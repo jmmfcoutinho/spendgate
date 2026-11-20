@@ -1,0 +1,33 @@
+# spendgate.yaml: Postgres ledger (shared by several gateway instances), USD throughout, Azure OpenAI
+# with a fallback to a second region, which is allowed because both serve the same catalog id.
+server:
+  listen: 0.0.0.0:8080
+  key_pepper: file:/run/secrets/spendgate_key_pepper
+
+ledger:
+  currency: USD
+  backend: { kind: postgres, dsn: env:SPENDGATE_DATABASE_URL }   # the DSN carries a password
+  lease_seconds: 60
+  heartbeat_seconds: 20
+
+providers:
+  azure_openai:
+    credential: env:AZURE_OPENAI_API_KEY
+    api_version: "2025-03-01-preview"
+
+models:
+  gpt-6-luna:
+    catalog_id: azure_openai/gpt-6-luna
+    deployments:
+      - provider: azure_openai
+        base_url: https://eu-west.example.openai.azure.com
+        model: alpha-prod                 # your Azure deployment name
+        region: westeurope
+      - provider: azure_openai
+        base_url: https://eu-north.example.openai.azure.com
+        model: alpha-prod
+        region: swedencentral
+
+routing: { max_attempts: 2, cooldown_seconds: 5 }
+
+fail_open: {}

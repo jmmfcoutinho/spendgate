@@ -1,0 +1,31 @@
+# spendgate.yaml for the local proxy guide (docs/deploy/local.md, step 2): one machine, SQLite.
+# No secret lives here: the provider keys and the key pepper come from environment variables.
+# Check it:  uv run spendgate check-config --config examples/config.local.yaml
+server:
+  listen: 127.0.0.1:8080                 # this machine only; never 0.0.0.0 without a perimeter
+  key_pepper: env:SPENDGATE_KEY_PEPPER
+
+ledger:
+  currency: USD                          # the bundled catalog is in USD, so no exchange rate needed
+  backend: { kind: sqlite, path: ./spendgate.db }   # relative to this file; created 0600
+
+providers:
+  openai:
+    base_url: https://api.openai.com/v1
+    credential: env:OPENAI_API_KEY
+  anthropic:
+    base_url: https://api.anthropic.com
+    credential: env:ANTHROPIC_API_KEY
+
+models:
+  gpt-6-luna:
+    catalog_id: openai/gpt-6-luna
+    deployments: [{ provider: openai }]
+  claude-haiku:
+    catalog_id: anthropic/claude-haiku-5-5
+    deployments: [{ provider: anthropic }]
+
+bootstrap:                               # create-only; a restart never changes existing rows
+  scopes: ["org:acme", "org:acme/project:app"]
+  budgets:
+    - { id: app-total, scope: "org:acme/project:app", period: none, cap: "5 USD" }

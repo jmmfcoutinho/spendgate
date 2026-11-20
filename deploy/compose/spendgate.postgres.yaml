@@ -1,0 +1,55 @@
+# Reference config, Postgres ledger (compose --profile postgres, SPENDGATE_LEDGER=postgres). Mounted read-only at /etc/spendgate/spendgate.yaml.
+# No secret lives here: credentials and the pepper are `file:` references to Docker secrets.
+# Check it:  docker compose run --rm --no-deps spendgate check-config --config /etc/spendgate/spendgate.yaml
+server:
+  listen: 0.0.0.0:8080                 # the data plane; reachable by the app containers on `apps`
+  admin: { listen: 127.0.0.1:8081 }    # inside the container only; see compose.yaml to publish it
+  key_pepper: file:/run/secrets/spendgate_key_pepper
+
+ledger:
+  currency: EUR
+  backend: { kind: postgres, dsn: file:/run/secrets/spendgate_database_url }   # the DSN carries the password
+  lease_seconds: 60
+  retention_days: 90
+
+# Required because the catalog is in USD and the ledger in EUR (1 USD = 0.92 EUR). Update it yourself.
+fx:
+  rates: { USD: "0.92" }
+  as_of: "2026-11-13"
+  source: ECB reference rate
+
+providers:
+  openai:
+    base_url: https://api.openai.com/v1
+    credential: file:/run/secrets/openai_api_key
+  anthropic:
+    base_url: https://api.anthropic.com
+    credential: file:/run/secrets/anthropic_api_key
+
+models:
+  gpt-6-luna:
+    catalog_id: openai/gpt-6-luna
+    deployments:
+      - { provider: openai }
+  claude-haiku:
+    catalog_id: anthropic/claude-haiku-5-5
+    deployments:
+      - { provider: anthropic }
+  embeddings:
+    catalog_id: openai/text-embedding-3-small
+    deployments:
+      - { provider: openai }
+
+defaults:
+  limits: { rpm: 600, concurrency: 16 }
+  strict_overrun: true
+
+routing: { max_attempts: 2, cooldown_seconds: 5 }
+
+fail_open: {}
+
+bootstrap:                             # create-only; a restart never changes existing rows
+  scopes: ["org:acme", "org:acme/project:app"]
+  budgets:
+    - { id: acme-monthly, scope: "org:acme", period: month, cap: "200 EUR", soft_pct: 80 }
+    - { id: app-daily, scope: "org:acme/project:app", period: day, cap: "10 EUR" }

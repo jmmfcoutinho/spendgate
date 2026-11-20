@@ -1,0 +1,349 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 5 * * 1" # weekly: pip-audit, secrets and image scan catch new advisories
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.9.11"
+  # Tool images pinned by digest; zizmor by exact version.
+  GITLEAKS_IMAGE: zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+  ACTIONLINT_IMAGE: rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+  ZIZMOR_VERSION: "1.32.0"
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv lock --check # T-SUP-02: uv.lock matches pyproject.toml (--frozen does not check)
+      - run: uv sync --frozen --all-extras
+      - run: make lint
+      - run: make format-check
+      - run: make arch
+      - run: make size
+
+  type:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - run: make type
+
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ matrix.python-version }}
+          enable-cache: false
+      - run: uv sync --frozen --all-extras --python ${{ matrix.python-version }}
+      - run: make test
+
+  integration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065 # 17-alpine
+        env:
+          POSTGRES_USER: spendgate
+          POSTGRES_PASSWORD: spendgate-ci-only # throwaway CI service, not a secret  # pragma: allowlist secret
+          POSTGRES_DB: spendgate_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spendgate -d spendgate_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      SPENDGATE_TEST_POSTGRES_URL: postgresql://spendgate:spendgate-ci-only@localhost:5432/spendgate_test  # pragma: allowlist secret (throwaway CI database)
+      SPENDGATE_PG_STATEFUL_EXAMPLES: "100" # fsync per step; full 500 runs locally on demand
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - run: make test-postgres
+
+  docker:
+    # The perimeter and block tests run the real Compose stack (tests/perimeter) and the local guide's
+    # Compose step (tests/docs); the tests build the image themselves.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - run: uv run pytest -m docker tests/perimeter tests/docs -q
+
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - run: make audit
+
+  secrets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - run: make secrets
+      - name: gitleaks (commits of the pull request; full history otherwise)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          range=()
+          if [ "$EVENT" = "pull_request" ]; then
+            range=(--log-opts="$BASE_SHA..$HEAD_SHA")
+          fi
+          docker run --rm -v "$PWD:/repo:ro" "$GITLEAKS_IMAGE" git /repo \
+            --config /repo/.gitleaks.toml --redact --no-banner "${range[@]}"
+
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [core, full]
+    env:
+      # Scanner and SBOM tool pinned by exact version / digest. Trivy runs from its image by
+      # digest instead of a third-party action (scanner supply-chain incidents, March 2026).
+      TRIVY_IMAGE: aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build image (${{ matrix.variant }})
+        run: docker build --target "${{ matrix.variant }}" -t "spendgate:${{ matrix.variant }}" .
+      - name: Record image size
+        run: |
+          # Uncompressed layer total, and the compressed size a registry pull transfers.
+          bytes=$(docker history --human=false --format '{{.Size}}' "spendgate:${{ matrix.variant }}" | awk '{s+=$1} END {print s}')
+          docker save "spendgate:${{ matrix.variant }}" | wc -c > "$RUNNER_TEMP/saved"
+          {
+            echo "### spendgate:${{ matrix.variant }}"
+            echo "- uncompressed layers: $((bytes / 1000000)) MB"
+            echo "- docker save tar: $(($(cat "$RUNNER_TEMP/saved") / 1000000)) MB"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ matrix.variant }}" = core ] && [ "$bytes" -ge 120000000 ]; then
+            echo "::error::spendgate:core is $((bytes / 1000000)) MB; the target is under 120 MB"
+            exit 1
+          fi
+      - name: Generate SBOM (syft)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: spendgate:${{ matrix.variant }}
+          syft-version: v1.57.1
+          format: spdx-json
+          output-file: sbom-${{ matrix.variant }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Upload SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-spdx-${{ matrix.variant }}
+          path: sbom-${{ matrix.variant }}.spdx.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Scan image (Trivy, HIGH/CRITICAL with a fix available)
+        run: |
+          mkdir -p "$RUNNER_TEMP/scan"
+          docker save "spendgate:${{ matrix.variant }}" -o "$RUNNER_TEMP/scan/image.tar"
+          docker run --rm -v "$RUNNER_TEMP/scan:/scan:ro" "$TRIVY_IMAGE" image \
+            --input /scan/image.tar --exit-code 1 --severity HIGH,CRITICAL \
+            --ignore-unfixed --no-progress
+
+  workflows:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: shellcheck
+        run: git ls-files -z '*.sh' | xargs -0 shellcheck --severity=warning
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo:ro" -w /repo "$ACTIONLINT_IMAGE" -color
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: false
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: uvx "zizmor==$ZIZMOR_VERSION" --format plain .github/
+
+  branch-name:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Branch is <type>/<short-kebab-description>
+        env:
+          EVENT: ${{ github.event_name }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "Not a pull request: nothing to check."
+            exit 0
+          fi
+          types='feat|fix|docs|chore|refactor|test|ci|perf|build|deps|prices|release'
+          if [[ "$HEAD_REF" =~ ^($types)/[a-z0-9._-]{1,60}$ ]] || [[ "$HEAD_REF" =~ ^dependabot/.+$ ]]; then
+            echo "branch name ok"
+          else
+            echo "Branch name rejected. Use <type>/<short-kebab-description>, type one of: ${types//|/, }" >&2
+            exit 1
+          fi
+
+  commit-messages:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Commit messages and pull request text carry no assistant trailers
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" | scripts/check-commit-message.sh -
+            while read -r sha; do
+              git log -1 --format=%B "$sha" | scripts/check-commit-message.sh -
+            done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
+          else
+            git log -1 --format=%B | scripts/check-commit-message.sh -
+          fi
+
+  no-ai-traces:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: scripts/check-no-ai-traces.sh
+
+  # The one check the branch rules require: every job above must succeed.
+  gate:
+    name: CI gate
+    if: always()
+    needs: [lint, type, test, integration, docker, audit, secrets, image, workflows, branch-name, commit-messages, no-ai-traces]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Every required job passed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          failed=0
+          while IFS=$'\t' read -r job result; do
+            if [ "$result" = success ]; then
+              echo "ok      $job"
+            else
+              echo "FAILED  $job: $result" >&2
+              failed=1
+            fi
+          done < <(jq -r 'to_entries[] | [.key, .value.result] | @tsv' <<<"$NEEDS")
+          exit "$failed"

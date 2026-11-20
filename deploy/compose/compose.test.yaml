@@ -1,0 +1,57 @@
+# Test-only overlay for tests/perimeter (never for real use). Adds:
+#   app            a long-lived stand-in app on `apps` (docker exec target; no secrets, no env)
+#   fake-provider  the scriptable fake upstream from tests/fakes, answering as every provider
+# The fake shares spendgate's network namespace and listens on 127.0.0.1:9000, so the config can use
+# `http://127.0.0.1:9000` (the loader allows plain http only to loopback). It is the only thing on the
+# "egress side" and is unreachable from `apps`. Run:
+#   docker compose -p sg-perim -f compose.yaml -f compose.test.yaml up -d --build
+# SPENDGATE_TEST_CONFIG (absolute path) replaces the reference config; the test generates one.
+name: spendgate
+
+services:
+  app:
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    image: spendgate:${SPENDGATE_VARIANT:-core}
+    user: "10001:10001"
+    entrypoint: ["python", "-c", "import time; time.sleep(86400)"]
+    # Newer Compose refuses `up --wait` on a service without a healthcheck.
+    healthcheck:
+      test: ["CMD", "python", "-c", "pass"]
+      interval: 2s
+      timeout: 5s
+      retries: 3
+    networks: [apps]
+    depends_on:
+      spendgate:
+        condition: service_healthy
+
+  fake-provider:
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    image: spendgate:${SPENDGATE_VARIANT:-core}
+    user: "10001:10001"
+    network_mode: "service:spendgate"
+    entrypoint: ["python", "-m", "uvicorn", "tests.perimeter.fake_provider:app", "--host", "127.0.0.1", "--port", "9000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:9000/__log', timeout=2)"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
+    environment:
+      PYTHONPATH: /srv
+    volumes:
+      - ../../tests:/srv/tests:ro
+    depends_on:
+      spendgate:
+        condition: service_healthy
+
+configs:
+  spendgate_config:
+    file: ${SPENDGATE_TEST_CONFIG:?set SPENDGATE_TEST_CONFIG to an absolute path}

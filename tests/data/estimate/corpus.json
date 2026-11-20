@@ -1,0 +1,858 @@
+[
+{
+"category": "en",
+"text": "The quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.",
+"tokens": {
+"o200k_base": 31,
+"cl100k_base": 31
+}
+},
+{
+"category": "en",
+"text": "Please summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.",
+"tokens": {
+"o200k_base": 25,
+"cl100k_base": 25
+}
+},
+{
+"category": "en",
+"text": "def fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])",
+"tokens": {
+"o200k_base": 38,
+"cl100k_base": 38
+}
+},
+{
+"category": "en",
+"text": "SELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;",
+"tokens": {
+"o200k_base": 54,
+"cl100k_base": 54
+}
+},
+{
+"category": "pt",
+"text": "O orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.",
+"tokens": {
+"o200k_base": 26,
+"cl100k_base": 37
+}
+},
+{
+"category": "pt",
+"text": "Não consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.",
+"tokens": {
+"o200k_base": 24,
+"cl100k_base": 29
+}
+},
+{
+"category": "fr_de",
+"text": "Les dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.",
+"tokens": {
+"o200k_base": 18,
+"cl100k_base": 23
+}
+},
+{
+"category": "fr_de",
+"text": "Die Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.",
+"tokens": {
+"o200k_base": 25,
+"cl100k_base": 35
+}
+},
+{
+"category": "ru",
+"text": "Бюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.",
+"tokens": {
+"o200k_base": 25,
+"cl100k_base": 50
+}
+},
+{
+"category": "ru",
+"text": "Привет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.",
+"tokens": {
+"o200k_base": 20,
+"cl100k_base": 36
+}
+},
+{
+"category": "gr_tr",
+"text": "Ο προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.",
+"tokens": {
+"o200k_base": 36,
+"cl100k_base": 83
+}
+},
+{
+"category": "gr_tr",
+"text": "Bütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.",
+"tokens": {
+"o200k_base": 27,
+"cl100k_base": 31
+}
+},
+{
+"category": "ar_he",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.",
+"tokens": {
+"o200k_base": 24,
+"cl100k_base": 59
+}
+},
+{
+"category": "ar_he",
+"text": "התקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.",
+"tokens": {
+"o200k_base": 30,
+"cl100k_base": 76
+}
+},
+{
+"category": "hi_th",
+"text": "इस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।",
+"tokens": {
+"o200k_base": 27,
+"cl100k_base": 88
+}
+},
+{
+"category": "hi_th",
+"text": "งบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน",
+"tokens": {
+"o200k_base": 34,
+"cl100k_base": 84
+}
+},
+{
+"category": "zh",
+"text": "本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。",
+"tokens": {
+"o200k_base": 24,
+"cl100k_base": 39
+}
+},
+{
+"category": "zh",
+"text": "请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。",
+"tokens": {
+"o200k_base": 27,
+"cl100k_base": 46
+}
+},
+{
+"category": "zh",
+"text": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。",
+"tokens": {
+"o200k_base": 24,
+"cl100k_base": 37
+}
+},
+{
+"category": "ja",
+"text": "今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。",
+"tokens": {
+"o200k_base": 33,
+"cl100k_base": 46
+}
+},
+{
+"category": "ja",
+"text": "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。",
+"tokens": {
+"o200k_base": 32,
+"cl100k_base": 39
+}
+},
+{
+"category": "ko",
+"text": "이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.",
+"tokens": {
+"o200k_base": 29,
+"cl100k_base": 46
+}
+},
+{
+"category": "ko",
+"text": "안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.",
+"tokens": {
+"o200k_base": 17,
+"cl100k_base": 32
+}
+},
+{
+"category": "emoji",
+"text": "🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯",
+"tokens": {
+"o200k_base": 41,
+"cl100k_base": 68
+}
+},
+{
+"category": "emoji",
+"text": "Great job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!",
+"tokens": {
+"o200k_base": 21,
+"cl100k_base": 27
+}
+},
+{
+"category": "emoji",
+"text": "👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠",
+"tokens": {
+"o200k_base": 38,
+"cl100k_base": 49
+}
+},
+{
+"category": "emoji",
+"text": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+"tokens": {
+"o200k_base": 40,
+"cl100k_base": 80
+}
+},
+{
+"category": "emoji",
+"text": "🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷",
+"tokens": {
+"o200k_base": 160,
+"cl100k_base": 240
+}
+},
+{
+"category": "json",
+"text": "{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}",
+"tokens": {
+"o200k_base": 610,
+"cl100k_base": 610
+}
+},
+{
+"category": "json",
+"text": "{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}",
+"tokens": {
+"o200k_base": 729,
+"cl100k_base": 729
+}
+},
+{
+"category": "json",
+"text": "{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}",
+"tokens": {
+"o200k_base": 27,
+"cl100k_base": 35
+}
+},
+{
+"category": "tools",
+"text": "[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]",
+"tokens": {
+"o200k_base": 101,
+"cl100k_base": 101
+}
+},
+{
+"category": "tools",
+"text": "[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]",
+"tokens": {
+"o200k_base": 193,
+"cl100k_base": 193
+}
+},
+{
+"category": "tools",
+"text": "[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]",
+"tokens": {
+"o200k_base": 65,
+"cl100k_base": 67
+}
+},
+{
+"category": "mixed",
+"text": "Please summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\n\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。",
+"tokens": {
+"o200k_base": 73,
+"cl100k_base": 123
+}
+},
+{
+"category": "mixed",
+"text": "O orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\n\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。",
+"tokens": {
+"o200k_base": 86,
+"cl100k_base": 172
+}
+},
+{
+"category": "mixed",
+"text": "def fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\n\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。",
+"tokens": {
+"o200k_base": 133,
+"cl100k_base": 166
+}
+},
+{
+"category": "mixed",
+"text": "[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\n\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.",
+"tokens": {
+"o200k_base": 176,
+"cl100k_base": 246
+}
+},
+{
+"category": "mixed",
+"text": "התקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\n\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]",
+"tokens": {
+"o200k_base": 223,
+"cl100k_base": 269
+}
+},
+{
+"category": "mixed",
+"text": "[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+"tokens": {
+"o200k_base": 289,
+"cl100k_base": 371
+}
+},
+{
+"category": "mixed",
+"text": "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\n\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\n\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.",
+"tokens": {
+"o200k_base": 117,
+"cl100k_base": 176
+}
+},
+{
+"category": "mixed",
+"text": "Great job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\n\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.",
+"tokens": {
+"o200k_base": 69,
+"cl100k_base": 115
+}
+},
+{
+"category": "mixed",
+"text": "งบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\n\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.",
+"tokens": {
+"o200k_base": 76,
+"cl100k_base": 148
+}
+},
+{
+"category": "mixed",
+"text": "O orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}",
+"tokens": {
+"o200k_base": 115,
+"cl100k_base": 164
+}
+},
+{
+"category": "mixed",
+"text": "{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]",
+"tokens": {
+"o200k_base": 289,
+"cl100k_base": 315
+}
+},
+{
+"category": "mixed",
+"text": "이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\n\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\n\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷",
+"tokens": {
+"o200k_base": 311,
+"cl100k_base": 472
+}
+},
+{
+"category": "mixed",
+"text": "Please summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\n\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\n\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])",
+"tokens": {
+"o200k_base": 822,
+"cl100k_base": 868
+}
+},
+{
+"category": "mixed",
+"text": "इस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\n\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]",
+"tokens": {
+"o200k_base": 128,
+"cl100k_base": 190
+}
+},
+{
+"category": "mixed",
+"text": "吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.",
+"tokens": {
+"o200k_base": 86,
+"cl100k_base": 135
+}
+},
+{
+"category": "mixed",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。",
+"tokens": {
+"o200k_base": 57,
+"cl100k_base": 105
+}
+},
+{
+"category": "mixed",
+"text": "Die Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\n\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\n\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\n\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.",
+"tokens": {
+"o200k_base": 139,
+"cl100k_base": 243
+}
+},
+{
+"category": "mixed",
+"text": "👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\n\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.",
+"tokens": {
+"o200k_base": 108,
+"cl100k_base": 178
+}
+},
+{
+"category": "mixed",
+"text": "{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.",
+"tokens": {
+"o200k_base": 57,
+"cl100k_base": 112
+}
+},
+{
+"category": "mixed",
+"text": "Les dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\n\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠",
+"tokens": {
+"o200k_base": 98,
+"cl100k_base": 141
+}
+},
+{
+"category": "mixed",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}",
+"tokens": {
+"o200k_base": 1527,
+"cl100k_base": 1576
+}
+},
+{
+"category": "mixed",
+"text": "本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.",
+"tokens": {
+"o200k_base": 53,
+"cl100k_base": 85
+}
+},
+{
+"category": "mixed",
+"text": "Ο προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\n\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.",
+"tokens": {
+"o200k_base": 101,
+"cl100k_base": 193
+}
+},
+{
+"category": "mixed",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.",
+"tokens": {
+"o200k_base": 83,
+"cl100k_base": 142
+}
+},
+{
+"category": "mixed",
+"text": "👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.",
+"tokens": {
+"o200k_base": 75,
+"cl100k_base": 133
+}
+},
+{
+"category": "mixed",
+"text": "今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.",
+"tokens": {
+"o200k_base": 85,
+"cl100k_base": 117
+}
+},
+{
+"category": "mixed",
+"text": "Die Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\n\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\n\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\n\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.",
+"tokens": {
+"o200k_base": 101,
+"cl100k_base": 130
+}
+},
+{
+"category": "mixed",
+"text": "Ο προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\n\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯",
+"tokens": {
+"o200k_base": 752,
+"cl100k_base": 890
+}
+},
+{
+"category": "mixed",
+"text": "Die Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\n\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.",
+"tokens": {
+"o200k_base": 56,
+"cl100k_base": 66
+}
+},
+{
+"category": "mixed",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\n\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.",
+"tokens": {
+"o200k_base": 129,
+"cl100k_base": 232
+}
+},
+{
+"category": "mixed",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;\n\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.",
+"tokens": {
+"o200k_base": 211,
+"cl100k_base": 264
+}
+},
+{
+"category": "mixed",
+"text": "Les dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\n\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.",
+"tokens": {
+"o200k_base": 96,
+"cl100k_base": 121
+}
+},
+{
+"category": "mixed",
+"text": "请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}",
+"tokens": {
+"o200k_base": 96,
+"cl100k_base": 163
+}
+},
+{
+"category": "mixed",
+"text": "התקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\n\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.",
+"tokens": {
+"o200k_base": 54,
+"cl100k_base": 135
+}
+},
+{
+"category": "mixed",
+"text": "Бюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\n\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.",
+"tokens": {
+"o200k_base": 61,
+"cl100k_base": 133
+}
+},
+{
+"category": "mixed",
+"text": "Les dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.",
+"tokens": {
+"o200k_base": 832,
+"cl100k_base": 901
+}
+},
+{
+"category": "mixed",
+"text": "Bütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.",
+"tokens": {
+"o200k_base": 90,
+"cl100k_base": 153
+}
+},
+{
+"category": "mixed",
+"text": "इस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\n\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\n\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷",
+"tokens": {
+"o200k_base": 349,
+"cl100k_base": 552
+}
+},
+{
+"category": "mixed",
+"text": "今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])",
+"tokens": {
+"o200k_base": 71,
+"cl100k_base": 84
+}
+},
+{
+"category": "mixed",
+"text": "이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}",
+"tokens": {
+"o200k_base": 758,
+"cl100k_base": 775
+}
+},
+{
+"category": "mixed",
+"text": "👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\n\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.",
+"tokens": {
+"o200k_base": 100,
+"cl100k_base": 177
+}
+},
+{
+"category": "mixed",
+"text": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.",
+"tokens": {
+"o200k_base": 88,
+"cl100k_base": 114
+}
+},
+{
+"category": "mixed",
+"text": "请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\n\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。",
+"tokens": {
+"o200k_base": 107,
+"cl100k_base": 195
+}
+},
+{
+"category": "mixed",
+"text": "{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.",
+"tokens": {
+"o200k_base": 799,
+"cl100k_base": 810
+}
+},
+{
+"category": "mixed",
+"text": "안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷\n\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.",
+"tokens": {
+"o200k_base": 975,
+"cl100k_base": 1116
+}
+},
+{
+"category": "mixed",
+"text": "[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\n\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!",
+"tokens": {
+"o200k_base": 144,
+"cl100k_base": 216
+}
+},
+{
+"category": "mixed",
+"text": "งบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\n\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。",
+"tokens": {
+"o200k_base": 62,
+"cl100k_base": 131
+}
+},
+{
+"category": "mixed",
+"text": "[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\n\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.",
+"tokens": {
+"o200k_base": 239,
+"cl100k_base": 287
+}
+},
+{
+"category": "mixed",
+"text": "{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\n\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।",
+"tokens": {
+"o200k_base": 782,
+"cl100k_base": 854
+}
+},
+{
+"category": "mixed",
+"text": "The quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\n\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.",
+"tokens": {
+"o200k_base": 116,
+"cl100k_base": 175
+}
+},
+{
+"category": "mixed",
+"text": "งบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠",
+"tokens": {
+"o200k_base": 106,
+"cl100k_base": 180
+}
+},
+{
+"category": "mixed",
+"text": "{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}",
+"tokens": {
+"o200k_base": 1237,
+"cl100k_base": 1252
+}
+},
+{
+"category": "mixed",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\n\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\n\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]",
+"tokens": {
+"o200k_base": 1370,
+"cl100k_base": 1415
+}
+},
+{
+"category": "mixed",
+"text": "Les dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]",
+"tokens": {
+"o200k_base": 141,
+"cl100k_base": 171
+}
+},
+{
+"category": "mixed",
+"text": "今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。",
+"tokens": {
+"o200k_base": 57,
+"cl100k_base": 83
+}
+},
+{
+"category": "mixed",
+"text": "[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\n\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\n\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]",
+"tokens": {
+"o200k_base": 319,
+"cl100k_base": 352
+}
+},
+{
+"category": "mixed",
+"text": "Бюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\n\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\n\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\n\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;",
+"tokens": {
+"o200k_base": 188,
+"cl100k_base": 226
+}
+},
+{
+"category": "mixed",
+"text": "The quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\n\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}",
+"tokens": {
+"o200k_base": 641,
+"cl100k_base": 641
+}
+},
+{
+"category": "mixed",
+"text": "안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\n\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\n\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\n\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.",
+"tokens": {
+"o200k_base": 132,
+"cl100k_base": 317
+}
+},
+{
+"category": "mixed",
+"text": "งบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\n\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.",
+"tokens": {
+"o200k_base": 60,
+"cl100k_base": 120
+}
+},
+{
+"category": "en_long",
+"text": "The quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;\nThe quick brown fox jumps over the lazy dog. Spend limits are enforced before any call leaves the process, so a runaway loop cannot drain the budget overnight.\nPlease summarise the attached quarterly report in three bullet points, highlighting revenue, churn and any risks the board should know about.\ndef fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\n\nprint([fib(i) for i in range(20)])\nSELECT u.id, u.email, COUNT(o.id) AS orders FROM users u LEFT JOIN orders o ON o.user_id = u.id WHERE u.created_at >= '2026-01-01' GROUP BY u.id HAVING COUNT(o.id) > 3;",
+"tokens": {
+"o200k_base": 888,
+"cl100k_base": 888
+}
+},
+{
+"category": "pt_long",
+"text": "O orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.\nO orçamento mensal foi excedido em vinte por cento; precisamos de uma explicação antes da reunião de quinta-feira com a direção.\nNão consigo aceder à conta desde ontem à noite, apesar de ter redefinido a palavra-passe duas vezes.",
+"tokens": {
+"o200k_base": 300,
+"cl100k_base": 396
+}
+},
+{
+"category": "fr_de_long",
+"text": "Les dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.\nLes dépenses doivent être approuvées par le responsable avant toute commande supérieure à mille euros.\nDie Geschäftsführung hat beschlossen, die Auftragsbearbeitung über Weihnachten zu verlängern, größtenteils wegen Überstunden.",
+"tokens": {
+"o200k_base": 258,
+"cl100k_base": 348
+}
+},
+{
+"category": "ru_long",
+"text": "Бюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.\nБюджет на этот квартал был превышен, поэтому все новые заказы необходимо согласовать с руководителем отдела.\nПривет! Как дела? Я хотел бы узнать, когда будет готов отчёт по расходам.",
+"tokens": {
+"o200k_base": 270,
+"cl100k_base": 516
+}
+},
+{
+"category": "gr_tr_long",
+"text": "Ο προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.\nΟ προϋπολογισμός του τριμήνου ξεπεράστηκε και χρειαζόμαστε έγκριση για κάθε νέα παραγγελία.\nBütçe bu çeyrekte aşıldığı için her yeni sipariş yöneticinin onayından geçmelidir.",
+"tokens": {
+"o200k_base": 378,
+"cl100k_base": 684
+}
+},
+{
+"category": "ar_he_long",
+"text": "تم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.\nتم تجاوز ميزانية هذا الربع، لذلك يجب الموافقة على كل طلب جديد من قبل المدير قبل إرساله.\nהתקציב של הרבעון הזה חרג ממה שתוכנן, ולכן כל הזמנה חדשה דורשת אישור של המנהל.",
+"tokens": {
+"o200k_base": 324,
+"cl100k_base": 810
+}
+},
+{
+"category": "hi_th_long",
+"text": "इस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน\nइस तिमाही का बजट पार हो गया है, इसलिए हर नए आदेश के लिए प्रबंधक की मंजूरी आवश्यक है।\nงบประมาณของไตรมาสนี้เกินกำหนด ดังนั้นทุกคำสั่งซื้อใหม่ต้องได้รับการอนุมัติจากผู้จัดการก่อน",
+"tokens": {
+"o200k_base": 371,
+"cl100k_base": 1043
+}
+},
+{
+"category": "zh_long",
+"text": "本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。\n本季度的预算已经超支，因此每一个新订单都必须在发出之前得到部门经理的批准。\n请把附件中的季度报告总结成三个要点，重点说明收入、客户流失以及董事会需要了解的风险。\n春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。",
+"tokens": {
+"o200k_base": 450,
+"cl100k_base": 732
+}
+},
+{
+"category": "ja_long",
+"text": "今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。\n今四半期の予算を超過したため、新しい注文はすべて部門長の承認を得てから送信してください。\n吾輩は猫である。名前はまだ無い。どこで生れたかとんと見当がつかぬ。",
+"tokens": {
+"o200k_base": 390,
+"cl100k_base": 510
+}
+},
+{
+"category": "ko_long",
+"text": "이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.\n이번 분기 예산이 초과되었으므로 모든 신규 주문은 발송하기 전에 부서장의 승인을 받아야 합니다.\n안녕하세요, 지난주에 주문한 상품이 아직 도착하지 않았습니다.",
+"tokens": {
+"o200k_base": 276,
+"cl100k_base": 468
+}
+},
+{
+"category": "emoji_long",
+"text": "🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷\n🚀🔥✨🎉😀😂🥲👍🏽👨‍👩‍👧‍👦🏳️‍🌈🇵🇹🇯🇵❤️💯\nGreat job team 🎉🎉🎉 shipping on Friday 🚢 — don't forget the 🍕!\n👩🏽‍💻👨🏿‍🚀🧑‍🤝‍🧑🫶🧿🪬🥹🫠\n😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\n🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷🇵🇹🇧🇷🇯🇵🇰🇷🇨🇳🇺🇸🇩🇪🇫🇷",
+"tokens": {
+"o200k_base": 1823,
+"cl100k_base": 2807
+}
+},
+{
+"category": "json_long",
+"text": "{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}\n{\"id\": 1234567, \"user\": {\"name\": \"Ana\", \"roles\": [\"admin\", \"ops\"], \"active\": true}, \"items\": [{\"sku\": \"A-00000\", \"qty\": 0, \"price\": 0.0}, {\"sku\": \"A-00001\", \"qty\": 1, \"price\": 1.37}, {\"sku\": \"A-00002\", \"qty\": 2, \"price\": 2.74}, {\"sku\": \"A-00003\", \"qty\": 3, \"price\": 4.11}, {\"sku\": \"A-00004\", \"qty\": 4, \"price\": 5.48}, {\"sku\": \"A-00005\", \"qty\": 5, \"price\": 6.85}, {\"sku\": \"A-00006\", \"qty\": 6, \"price\": 8.22}, {\"sku\": \"A-00007\", \"qty\": 0, \"price\": 9.59}, {\"sku\": \"A-00008\", \"qty\": 1, \"price\": 10.96}, {\"sku\": \"A-00009\", \"qty\": 2, \"price\": 12.33}, {\"sku\": \"A-00010\", \"qty\": 3, \"price\": 13.7}, {\"sku\": \"A-00011\", \"qty\": 4, \"price\": 15.07}, {\"sku\": \"A-00012\", \"qty\": 5, \"price\": 16.44}, {\"sku\": \"A-00013\", \"qty\": 6, \"price\": 17.81}, {\"sku\": \"A-00014\", \"qty\": 0, \"price\": 19.18}, {\"sku\": \"A-00015\", \"qty\": 1, \"price\": 20.55}, {\"sku\": \"A-00016\", \"qty\": 2, \"price\": 21.92}, {\"sku\": \"A-00017\", \"qty\": 3, \"price\": 23.29}, {\"sku\": \"A-00018\", \"qty\": 4, \"price\": 24.66}, {\"sku\": \"A-00019\", \"qty\": 5, \"price\": 26.03}, {\"sku\": \"A-00020\", \"qty\": 6, \"price\": 27.4}, {\"sku\": \"A-00021\", \"qty\": 0, \"price\": 28.77}, {\"sku\": \"A-00022\", \"qty\": 1, \"price\": 30.14}, {\"sku\": \"A-00023\", \"qty\": 2, \"price\": 31.51}, {\"sku\": \"A-00024\", \"qty\": 3, \"price\": 32.88}]}\n{\n  \"results\": [\n    {\n      \"ts\": \"2026-11-13T10:00:00Z\",\n      \"latency_ms\": 100,\n      \"status\": \"ok\",\n      \"trace\": \"trace-0\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:01:00Z\",\n      \"latency_ms\": 103,\n      \"status\": \"ok\",\n      \"trace\": \"trace-1\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:02:00Z\",\n      \"latency_ms\": 106,\n      \"status\": \"ok\",\n      \"trace\": \"trace-2\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:03:00Z\",\n      \"latency_ms\": 109,\n      \"status\": \"ok\",\n      \"trace\": \"trace-3\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:04:00Z\",\n      \"latency_ms\": 112,\n      \"status\": \"ok\",\n      \"trace\": \"trace-4\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:05:00Z\",\n      \"latency_ms\": 115,\n      \"status\": \"ok\",\n      \"trace\": \"trace-5\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:06:00Z\",\n      \"latency_ms\": 118,\n      \"status\": \"ok\",\n      \"trace\": \"trace-6\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:07:00Z\",\n      \"latency_ms\": 121,\n      \"status\": \"ok\",\n      \"trace\": \"trace-7\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:08:00Z\",\n      \"latency_ms\": 124,\n      \"status\": \"ok\",\n      \"trace\": \"trace-8\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:09:00Z\",\n      \"latency_ms\": 127,\n      \"status\": \"ok\",\n      \"trace\": \"trace-9\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:10:00Z\",\n      \"latency_ms\": 130,\n      \"status\": \"ok\",\n      \"trace\": \"trace-10\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:11:00Z\",\n      \"latency_ms\": 133,\n      \"status\": \"ok\",\n      \"trace\": \"trace-11\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:12:00Z\",\n      \"latency_ms\": 136,\n      \"status\": \"ok\",\n      \"trace\": \"trace-12\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:13:00Z\",\n      \"latency_ms\": 139,\n      \"status\": \"ok\",\n      \"trace\": \"trace-13\"\n    },\n    {\n      \"ts\": \"2026-11-13T10:14:00Z\",\n      \"latency_ms\": 142,\n      \"status\": \"ok\",\n      \"trace\": \"trace-14\"\n    }\n  ]\n}\n{\"名前\": \"太郎\", \"都市\": \"東京\", \"tags\": [\"日本\", \"料理\", \"🍣\"]}",
+"tokens": {
+"o200k_base": 8191,
+"cl100k_base": 8244
+}
+},
+{
+"category": "tools_long",
+"text": "[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]\n[{\"type\": \"function\", \"function\": {\"name\": \"get_weather\", \"description\": \"Get the current weather for a city.\", \"parameters\": {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\", \"description\": \"City name, e.g. Lisbon\"}, \"unit\": {\"type\": \"string\", \"enum\": [\"celsius\", \"fahrenheit\"]}}, \"required\": [\"city\"], \"additionalProperties\": false}, \"strict\": true}}]\n[\n  {\n    \"name\": \"search_documents\",\n    \"description\": \"Full-text search across the knowledge base; returns the top matches with snippets.\",\n    \"input_schema\": {\n      \"type\": \"object\",\n      \"properties\": {\n        \"query\": {\n          \"type\": \"string\"\n        },\n        \"limit\": {\n          \"type\": \"integer\",\n          \"minimum\": 1,\n          \"maximum\": 50\n        },\n        \"filters\": {\n          \"type\": \"object\",\n          \"properties\": {\n            \"author\": {\n              \"type\": \"string\"\n            },\n            \"since\": {\n              \"type\": \"string\",\n              \"format\": \"date\"\n            },\n            \"tags\": {\n              \"type\": \"array\",\n              \"items\": {\n                \"type\": \"string\"\n              }\n            }\n          }\n        }\n      },\n      \"required\": [\n        \"query\"\n      ]\n    }\n  }\n]\n[{\"type\": \"function\", \"function\": {\"name\": \"创建订单\", \"description\": \"为客户创建一个新订单并返回订单编号。\", \"parameters\": {\"type\": \"object\", \"properties\": {\"客户\": {\"type\": \"string\"}, \"数量\": {\"type\": \"integer\"}}}}}]",
+"tokens": {
+"o200k_base": 2154,
+"cl100k_base": 2166
+}
+}
+]

@@ -1,0 +1,18 @@
+{
+  "id": "chatcmpl-fixture",
+  "object": "chat.completion",
+  "choices": [],
+  "usage": {
+    "prompt_tokens": 300,
+    "completion_tokens": 80,
+    "total_tokens": 380,
+    "prompt_tokens_details": {
+      "cached_tokens": 0,
+      "audio_tokens": 100
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0,
+      "audio_tokens": 30
+    }
+  }
+}

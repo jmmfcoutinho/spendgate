@@ -1,0 +1,128 @@
+# Reference deployment with a network perimeter. See README.md and docs/deploy/local.md.
+#
+#   apps    internal: true  app containers + spendgate. No route to the internet.
+#   egress                  spendgate only. The one container that can reach providers.
+#   db      internal: true  spendgate + Postgres (--profile postgres). Nothing else.
+#
+# Provider keys, the key pepper and the database URL are Docker secrets files: they reach only the
+# spendgate container, never an app container's environment or filesystem.
+#
+#   SQLite (default):  docker compose up -d --build
+#   Postgres:          SPENDGATE_LEDGER=postgres docker compose --profile postgres up -d --build
+name: spendgate
+
+x-hardening: &hardening
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  pids_limit: 128
+  restart: unless-stopped
+
+services:
+  spendgate:
+    <<: *hardening
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+      target: ${SPENDGATE_VARIANT:-core}   # use `full` for the Postgres ledger and Bedrock, Google, Azure
+    image: spendgate:${SPENDGATE_VARIANT:-core}
+    user: "10001:10001"
+    mem_limit: 512m
+    environment:
+      SPENDGATE_CONFIG: /etc/spendgate/spendgate.yaml   # so `docker compose exec spendgate spendgate ...` finds it
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    networks: [apps, egress, db]
+    # The data port is reachable by containers on `apps` only. To use it from the host, uncomment:
+    # ports: ["127.0.0.1:8080:8080"]
+    # The admin API listens on 127.0.0.1 inside the container, so apps cannot reach it. To publish it
+    # on the host's loopback, set `server.admin.listen: 0.0.0.0:8081` in the config and uncomment:
+    #   ports: ["127.0.0.1:8081:8081"]
+    # Never publish either port on 0.0.0.0.
+    volumes:
+      - ledger:/data
+    configs:
+      - source: spendgate_config
+        target: /etc/spendgate/spendgate.yaml
+    # File secrets are bind-mounted with the host file's owner and mode (Compose ignores uid/gid/mode
+    # outside Swarm), so the files must be readable by UID 10001: see README.md (0644 inside a 0700 dir).
+    secrets:
+      - spendgate_key_pepper
+      - openai_api_key
+      - anthropic_api_key
+      - spendgate_database_url
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false   # only exists with --profile postgres
+
+  # An app stand-in on `apps` only. It reuses the spendgate image (Python and nothing else) so no
+  # second base image needs pinning. It gets no secrets and no environment.
+  demo:
+    <<: *hardening
+    image: spendgate:${SPENDGATE_VARIANT:-core}
+    user: "10001:10001"
+    restart: "no"
+    entrypoint: ["python", "/demo/demo.py"]
+    healthcheck: { disable: true }   # the image's check targets the guard's port
+    mem_limit: 128m
+    tmpfs:
+      - /tmp:size=8m,noexec,nosuid,nodev
+    volumes:
+      - ./demo/demo.py:/demo/demo.py:ro
+    networks: [apps]
+    depends_on:
+      spendgate:
+        condition: service_healthy
+
+  db:
+    <<: *hardening
+    profiles: [postgres]
+    image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065 # 17-alpine
+    user: "70:70"   # the image's postgres user, so no root start-up and no capabilities are needed
+    mem_limit: 512m
+    environment:
+      POSTGRES_USER: spendgate
+      POSTGRES_DB: spendgate
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+      - /var/run/postgresql:size=1m,uid=70,gid=70
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [db]
+    secrets: [postgres_password]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "spendgate", "-d", "spendgate"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  apps:
+    internal: true
+  egress: {}
+  db:
+    internal: true
+
+volumes:
+  ledger: {}
+  pgdata: {}
+
+configs:
+  spendgate_config:
+    file: ./spendgate.${SPENDGATE_LEDGER:-sqlite}.yaml
+
+secrets:
+  spendgate_key_pepper:
+    file: ./secrets/spendgate_key_pepper
+  openai_api_key:
+    file: ./secrets/openai_api_key
+  anthropic_api_key:
+    file: ./secrets/anthropic_api_key
+  # Postgres profile only; the files must exist (empty is fine) because Compose resolves every
+  # secret a started service lists.
+  spendgate_database_url:
+    file: ./secrets/spendgate_database_url
+  postgres_password:
+    file: ./secrets/postgres_password

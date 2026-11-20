@@ -1,0 +1,29 @@
+name: Idea or improvement
+description: A new feature, provider, deployment pattern or a change to how something works.
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What is hard, missing or risky today, and for whom.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What you would change. Check ROADMAP.md first; it may already be planned.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: How we will know it worked
+      description: A test, a measurement or an observable behaviour.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Proxy / pipeline, Budgets / ledger, Provider adapter, Prices / catalog, SDK / client helpers, Library mode, Admin API / CLI, Configuration, Docker / deployment, Docs, Other]

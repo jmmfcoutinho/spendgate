@@ -1,0 +1,342 @@
+# spendgate seed price catalog (schema: schema.json). Prices are quoted decimal strings in the entry's currency.
+# Compiled 2026-11-13 from each provider's own pages / public price feeds (see source_url and per-entry notes).
+# verified: true = every price on the entry was read today from the provider's own page or official public price feed.
+# No Realtime entries (on the roadmap). Bedrock region used for every bedrock entry: us-east-1.
+# Known schema gaps: Anthropic/Bedrock have 5m and 1h cache-write prices but only one cache_write meter exists, so the
+# dearer 1h price is stored (never lower). Batch/Flex/Priority variants are not seeded. Vertex AI pricing page could not be
+# read, so no Vertex-specific price is encoded (google/* entries are Gemini API prices).
+catalog_version: 1
+updated: "2026-11-13"
+
+providers:
+  openai: { free_statuses: [429] }
+  azure_openai: { free_statuses: [429] }
+  anthropic: { free_statuses: [429, 529] }
+  bedrock: { free_statuses: [429] }
+  google: { free_statuses: [429] }
+  azure_speech: { free_statuses: [429] }
+  elevenlabs: { free_statuses: [429] }
+
+models:
+  # ===================== OpenAI (direct) =====================
+  # Page: developers.openai.com/api/docs/pricing and /models/<id>. Long context: prompts over 272K input tokens price the
+  # whole request at 2x input/cache, 1.5x output. Max output 128,000, context 1,050,000 (model pages).
+  - id: openai/gpt-6-astra
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6-astra
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Flagship. Standard tier. Pricing page lists 10/1/50; model page adds cache write 12.50."
+    deployment_type: standard
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "12.5", output_per_mtok: "50" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-6-luna
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6-luna
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Small/cheap model. Standard tier."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.125", output_per_mtok: "0.5" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/text-embedding-3-small
+    mode: embedding
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-13"
+    meters: { input_per_mtok: "0.02" }
+
+  # --- OpenAI speech-to-text (pricing page and /models/<id> pages read 2026-11-18). Not encoded: gpt-live-transcribe and
+  # gpt-realtime-whisper (Realtime only, on the roadmap); gpt-4o-transcribe, gpt-4o-mini-transcribe and gpt-4o-transcribe-diarize
+  # (deprecated, shutdown 2027-02-26; the pages disagree on whether their token prices are audio or text tokens). ---
+  - id: openai/gpt-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-18"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-18"
+    note: "0.0045 USD per minute (pricing page and model page). No deprecation notice."
+    meters: { audio_input_per_minute: "0.0045" }
+  - id: openai/whisper-1
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-18"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-18"
+    note: "0.006 USD per minute (pricing page lists 'Whisper'). Deprecated 2026-08-26; shutdown 2027-02-26 (deprecations page)."
+    meters: { audio_input_per_minute: "0.006" }
+    deprecation_date: "2027-02-26"
+
+  # ===================== Azure OpenAI (Foundry Models) =====================
+  # Source: Azure Retail Prices API (https://prices.azure.com/api/retail/prices, serviceName 'Foundry Models'), read 2026-11-13.
+  # Stored meters are Global Standard; price_multiplier 1.20 = highest Data Zone uplift seen in any region (1.10 in US zones,
+  # 1.20 in EU). Long context (over 272K input) is 2x input/cache, 1.5x output, matching the LongCo meters. Cache write meter
+  # is published, so it is encoded. max_output_tokens 128000 follows OpenAI's model page (not re-checked on Azure docs).
+  - id: azure_openai/gpt-6-astra
+    mode: responses
+    currency: USD
+    effective_from: "2026-09-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Flagship. Global 10/1/12.5/50 x 1.20 Data Zone upper bound (retail meters DZ 11-12 / 55-60)."
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "12.5", output_per_mtok: "50" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: azure_openai/gpt-6-luna
+    mode: responses
+    currency: USD
+    effective_from: "2026-09-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Small/cheap. Global 0.10/0.01/0.125/0.50 x 1.20 Data Zone upper bound."
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.125", output_per_mtok: "0.5" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: azure_openai/gpt-6.1-terra
+    mode: responses
+    currency: USD
+    effective_from: "2026-10-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Global 1.00/0.05/1.25/5.00 x 1.20 Data Zone upper bound."
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "1", cached_input_per_mtok: "0.05", cache_write_per_mtok: "1.25", output_per_mtok: "5" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: azure_openai/gpt-6.1-sol
+    mode: responses
+    currency: USD
+    effective_from: "2026-10-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Global 2.00/0.10/2.50/10.00 x 1.20 Data Zone upper bound."
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "2.5", output_per_mtok: "10" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+
+  # --- Azure OpenAI speech-to-text (highest regional meter = upper bound; all from the Azure Retail Prices API) ---
+  - id: azure_openai/whisper
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Highest regional batch meter 0.4752 USD/h (global 0.36). Retires 2026-12-15 per learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-18."
+    meters: { audio_input_per_minute: "0.00792" }
+    deprecation_date: "2026-12-15"
+  - id: azure_openai/gpt-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-09-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Data Zone meter 0.297 USD/h (global 0.27)."
+    meters: { audio_input_per_minute: "0.00495" }
+  - id: azure_openai/gpt-live-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-09-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Data Zone meter 1.122 USD/h (global 1.02)."
+    meters: { audio_input_per_minute: "0.0187" }
+  - id: azure_openai/gpt-4o-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2025-04-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Highest regional token meters (audio in 0.00792/1K, text 0.0033/1K, out 0.0132/1K); minute rate is a guard basis, not published. Retired 2026-10-15 per learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-18."
+    meters:
+      audio_input_per_minute: "0.00792"
+      audio_input_per_mtok: "7.92"
+      input_per_mtok: "3.3"
+      output_per_mtok: "13.2"
+    deprecation_date: "2026-10-15"
+  - id: azure_openai/gpt-4o-mini-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2025-12-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Highest regional token meters (audio 3.96, text 1.65, out 6.60 per 1M); minute rate is a guard basis. Version 2025-12-15 retires 2027-06-15, 2025-03-20 retired 2026-10-15 (learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-18)."
+    meters:
+      audio_input_per_minute: "0.00396"
+      audio_input_per_mtok: "3.96"
+      input_per_mtok: "1.65"
+      output_per_mtok: "6.6"
+    deprecation_date: "2027-06-15"
+
+  # ===================== Azure Speech =====================
+  # Source: Azure Retail Prices API, serviceName 'Foundry Tools'/'MAI Models'. The azure.microsoft.com page shows blank prices.
+  - id: azure_speech/azure-speech
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Fast Transcription: highest regional meter 0.45 USD/h (min 0.36). Promo meter 0.10-0.125 ignored."
+    meters: { audio_input_per_minute: "0.0075" }
+  - id: azure_speech/mai-transcribe-2
+    mode: transcription
+    currency: USD
+    effective_from: "2026-10-01"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: true
+    checked_on: "2026-11-13"
+    note: "0.54 USD/h in every region (was launch price 0.10 in the earlier in-house guard; promo valid till 2026-12-31 per Azure page)."
+    meters: { audio_input_per_minute: "0.009" }
+
+  # ===================== Anthropic (direct API) =====================
+  # Page: platform.claude.com/docs/en/about-claude/pricing; limits from /docs/en/models/overview (max output 128K, context 1M;
+  # retirement not sooner than 2027-11-09 for Fable 5.2 and 2027-10-07 for Haiku 5.5, so no deprecation_date).
+  # cache_write_per_mtok holds the 1h cache-write price (dearer than the 5m price) because the schema has one meter.
+  - id: anthropic/claude-fable-5-2
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Flagship. Input 8, cache write 5m 10 (1h 16 stored), cache hit 0.20 (0.025x), output 40."
+    meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
+    limits: { max_output_tokens: 128000, context_window: 1000000 }
+  - id: anthropic/claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Small. Prompts over 100,000 tokens: 5x on every meter (0.50/2.50 etc.). Cache write: 1h price 0.20 stored (5m 0.125)."
+    meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.2", output_per_mtok: "0.5" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000 }
+
+  # ===================== AWS Bedrock (Converse), region us-east-1 =====================
+  # Source: AWS Price List bulk API (pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current),
+  # read 2026-11-13; the aws.amazon.com/bedrock/pricing page itself did not render the Anthropic tables to the fetcher.
+  # Model ids from platform.claude.com models overview. Cache write = 1h price (dearer than 5m).
+  - id: bedrock/global.anthropic.claude-fable-5-2
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-13"
+    region: us-east-1
+    deployment_type: global
+    note: "Flagship, global inference profile price. Regional (non-global) us-east-1 would be +10% (8.8/44)."
+    meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
+    limits: { max_output_tokens: 128000, context_window: 1000000 }
+  - id: bedrock/anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-10-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-13"
+    region: us-east-1
+    deployment_type: regional
+    note: "Small. Regional us-east-1 price (+10% over global, the dearer choice). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000 }
+
+  # ===================== Google (Gemini API, AI Studio) =====================
+  # Page: ai.google.dev/gemini-api/docs/pricing (redirects to aistudio.google.com/docs/pricing), Standard paid tier.
+  # Vertex AI pricing page could not be read by the fetcher, so Vertex-specific prices are not encoded.
+  # max_output_tokens 65536: the models page says "65K / 1M" for Gemini 4 (ambiguous) and is silent for 3.5 Flash-Lite; the
+  # lower figure is used (it is sent as the cap, so cost is bounded). Context window 1M per models page for Gemini 4.
+  - id: google/gemini-4-carbon
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Flagship. Price valid through 2026-11-30; doubles from 2026-12-01 (see next entry). Implicit caching only."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", output_per_mtok: "10" }
+    limits: { max_output_tokens: 65536, context_window: 1000000 }
+  - id: google/gemini-4-carbon
+    mode: chat
+    currency: USD
+    effective_from: "2026-12-01"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Announced price from 2026-12-01 ($4 input, $0.20 cached, $20 output)."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", output_per_mtok: "20" }
+    limits: { max_output_tokens: 65536, context_window: 1000000 }
+  - id: google/gemini-3.5-flash-lite
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Small/cheap current model (stable). Output includes thinking. Cache storage ($1/MTok/h) not encoded. Output limit not stated by Google."
+    meters: { input_per_mtok: "0.3", cached_input_per_mtok: "0.03", output_per_mtok: "2.5" }
+    limits: { max_output_tokens: 65536 }
+
+  # ===================== ElevenLabs (TTS, per 1,000 characters) =====================
+  - id: elevenlabs/eleven_v4
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-13"
+    meters: { per_1k_characters: "0.08" }
+  - id: elevenlabs/eleven_v4_turbo
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-13"
+    meters: { per_1k_characters: "0.04" }
+  - id: elevenlabs/eleven_multilingual_v2
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-13"
+    meters: { per_1k_characters: "0.08" }
+  - id: elevenlabs/eleven_flash_v2_5
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-13"
+    note: "Page lists 'Flash / Turbo' at 0.04 without naming v2.5."
+    meters: { per_1k_characters: "0.04" }

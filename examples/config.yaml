@@ -1,0 +1,72 @@
+# spendgate.yaml: single-host deployment, SQLite ledger, EUR budgets over a USD catalog.
+# No secret lives here: credentials and the key pepper are `env:NAME` or `file:/absolute/path`.
+# Check it without starting:  spendgate check-config --config examples/config.yaml
+server:
+  listen: 0.0.0.0:8080
+  admin: { listen: 127.0.0.1:8081 }     # optional; without it /admin/v1 shares the data port
+  max_body_bytes: 26214400          # audio uploads
+  max_json_body_bytes: 4194304      # JSON requests
+  key_pepper: env:SPENDGATE_KEY_PEPPER
+
+ledger:
+  currency: EUR
+  backend: { kind: sqlite, path: ./spendgate.db }   # relative to this file; the file must be 0600
+  lease_seconds: 60
+  sweep_seconds: 30      # how often `serve` charges and releases holds whose owner died
+  retention_days: 90
+
+# Required because the catalog is in USD and the ledger in EUR (1 USD = 0.92 EUR).
+fx:
+  rates: { USD: "0.92" }
+  as_of: "2026-11-13"
+  source: ECB reference rate
+
+catalog:
+  paths: []                              # optional override files, applied after the bundled catalog
+
+providers:
+  openai:
+    base_url: https://api.openai.com/v1
+    credential: env:OPENAI_API_KEY
+  anthropic:
+    base_url: https://api.anthropic.com
+    credential: file:/run/secrets/anthropic_api_key
+
+models:
+  gpt-6-luna:                            # alias: one catalog id, ordered deployments
+    catalog_id: openai/gpt-6-luna
+    deployments:
+      - { provider: openai }
+  claude-haiku:
+    catalog_id: anthropic/claude-haiku-5-5
+    deployments:
+      - { provider: anthropic }
+  embeddings:
+    catalog_id: openai/text-embedding-3-small
+    deployments:
+      - { provider: openai }
+
+defaults:
+  limits: { rpm: 600, concurrency: 16 }
+  max_embedding_items: 256
+  strict_overrun: true
+
+routing: { max_attempts: 2, cooldown_seconds: 5 }
+
+anthropic:
+  allowed_versions: ["2023-06-01", "2026-10-21"]
+  allowed_betas: []
+
+fail_open: {}                            # explicit opt-outs only, e.g. allow_remote_media: true
+
+bootstrap:                               # create-only; a restart never changes existing rows
+  scopes: ["org:acme", "org:acme/project:app"]
+  budgets:
+    - { id: acme-monthly, scope: "org:acme", period: month, cap: "200 EUR", soft_pct: 80 }
+    - { id: app-daily, scope: "org:acme/project:app", period: day, cap: "10 EUR" }
+  keys:
+    - name: app-key
+      scope: "org:acme/project:app"
+      models: [gpt-6-luna, embeddings]
+      session_defaults: { budget: "1 EUR", max_steps: 50, max_seconds: 900 }
+    - { name: ops-admin, admin_scopes: ["usage:read", "keys:write", "budgets:write"] }

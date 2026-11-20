@@ -1,0 +1,58 @@
+{
+  "sample_spec": {"input_cost_per_token": 0.0, "litellm_provider": "one of https://docs.litellm.ai/docs/providers", "mode": "one of: chat"},
+  "gpt-6-luna": {
+    "litellm_provider": "openai", "mode": "chat",
+    "input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07,
+    "cache_read_input_token_cost": 1e-08, "cache_creation_input_token_cost": 1.25e-07,
+    "input_cost_per_token_above_272k_tokens": 2e-07, "output_cost_per_token_above_272k_tokens": 7.5e-07,
+    "max_input_tokens": 1050000, "max_output_tokens": 128000
+  },
+  "gpt-transcribe": {"litellm_provider": "openai", "mode": "audio_transcription", "input_cost_per_second": 7.5e-05},
+  "whisper-1": {
+    "litellm_provider": "openai", "mode": "audio_transcription", "input_cost_per_second": 0.0001,
+    "deprecation_date": "2027-02-26"
+  },
+  "text-embedding-3-small": {"litellm_provider": "openai", "mode": "embedding", "input_cost_per_token": 2e-08, "output_cost_per_token": 0.0},
+  "gpt-6-new": {
+    "litellm_provider": "openai", "mode": "responses", "input_cost_per_token": 3e-06,
+    "output_cost_per_token": 1.5e-05, "max_output_tokens": 64000, "max_input_tokens": 400000
+  },
+  "gpt-6-nolimit": {"litellm_provider": "openai", "mode": "chat", "input_cost_per_token": 3e-06, "output_cost_per_token": 1.5e-05},
+  "gpt-image-1": {"litellm_provider": "openai", "mode": "image_generation", "input_cost_per_token": 5e-06},
+  "azure/gpt-6-luna": {
+    "litellm_provider": "azure", "mode": "chat", "input_cost_per_token": 1e-07, "output_cost_per_token": 5e-07,
+    "max_output_tokens": 128000
+  },
+  "azure/eu/gpt-6-luna": {
+    "litellm_provider": "azure", "mode": "chat", "input_cost_per_token": 1.2e-07, "output_cost_per_token": 6e-07,
+    "max_output_tokens": 128000
+  },
+  "azure/us/gpt-6-luna": {
+    "litellm_provider": "azure", "mode": "chat", "input_cost_per_token": 1.1e-07, "output_cost_per_token": 5.5e-07,
+    "max_output_tokens": 128000
+  },
+  "azure/us-gov/gpt-6-luna": {"litellm_provider": "azure", "mode": "chat", "input_cost_per_token": 9e-07, "output_cost_per_token": 9e-07},
+  "azure/whisper": {
+    "litellm_provider": "azure", "mode": "audio_transcription", "input_cost_per_second": 0.0001,
+    "deprecation_date": "2026-12-15"
+  },
+  "claude-fable-5-2": {
+    "litellm_provider": "anthropic", "mode": "chat", "input_cost_per_token": 8e-06, "output_cost_per_token": 4e-05,
+    "cache_read_input_token_cost": 2e-07, "cache_creation_input_token_cost": 1e-05,
+    "cache_creation_input_token_cost_above_1hr": 1.6e-05, "max_output_tokens": 128000, "max_input_tokens": 1000000
+  },
+  "global.anthropic.claude-fable-5-2": {
+    "litellm_provider": "bedrock_converse", "mode": "chat", "input_cost_per_token": 8e-06,
+    "output_cost_per_token": 4e-05, "max_output_tokens": 128000
+  },
+  "bedrock/us-east-1/anthropic.claude-fable-5-2": {"litellm_provider": "bedrock", "mode": "chat", "input_cost_per_token": 8.8e-06, "output_cost_per_token": 4.4e-05},
+  "gemini/gemini-4-carbon": {
+    "litellm_provider": "gemini", "mode": "chat", "input_cost_per_token": 2e-06,
+    "output_cost_per_token": 1e-05, "output_cost_per_reasoning_token": 1e-05,
+    "cache_read_input_token_cost": 1e-07, "max_output_tokens": 65536
+  },
+  "vertex_ai/gemini-4-carbon": {"litellm_provider": "vertex_ai", "mode": "chat", "input_cost_per_token": 2.2e-06, "output_cost_per_token": 1.1e-05},
+  "elevenlabs/eleven_v4": {"litellm_provider": "elevenlabs", "mode": "audio_speech", "input_cost_per_character": 8e-05},
+  "claude-fable-latest": {"litellm_provider": null, "mode": null},
+  "some-other-provider/model": {"litellm_provider": "mistral", "mode": "chat", "input_cost_per_token": 1e-06, "output_cost_per_token": 1e-06}
+}

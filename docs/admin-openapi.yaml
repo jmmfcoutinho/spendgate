@@ -1,0 +1,877 @@
+openapi: 3.1.0
+info:
+  title: spendgate admin API
+  version: 1.0.0
+  summary: Keys, scopes, budgets, kill switches, usage and status.
+  description: |
+    Control plane of spendgate. Separate admin key type (`sga-<prefix>-<secret>`) with scopes
+    `usage:read`, `keys:write` and `budgets:write`. May listen on its own port (`server.admin.listen`).
+    Money is a decimal string plus currency (stored as integer nano-units). Times are RFC 3339 UTC.
+    Errors use the OpenAI shape. See protocol.md section 6. Scope ids are ULIDs; every `{scope_id}` and
+    `scope_id` parameter also accepts the unique human path such as `org:acme/project:app/service:api`
+    (URL-encode the slashes in path parameters).
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+servers:
+  - url: http://127.0.0.1:8081
+    description: Separate admin listener (default suggestion)
+security:
+  - adminKey: []
+tags:
+  - name: status
+  - name: scopes
+  - name: keys
+  - name: budgets
+  - name: kill-switches
+  - name: usage
+paths:
+  /admin/v1/status:
+    get:
+      tags: [status]
+      operationId: getStatus
+      summary: Gateway status
+      description: Version, ledger backend and health, catalog version, active kill switches, budget alerts. Needs `usage:read`.
+      x-required-scope: usage:read
+      responses:
+        '200':
+          description: Status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Status'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/readiness:
+    get:
+      tags: [status]
+      operationId: getReadiness
+      summary: Readiness in detail
+      description: >-
+        What `/readyz` on the data port withholds: the failing reasons (`ledger_unreachable`,
+        `catalog_not_loaded`, `kill_switch_engaged`) and the warnings (`clock_skew`,
+        `catalog_stale`). The status code is 200 when ready and 503 when not. Needs `usage:read`.
+      x-required-scope: usage:read
+      responses:
+        '200':
+          description: Ready, possibly with warnings
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Readiness'}
+        '503':
+          description: Not ready; `reasons` says why
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Readiness'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/scopes:
+    get:
+      tags: [scopes]
+      operationId: listScopes
+      x-required-scope: usage:read
+      summary: List scopes
+      parameters:
+        - {name: kind, in: query, schema: {$ref: '#/components/schemas/ScopeKind'}}
+        - {name: parent, in: query, description: Parent scope id or path, schema: {type: string}}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Scopes
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ScopeList'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [scopes]
+      operationId: createScope
+      x-required-scope: keys:write
+      summary: Create a scope
+      description: Give the human path (`org:acme/project:app/service:api`); parents must exist and the kind is the last segment. Kind `session` scopes are created by the gateway on first use and cannot be created here.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScopeCreate'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Scope'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/scopes/{scope_id}:
+    parameters: [{$ref: '#/components/parameters/ScopeId'}]
+    get:
+      tags: [scopes]
+      operationId: getScope
+      x-required-scope: usage:read
+      summary: Get a scope with its spent, held and remaining amounts
+      responses:
+        '200':
+          description: Scope
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/ScopeDetail'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [scopes]
+      operationId: updateScope
+      x-required-scope: keys:write
+      summary: Update display name
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ScopeUpdate'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Scope'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/keys:
+    get:
+      tags: [keys]
+      operationId: listKeys
+      x-required-scope: usage:read
+      summary: List virtual keys (never returns secrets)
+      parameters:
+        - {name: scope_id, in: query, description: Scope id or path, schema: {type: string}}
+        - {name: include_revoked, in: query, schema: {type: boolean, default: false}}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Keys
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KeyList'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [keys]
+      operationId: createKey
+      x-required-scope: keys:write
+      summary: Create a virtual key
+      description: The full `sg-<prefix>-<secret>` value is returned once, in `secret`; only its hash is stored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KeyCreate'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KeyWithSecret'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/keys/{key_id}:
+    parameters: [{$ref: '#/components/parameters/KeyId'}]
+    get:
+      tags: [keys]
+      operationId: getKey
+      x-required-scope: usage:read
+      summary: Get a key
+      responses:
+        '200':
+          description: Key
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Key'}
+        default: {$ref: '#/components/responses/Error'}
+    patch:
+      tags: [keys]
+      operationId: updateKey
+      x-required-scope: keys:write
+      summary: Change allowed models, limits, session defaults or expiry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KeyUpdate'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Key'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/keys/{key_id}/revoke:
+    parameters: [{$ref: '#/components/parameters/KeyId'}]
+    post:
+      tags: [keys]
+      operationId: revokeKey
+      x-required-scope: keys:write
+      summary: Revoke a key (takes effect without restart)
+      responses:
+        '200':
+          description: Revoked
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Key'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/keys/{key_id}/rotate:
+    parameters: [{$ref: '#/components/parameters/KeyId'}]
+    post:
+      tags: [keys]
+      operationId: rotateKey
+      x-required-scope: keys:write
+      summary: Issue a replacement key with the same settings; the old key stays valid for a grace period
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                grace_seconds: {type: integer, minimum: 0, maximum: 604800, default: 3600}
+      responses:
+        '201':
+          description: New key (secret shown once)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KeyWithSecret'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/scopes/{scope_id}/budgets:
+    parameters: [{$ref: '#/components/parameters/ScopeId'}]
+    get:
+      tags: [budgets]
+      operationId: listBudgets
+      x-required-scope: usage:read
+      summary: List budgets of a scope with current spent and held
+      responses:
+        '200':
+          description: Budgets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Budget'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [budgets]
+      operationId: createBudget
+      x-required-scope: budgets:write
+      summary: Create a budget (temporary extra room is a grant, see below)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BudgetCreate'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Budget'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/budgets/{budget_id}/ack-overrun:
+    parameters: [{$ref: '#/components/parameters/BudgetId'}]
+    post:
+      tags: [budgets]
+      operationId: ackOverrun
+      x-required-scope: budgets:write
+      summary: Acknowledge a breach overrun so the budget admits calls again (clears review_required_at; strict_overrun)
+      description: Without this, a budget flagged by a breach overrun refuses every call with `budget_exhausted` and `details.reason = overrun_review`, across period rollover and cap changes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: {type: string, minLength: 1, maxLength: 500}
+      responses:
+        '200':
+          description: Cleared
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Budget'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/budgets/{budget_id}/grants:
+    parameters: [{$ref: '#/components/parameters/BudgetId'}]
+    post:
+      tags: [budgets]
+      operationId: createGrant
+      x-required-scope: budgets:write
+      summary: Add a temporary additive grant (effective cap = cap + active grants)
+      description: When a grant expires and spent plus held exceed the new effective cap, the difference is recorded as `excess` (lazily, at the next admission or sweep) and new calls are refused until room exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/GrantCreate'}
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Grant'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/budgets/{budget_id}:
+    parameters: [{$ref: '#/components/parameters/BudgetId'}]
+    patch:
+      tags: [budgets]
+      operationId: updateBudget
+      x-required-scope: budgets:write
+      summary: Change cap, soft threshold or strict_overrun. Lowering a cap below spent is allowed, records `excess` and blocks further calls.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BudgetUpdate'}
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Budget'}
+        default: {$ref: '#/components/responses/Error'}
+    delete:
+      tags: [budgets]
+      operationId: deleteBudget
+      x-required-scope: budgets:write
+      summary: Remove a budget (history stays in calls)
+      responses:
+        '204': {description: Deleted}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/kill-switches:
+    get:
+      tags: [kill-switches]
+      operationId: listKillSwitches
+      x-required-scope: usage:read
+      summary: List active kill switches
+      responses:
+        '200':
+          description: Active switches
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/KillSwitch'}
+        default: {$ref: '#/components/responses/Error'}
+    post:
+      tags: [kill-switches]
+      operationId: engageKillSwitch
+      x-required-scope: budgets:write
+      summary: Engage a kill switch (global, scope, key, provider or model)
+      description: Targets `global`, `scope`, `key`, `provider`, `model`; `target_ref` is omitted for global, a scope ULID or path, a key id, a provider slug or a catalog model id. New calls fail with `kill_switch` (checked in the admission transaction); in-flight streams end at the next event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/KillSwitchCreate'}
+      responses:
+        '201':
+          description: Engaged
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/KillSwitch'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/kill-switches/{switch_id}:
+    parameters:
+      - {name: switch_id, in: path, required: true, schema: {type: string}}
+    delete:
+      tags: [kill-switches]
+      operationId: liftKillSwitch
+      x-required-scope: budgets:write
+      summary: Lift a kill switch
+      responses:
+        '204': {description: Lifted}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/usage:
+    get:
+      tags: [usage]
+      operationId: queryUsage
+      x-required-scope: usage:read
+      summary: Aggregated usage ("who spent what on which model")
+      parameters:
+        - name: by
+          in: query
+          description: Comma list of dimensions to group by (at most 6). Usage is computed from `calls`, which are kept for the retention window; older days are deleted (a daily rollup is on the roadmap), so a `since` before the cutoff is `invalid_request` with param `since`.
+          schema:
+            type: array
+            items: {type: string, enum: [scope, project, service, user, session, key, model, provider, deployment, tag, day, outcome]}
+            maxItems: 6
+          style: form
+          explode: false
+        - name: basis
+          in: query
+          description: '`charged` (default) sums `charged_nano`, the money booked to budgets (includes full-hold charges for cancels, 5xx and sweeper expiry); `usage` sums `usage_cost_nano`, computed from reported usage only.'
+          schema: {type: string, enum: [charged, usage], default: charged}
+        - {name: since, in: query, description: 'RFC 3339 time or relative duration such as 7d', schema: {type: string}}
+        - {name: until, in: query, schema: {type: string}}
+        - {name: scope_id, in: query, description: Restrict to a scope (id or path) and its descendants, schema: {type: string}}
+        - {name: model, in: query, schema: {type: string}}
+        - {name: tag, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Rows
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UsageResult'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/calls:
+    get:
+      tags: [usage]
+      operationId: listCalls
+      x-required-scope: usage:read
+      summary: Per-attempt call records (kept for the retention window, then deleted). Refused requests write no row.
+      parameters:
+        - {name: scope_id, in: query, schema: {type: string}}
+        - {name: key_id, in: query, schema: {type: string}}
+        - {name: session_id, in: query, description: Session scope id or path, schema: {type: string}}
+        - {name: outcome, in: query, schema: {$ref: '#/components/schemas/Outcome'}}
+        - {name: since, in: query, schema: {type: string}}
+        - {name: until, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Calls, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/Call'}
+                  next_cursor: {type: [string, 'null']}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/calls/{request_id}:
+    get:
+      tags: [usage]
+      operationId: getCall
+      x-required-scope: usage:read
+      summary: One call by X-Spendgate-Request-Id (authoritative cost of a stream)
+      parameters:
+        - {name: request_id, in: path, required: true, schema: {type: string}}
+      responses:
+        '200':
+          description: Call
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Call'}
+        default: {$ref: '#/components/responses/Error'}
+  /admin/v1/audit:
+    get:
+      tags: [usage]
+      operationId: listAudit
+      x-required-scope: usage:read
+      summary: Admin write audit trail
+      parameters:
+        - {name: since, in: query, schema: {type: string}}
+        - {name: until, in: query, schema: {type: string}}
+        - {name: actor, in: query, schema: {type: string}}
+        - {$ref: '#/components/parameters/Limit'}
+        - {$ref: '#/components/parameters/Cursor'}
+      responses:
+        '200':
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor]
+                properties:
+                  data:
+                    type: array
+                    items: {$ref: '#/components/schemas/AuditEntry'}
+                  next_cursor: {type: [string, 'null']}
+        default: {$ref: '#/components/responses/Error'}
+components:
+  securitySchemes:
+    adminKey:
+      type: http
+      scheme: bearer
+      description: Admin key `sga-<prefix>-<secret>`. Data-plane `sg-` keys are rejected here.
+  parameters:
+    Limit: {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
+    Cursor: {name: cursor, in: query, description: Opaque cursor from next_cursor, schema: {type: string}}
+    ScopeId: {name: scope_id, in: path, required: true, schema: {type: string}, description: 'Scope ULID or human path such as org:acme/project:app/service:api (URL-encoded)'}
+    KeyId: {name: key_id, in: path, required: true, schema: {type: string}}
+    BudgetId: {name: budget_id, in: path, required: true, schema: {type: string}}
+  responses:
+    Error:
+      description: Error (OpenAI shape). Codes unauthorized 401, forbidden 403, invalid_request 400, not_found 404, conflict 409, ledger_unavailable 503, internal_error 500. Budget refusals carry `details.reason` (e.g. `overrun_review`).
+      headers:
+        X-Spendgate-Request-Id: {schema: {type: string}}
+        Retry-After: {schema: {type: integer}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, param]
+          properties:
+            type: {type: string}
+            code: {$ref: '#/components/schemas/ErrorCode'}
+            message: {type: string}
+            param: {type: [string, 'null']}
+            details:
+              type: object
+              additionalProperties: true
+              description: 'Typed per code: scope, remaining, limit, period_resets_at, retry_after_seconds, provider, reason (overrun_review).'
+    ErrorCode:
+      type: string
+      enum: [invalid_request, unauthorized, forbidden, not_found, conflict, internal_error, ledger_unavailable,
+             budget_exhausted, budget_period_exhausted, session_limit_reached, rate_limited, upstream_throttled,
+             upstream_unavailable, model_not_priced, model_not_allowed, request_too_large, kill_switch]
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: {type: string, pattern: '^[0-9]+(\.[0-9]{1,9})?$', examples: ['12.500000000']}
+        currency: {type: string, pattern: '^[A-Z]{3}$', examples: [EUR]}
+    SignedMoney:
+      type: object
+      description: Only for derived values that can be negative (`remaining` after an overrun or excess).
+      required: [amount, currency]
+      properties:
+        amount: {type: string, pattern: '^-?[0-9]+(\.[0-9]{1,9})?$'}
+        currency: {type: string, pattern: '^[A-Z]{3}$'}
+    ScopeKind:
+      type: string
+      enum: [org, project, service, user, session]
+    Period:
+      type: string
+      enum: [none, day, month]
+    Outcome:
+      type: string
+      description: One call-outcome enum (core.outcomes, DDL CHECK). Reservation states (pending, settled, released, expired) are separate.
+      enum: [ok, ok_no_usage, client_error, throttled, timeout, upstream_5xx, unreachable, cancelled,
+             stream_broken, internal_error, expired]
+    SessionDefaults:
+      type: object
+      description: >-
+        On keys only (column keys.session_defaults). A session header on a key without defaults is
+        `invalid_request`. Clients cannot request limits. Money is integer nano-units.
+      additionalProperties: false
+      properties:
+        budget_nano: {type: integer, minimum: 0}
+        max_steps: {type: integer, minimum: 1}
+        max_seconds: {type: integer, minimum: 1}
+        idle_seconds: {type: integer, minimum: 1}
+        max_new_sessions_per_hour: {type: integer, minimum: 1}
+    ScopeCreate:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+          description: >-
+            Unique human path; the last segment is the new scope, its kind is the segment prefix. Only a `session`
+            segment (gateway-created, per key: `session:<key id>:<session id>`, renamed `...#<started_at>` on restart)
+            may contain `:` and `#`.
+          pattern: '^([a-z]+:[A-Za-z0-9._-]{1,64}/){0,4}(session:[A-Za-z0-9._:#-]{1,300}|[a-z]+:[A-Za-z0-9._-]{1,64})$'
+          examples: ['org:acme/project:app/service:api']
+        display_name: {type: string, maxLength: 120}
+    ScopeUpdate:
+      type: object
+      properties:
+        display_name: {type: string, maxLength: 120}
+    Scope:
+      allOf:
+        - {$ref: '#/components/schemas/ScopeCreate'}
+        - type: object
+          required: [id, kind, created_at]
+          properties:
+            id: {type: string, description: ULID}
+            kind: {$ref: '#/components/schemas/ScopeKind'}
+            parent_id: {type: [string, 'null']}
+            created_at: {type: string, format: date-time}
+    ScopeDetail:
+      allOf:
+        - {$ref: '#/components/schemas/Scope'}
+        - type: object
+          properties:
+            budgets:
+              type: array
+              items: {$ref: '#/components/schemas/Budget'}
+    ScopeList:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/Scope'}
+        next_cursor: {type: [string, 'null']}
+    KeyLimits:
+      type: object
+      description: Stored as keys.limits JSON; money is integer nano-units. RPM, TPM and concurrency are per gateway process in v0.1.
+      additionalProperties: false
+      properties:
+        rpm: {type: integer, minimum: 1}
+        tpm: {type: integer, minimum: 1}
+        max_concurrent: {type: integer, minimum: 1}
+        max_output_tokens: {type: integer, minimum: 1}
+        per_call_ceiling_nano: {type: integer, minimum: 0}
+    KeyCreate:
+      type: object
+      required: [scope_id]
+      properties:
+        scope_id: {type: string, description: Scope ULID or path}
+        name: {type: string, maxLength: 120}
+        allowed_models: {type: array, items: {type: string}, description: Empty or absent means the models listed in config}
+        limits: {$ref: '#/components/schemas/KeyLimits'}
+        session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        expires_at: {type: [string, 'null'], format: date-time}
+    KeyUpdate:
+      type: object
+      properties:
+        name: {type: string, maxLength: 120}
+        allowed_models: {type: array, items: {type: string}}
+        limits: {$ref: '#/components/schemas/KeyLimits'}
+        session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        expires_at: {type: [string, 'null'], format: date-time}
+    Key:
+      type: object
+      required: [id, prefix, scope_id, created_at, revoked]
+      properties:
+        id: {type: string}
+        prefix: {type: string, description: The `<prefix>` part of sg-<prefix>-<secret>}
+        name: {type: string}
+        scope_id: {type: string}
+        allowed_models: {type: array, items: {type: string}}
+        limits: {$ref: '#/components/schemas/KeyLimits'}
+        session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        created_at: {type: string, format: date-time}
+        expires_at: {type: [string, 'null'], format: date-time}
+        last_used_at: {type: [string, 'null'], format: date-time}
+        revoked: {type: boolean}
+    KeyWithSecret:
+      allOf:
+        - {$ref: '#/components/schemas/Key'}
+        - type: object
+          required: [secret]
+          properties:
+            secret: {type: string, description: Full virtual key. Shown once.}
+    KeyList:
+      type: object
+      required: [data, next_cursor]
+      properties:
+        data:
+          type: array
+          items: {$ref: '#/components/schemas/Key'}
+        next_cursor: {type: [string, 'null']}
+    BudgetCreate:
+      type: object
+      required: [cap]
+      properties:
+        period: {$ref: '#/components/schemas/Period'}
+        cap: {$ref: '#/components/schemas/Money'}
+        soft_pct: {type: integer, minimum: 1, maximum: 99, default: 80, description: Warning threshold in percent, never blocks}
+        model_filter: {type: [string, 'null'], description: 'Model id or glob; null means all models'}
+        strict_overrun:
+          type: boolean
+          default: true
+          description: Block (`budget_exhausted`, `details.reason = overrun_review`) after an overrun leaves spent + held above the effective cap, until ack-overrun.
+        note: {type: string, maxLength: 500}
+    BudgetUpdate:
+      type: object
+      properties:
+        cap: {$ref: '#/components/schemas/Money'}
+        soft_pct: {type: integer, minimum: 1, maximum: 99}
+        strict_overrun: {type: boolean}
+        note: {type: string, maxLength: 500}
+    GrantCreate:
+      type: object
+      required: [amount, valid_until, reason]
+      properties:
+        amount: {$ref: '#/components/schemas/Money'}
+        valid_from: {type: string, format: date-time, description: Defaults to now}
+        valid_until: {type: string, format: date-time}
+        reason: {type: string, minLength: 1, maxLength: 500}
+    Grant:
+      allOf:
+        - {$ref: '#/components/schemas/GrantCreate'}
+        - type: object
+          required: [id, budget_id, valid_from, created_by, created_at]
+          properties:
+            id: {type: string}
+            budget_id: {type: string}
+            created_by: {type: string}
+            created_at: {type: string, format: date-time}
+    Budget:
+      allOf:
+        - {$ref: '#/components/schemas/BudgetCreate'}
+        - type: object
+          required: [id, scope_id, spent, held, remaining, effective_cap]
+          properties:
+            id: {type: string}
+            scope_id: {type: string}
+            period_start: {type: [string, 'null'], format: date-time}
+            effective_cap: {$ref: '#/components/schemas/Money', description: Cap plus active grants}
+            spent: {$ref: '#/components/schemas/Money'}
+            held: {$ref: '#/components/schemas/Money'}
+            remaining: {$ref: '#/components/schemas/SignedMoney'}
+            overrun: {$ref: '#/components/schemas/Money'}
+            excess: {$ref: '#/components/schemas/Money'}
+            review_required_at: {type: [string, 'null'], format: date-time, description: Set by a breach overrun; cleared by ack-overrun}
+    KillSwitchCreate:
+      type: object
+      required: [target_kind, reason]
+      properties:
+        target_kind: {type: string, enum: [global, scope, key, provider, model]}
+        target_ref:
+          type: [string, 'null']
+          description: Omitted or null for global; scope ULID or path, key id, provider slug, or catalog model id otherwise.
+        reason: {type: string, minLength: 1, maxLength: 500}
+    KillSwitch:
+      allOf:
+        - {$ref: '#/components/schemas/KillSwitchCreate'}
+        - type: object
+          required: [id, created_by, created_at, cleared_at]
+          properties:
+            id: {type: string}
+            created_by: {type: string}
+            created_at: {type: string, format: date-time}
+            cleared_at: {type: [string, 'null'], format: date-time}
+    UsageResult:
+      type: object
+      required: [currency, rows, total, next_cursor]
+      properties:
+        currency: {type: string}
+        rows:
+          type: array
+          items:
+            type: object
+            required: [group, calls, cost]
+            properties:
+              group:
+                type: object
+                additionalProperties: {type: string}
+              calls: {type: integer}
+              tokens_in: {type: integer}
+              tokens_out: {type: integer}
+              tokens_cached: {type: integer}
+              tokens_cache_write: {type: integer}
+              audio_ms: {type: integer}
+              characters: {type: integer}
+              cost: {$ref: '#/components/schemas/Money'}
+        total: {$ref: '#/components/schemas/Money'}
+        next_cursor: {type: [string, 'null']}
+    Call:
+      type: object
+      description: >-
+        One provider attempt (PK request_id + attempt); fields mirror the `calls` table. Audit view: money is raw
+        integer nano-units of the ledger currency (`native_cost_nano` of `native_currency`). Times are RFC 3339.
+        Refused requests have no row. A sweeper-written row (`settled_by = sweeper`) is updated in place by a late settle.
+      required: [request_id, attempt, key_id, scope_id, provider, deployment, model, outcome, charged_nano, settled_by, started_at, finished_at]
+      properties:
+        request_id: {type: string}
+        attempt: {type: integer, minimum: 1}
+        key_id: {type: string}
+        scope_id: {type: string}
+        session_id: {type: [string, 'null']}
+        user_label: {type: [string, 'null']}
+        labels: {type: object, additionalProperties: {type: string}}
+        endpoint: {type: string}
+        provider: {type: string}
+        deployment: {type: string}
+        model: {type: string}
+        price_id: {type: string}
+        catalog_sha: {type: string}
+        tokens_in: {type: integer, minimum: 0}
+        tokens_out: {type: integer, minimum: 0}
+        tokens_cached: {type: integer, minimum: 0}
+        tokens_cache_write: {type: integer, minimum: 0}
+        tokens_reasoning: {type: integer, minimum: 0}
+        audio_tokens_in: {type: integer, minimum: 0}
+        audio_tokens_out: {type: integer, minimum: 0}
+        audio_ms: {type: integer, minimum: 0}
+        characters: {type: integer, minimum: 0}
+        images: {type: integer, minimum: 0}
+        native_currency: {type: string}
+        native_cost_nano: {type: integer, minimum: 0}
+        fx_rate_nano: {type: integer, minimum: 1}
+        charged_nano: {type: integer, minimum: 0, description: Money booked to the budgets for this attempt (0 for a not_processed attempt; the full hold for a cancel or 5xx after send or a sweeper expiry)}
+        usage_cost_nano: {type: [integer, 'null'], minimum: 0, description: Cost computed from reported usage; null when no usage was seen}
+        hold_nano: {type: integer, minimum: 0}
+        overrun_nano: {type: integer, minimum: 0}
+        http_status: {type: [integer, 'null'], minimum: 100, maximum: 599, description: The HTTP status the provider answered this attempt with (for a stream, the opened response); null when the request was never sent or no response arrived (connect failure, timeout before headers, cancel before the answer, sweeper expiry)}
+        outcome: {$ref: '#/components/schemas/Outcome'}
+        error_code: {type: [string, 'null']}
+        streamed: {type: boolean}
+        settled_by: {type: string, enum: [owner, sweeper]}
+        review_required_at: {type: [string, 'null'], format: date-time}
+        started_at: {type: string, format: date-time}
+        finished_at: {type: string, format: date-time}
+        latency_ms: {type: [integer, 'null']}
+        ttfb_ms: {type: [integer, 'null']}
+    AuditEntry:
+      type: object
+      required: [id, at, actor, action]
+      properties:
+        id: {type: string}
+        at: {type: string, format: date-time}
+        actor: {type: string, description: Admin key prefix or cli}
+        action: {type: string, examples: [budget.update]}
+        target: {type: string}
+        before: {type: [object, 'null'], additionalProperties: true}
+        after: {type: [object, 'null'], additionalProperties: true}
+        request_id: {type: string}
+    Readiness:
+      type: object
+      required: [status, reasons, warnings]
+      properties:
+        status: {type: string, enum: [ready, not_ready]}
+        reasons: {type: array, items: {type: string}}
+        warnings: {type: array, items: {type: string}}
+
+    Status:
+      type: object
+      required: [version, ledger, catalog, kill_switches]
+      properties:
+        version: {type: string}
+        uptime_seconds: {type: integer}
+        ledger:
+          type: object
+          required: [backend, healthy]
+          properties:
+            backend: {type: string, enum: [sqlite, postgres]}
+            healthy: {type: boolean}
+            pending_holds: {type: integer}
+        catalog:
+          type: object
+          properties:
+            entries: {type: integer}
+            newest_effective_from: {type: string, format: date}
+            expired_or_deprecated: {type: array, items: {type: string}}
+        deployments:
+          type: array
+          items:
+            type: object
+            required: [id, state]
+            properties:
+              id: {type: string}
+              state: {type: string, enum: [ok, cooling_down, circuit_open]}
+              cooldown_seconds: {type: integer}
+        kill_switches:
+          type: array
+          items: {$ref: '#/components/schemas/KillSwitch'}
+        budget_alerts:
+          type: array
+          description: Budgets past their soft threshold, exhausted or awaiting overrun review
+          items:
+            type: object
+            properties:
+              scope_id: {type: string}
+              kind: {type: string, enum: [soft_threshold, exhausted, overrun_review]}

@@ -1,0 +1,11 @@
+{
+  "_note": "Non-streamed Messages response shape from the prompt-caching and fast-mode docs, 2026-11-17. input_tokens excludes cache tokens.",
+  "id": "msg_01example", "type": "message", "role": "assistant", "model": "claude-opus-5-5",
+  "content": [{"type": "text", "text": "Hello"}], "stop_reason": "end_turn",
+  "usage": {
+    "input_tokens": 100, "output_tokens": 200,
+    "cache_creation_input_tokens": 1000, "cache_read_input_tokens": 5000,
+    "cache_creation": {"ephemeral_5m_input_tokens": 400, "ephemeral_1h_input_tokens": 600},
+    "service_tier": "standard", "speed": "standard", "inference_geo": "global"
+  }
+}

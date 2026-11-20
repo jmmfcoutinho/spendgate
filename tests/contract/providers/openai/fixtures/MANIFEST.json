@@ -1,0 +1,11 @@
+{
+  "recorded_on": "2026-11-17",
+  "kind": "hand-transcribed response shapes, not live recordings (no API key was used)",
+  "sources": {
+    "chat usage/stream_options": "https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create",
+    "transcription usage (tokens and duration), speech fields": "https://developers.openai.com/api/reference/resources/audio",
+    "responses usage": "OpenAI Responses reference; same fields as tests/fakes/shapes_openai.py",
+    "errors": "OpenAI error object {error:{message,type,param,code}}"
+  },
+  "secrets": "none; all ids and text are placeholders"
+}

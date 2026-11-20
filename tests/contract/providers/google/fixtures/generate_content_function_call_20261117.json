@@ -1,0 +1,16 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {"functionCall": {"name": "get_weather", "args": {"city": "Porto"}}, "thoughtSignature": "sig-fixture"}
+        ]
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {"promptTokenCount": 50, "candidatesTokenCount": 12, "totalTokenCount": 62},
+  "modelVersion": "gemini-4-carbon"
+}

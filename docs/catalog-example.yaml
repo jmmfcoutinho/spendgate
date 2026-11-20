@@ -1,0 +1,205 @@
+# spendgate price catalog, example and seed shape (schema: catalog-schema.json).
+# Prices are quoted decimal STRINGS in the entry's own currency; units are in the field names.
+# Every number below comes from an earlier in-house guard or, for the three "illustrative" entries,
+# from LiteLLM's public map; those are verified: false until they are re-checked.
+# Provider slug = adapter module name (azure_openai, azure_speech); Vertex is an auth mode of google.
+# Every chat/responses/messages entry carries limits.max_output_tokens (output ceiling, protocol 2.1).
+catalog_version: 1
+updated: "2026-11-13"
+
+# Optional per-provider settlement rules (not per model).
+# free_statuses may only list throttling statuses (429, 529). No fail-open option exists in catalog data.
+# A status listed here means "the provider rejected the call before processing it": the attempt costs 0 and
+# the request may fail over (core predicate not_processed). Default when omitted: [429].
+providers:
+  openai: { free_statuses: [429] }
+  azure_openai: { free_statuses: [429] }
+  anthropic: { free_statuses: [429, 529] }
+  bedrock: { free_statuses: [429] }
+  google: { free_statuses: [429] }
+  azure_speech: { free_statuses: [429] }
+  elevenlabs: { free_statuses: [429] }
+
+models:
+  # --- Text with cache + long-context + deployment multiplier (Azure OpenAI deployment-zone models) --------
+  # Earlier guard rates are Global Standard x 1.20 (Azure Data Zone upper bound). Stored as the global
+  # price plus price_multiplier so a rate change touches one number. 0.12 = 0.10 x 1.20, etc.
+  - id: azure_openai/gpt-6-luna
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-04"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: false
+    note: "Global price derived as the earlier guard's rate / 1.20; Data Zone published rate is about +10%, 20% kept as a safe bound."
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "0.10", cached_input_per_mtok: "0.01", output_per_mtok: "0.50" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 64000 }   # documented ceiling = the earlier guard's MAX_OUTPUT_TOKENS_LIMIT; verified: false
+  - id: azure_openai/gpt-6.1-terra
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-06"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: false
+    note: "Published Global 1.00 / 0.05 / 5.00 per 1M (earlier guard comment, checked 2026-11-06) x 1.20."
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "1.00", cached_input_per_mtok: "0.05", output_per_mtok: "5.00" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 64000 }   # documented ceiling = the earlier guard's MAX_OUTPUT_TOKENS_LIMIT; verified: false
+  - id: azure_openai/gpt-6.1-sol
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-04"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: false
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "2.00", cached_input_per_mtok: "0.10", output_per_mtok: "10.00" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 64000 }   # documented ceiling = the earlier guard's MAX_OUTPUT_TOKENS_LIMIT; verified: false
+
+  # --- Illustrative: cache write + lifecycle (anthropic claude-sonnet-4-5, LiteLLM map) --------
+  - id: anthropic/claude-sonnet-4-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-01-01"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: false
+    meters: { input_per_mtok: "3", cached_input_per_mtok: "0.30", cache_write_per_mtok: "3.75", output_per_mtok: "15" }
+    limits: { max_output_tokens: 64000, context_window: 200000 }
+    deprecation_date: "2026-11-30"
+
+  # --- Illustrative: separately priced reasoning tokens (gemini-2.5-flash, LiteLLM map) --------
+  - id: google/gemini-2.5-flash
+    mode: chat
+    currency: USD
+    effective_from: "2026-01-01"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: false
+    note: "Reasoning tokens have their own meter; without reasoning_per_mtok they bill as output."
+    meters:
+      input_per_mtok: "0.30"
+      cached_input_per_mtok: "0.03"
+      output_per_mtok: "2.50"
+      reasoning_per_mtok: "2.50"
+      audio_input_per_mtok: "1.00"
+      cached_audio_input_per_mtok: "0.10"
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+    deprecation_date: "2026-12-01"
+
+  # --- Illustrative: embedding ----------------------------------------------------------------
+  - id: openai/text-embedding-3-small
+    mode: embedding
+    currency: USD
+    effective_from: "2026-01-01"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: false
+    meters: { input_per_mtok: "0.02" }
+    limits: { context_window: 8191 }
+
+  # --- Speech-to-text, per audio minute (Azure OpenAI; highest published meter = upper bound) --
+  # Source for all below: Azure Retail Prices API, checked 2026-11-03 (earlier guard AUDIO_RATES).
+  - id: azure_openai/whisper
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-03"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: false
+    note: "Highest of global/data-zone/regional batch meters: 0.4752 USD/h."
+    meters: { audio_input_per_minute: "0.00792" }
+  - id: azure_openai/gpt-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-03"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: false
+    note: "Data-zone meter 0.297 USD/h."
+    meters: { audio_input_per_minute: "0.00495" }
+  - id: azure_openai/gpt-live-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-03"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: false
+    note: "Data-zone meter 1.122 USD/h."
+    meters: { audio_input_per_minute: "0.0187" }
+  # Per-token audio (usage reports audio-in, text-in, text-out). audio_input_per_minute is the
+  # fallback when the reply carries no usage and the reservation basis; it is also a rate.
+  - id: azure_openai/gpt-4o-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-03"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: false
+    note: "Minute rate = OpenAI ~0.006 USD/min x 1.32 regional factor (Azure bills tokens)."
+    meters:
+      audio_input_per_minute: "0.00792"
+      audio_input_per_mtok: "7.92"
+      input_per_mtok: "3.30"
+      output_per_mtok: "13.20"
+  - id: azure_openai/gpt-4o-mini-transcribe
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-03"
+    source_url: https://prices.azure.com/api/retail/prices
+    verified: false
+    note: "Minute rate = ~0.003 USD/min x 1.32."
+    meters:
+      audio_input_per_minute: "0.00396"
+      audio_input_per_mtok: "3.96"
+      input_per_mtok: "1.65"
+      output_per_mtok: "6.60"
+  - id: azure_speech/azure-speech
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-04"
+    source_url: https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/
+    verified: false
+    note: "Fast transcription 0.36 USD/h x 1.20 EU Data Zone uplift = 0.432 USD/h."
+    meters: { audio_input_per_minute: "0.0072" }
+  - id: azure_speech/mai-transcribe-2
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-04"
+    source_url: https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/
+    verified: false
+    note: "Upper bound: standard fast transcription x 1.20. Launch price 0.10 USD/h is preview-only."
+    meters: { audio_input_per_minute: "0.0072" }
+
+  # Realtime (gpt-realtime-*) entries are not in v0.1: the Realtime API is on the roadmap.
+
+  # --- Text-to-speech, per 1,000 characters (ElevenLabs API pay as you go) ---------------------
+  - id: elevenlabs/eleven_v4
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-10"
+    meters: { per_1k_characters: "0.08" }
+  - id: elevenlabs/eleven_v4_turbo
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-10"
+    meters: { per_1k_characters: "0.04" }
+  - id: elevenlabs/eleven_multilingual_v2
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-10"
+    meters: { per_1k_characters: "0.08" }
+  - id: elevenlabs/eleven_flash_v2_5
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-10"
+    source_url: https://elevenlabs.io/pricing/api
+    verified: true
+    checked_on: "2026-11-10"
+    meters: { per_1k_characters: "0.04" }

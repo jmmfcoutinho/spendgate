@@ -1,0 +1,42 @@
+name: Wrong or missing price
+description: A model price in the catalog is wrong, stale, missing or retired.
+title: "[Price] "
+labels: ["prices"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Prices must come from the **provider's own pricing page or price API**, never from a third party
+        alone. A price lower than the real one is a money bug; say so in the severity.
+  - type: input
+    id: model
+    attributes:
+      label: Catalog id
+      description: e.g. `openai/gpt-transcribe` or `azure_openai/gpt-6-luna` (or the model you want added).
+    validations:
+      required: true
+  - type: textarea
+    id: prices
+    attributes:
+      label: Our price vs the provider's
+      description: Each meter (input, output, cached, per minute, per 1k characters …), our value and the provider's value, with currency.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Provider source
+      description: URL of the provider's own page or price API, and the date you checked it.
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it?
+      options:
+        - Our price is LOWER than the provider's (under-charging)
+        - Our price is higher than the provider's (over-charging)
+        - Missing model
+        - Model retired or retiring (deprecation date)
+    validations:
+      required: true

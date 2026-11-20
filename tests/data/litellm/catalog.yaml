@@ -1,0 +1,96 @@
+catalog_version: 1
+models:
+  - id: openai/gpt-6-luna            # equal
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.125", output_per_mtok: "0.5" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000 }
+  - id: openai/gpt-transcribe        # differs: ours LOWER
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { audio_input_per_minute: "0.004" }
+  - id: openai/whisper-1             # price equal, deprecation date missing and soon
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { audio_input_per_minute: "0.006" }
+  - id: openai/text-embedding-3-small  # 0.5% off: within the 1% threshold
+    mode: embedding
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { input_per_mtok: "0.0201" }
+  - id: azure_openai/gpt-6-luna      # global meters equal, multiplier 1.20 covers the EU zone
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    deployment_type: data_zone
+    price_multiplier: "1.20"
+    meters: { input_per_mtok: "0.1", output_per_mtok: "0.5" }
+    limits: { max_output_tokens: 128000 }
+  - id: azure_openai/whisper         # ours higher; deprecation date far enough to be informational only
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    deprecation_date: "2026-12-15"
+    meters: { audio_input_per_minute: "0.00792" }
+  - id: anthropic/claude-fable-5-2   # cache write is the 1-hour price: equal
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
+    limits: { max_output_tokens: 128000 }
+  - id: bedrock/global.anthropic.claude-fable-5-2
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { input_per_mtok: "8", output_per_mtok: "40" }
+    limits: { max_output_tokens: 128000 }
+  - id: google/gemini-4-carbon        # today's entry equal; a future entry is not compared
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", output_per_mtok: "10" }
+    limits: { max_output_tokens: 65536 }
+  - id: google/gemini-4-carbon
+    mode: chat
+    currency: USD
+    effective_from: "2026-12-01"
+    source_url: https://example.com/p
+    verified: true
+    meters: { input_per_mtok: "4", output_per_mtok: "20" }
+    limits: { max_output_tokens: 65536 }
+  - id: elevenlabs/eleven_v4
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { per_1k_characters: "0.08" }
+  - id: azure_speech/azure-speech
+    mode: transcription
+    currency: USD
+    effective_from: "2026-11-13"
+    source_url: https://example.com/p
+    verified: true
+    meters: { audio_input_per_minute: "0.0075" }

@@ -1,0 +1,12 @@
+{
+  "durationMilliseconds": 3000,
+  "combinedPhrases": [{"channel": 0, "text": "Good afternoon. Welcome."}],
+  "phrases": [
+    {"channel": 0, "offsetMilliseconds": 960, "durationMilliseconds": 640, "text": "Good afternoon.",
+     "words": [{"text": "Good", "offsetMilliseconds": 960, "durationMilliseconds": 240},
+               {"text": "afternoon.", "offsetMilliseconds": 1200, "durationMilliseconds": 400}],
+     "locale": "en-US", "confidence": 0.93},
+    {"channel": 0, "offsetMilliseconds": 1700, "durationMilliseconds": 800, "text": "Welcome.",
+     "words": [], "locale": "en-US", "confidence": 0.9}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "recorded_on": "2026-11-17",
+  "kind": "hand-transcribed response shapes, not live recordings (no key was used)",
+  "sources": {
+    "request and answer": "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/fast-transcription-create (POST /speechtotext/transcriptions:transcribe?api-version=2025-10-15)",
+    "errors": "Azure error object {code, message}; 429 'Resource exhausted' behaviour observed by the earlier in-house guard"
+  },
+  "secrets": "none; all text is placeholder"
+}

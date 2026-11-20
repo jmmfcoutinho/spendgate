@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/jmmfcoutinho/spendgate/security/advisories/new
+    about: Never open a public issue for a vulnerability (budget bypass, key leak, auth bypass). See SECURITY.md.
+  - name: How to report issues (secrets and privacy rules)
+    url: https://github.com/jmmfcoutinho/spendgate/blob/main/docs/issues-and-prs.md
+    about: Read this first. Never paste API keys, virtual keys, peppers, prompts or personal data into an issue.

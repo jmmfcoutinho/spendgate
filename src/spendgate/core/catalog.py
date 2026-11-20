@@ -1,0 +1,294 @@
+"""Parse and resolve the price catalog from already-loaded dicts.
+
+`parse` takes the bundled document first and override documents after it, as plain dicts, plus the
+sha256 of the files they came from; the caller (config) reads the files. The catalog can never
+fail open: unknown keys, a zero-charge option or out-of-range `free_statuses` are load errors.
+"""
+
+import re
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import UTC, date, datetime
+from decimal import Decimal
+from types import MappingProxyType
+from typing import Annotated, Literal, Self
+
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, model_validator
+
+from spendgate.core.errors import ErrorCode, Refusal
+from spendgate.core.money import FxSnapshot, Money, convert_to
+from spendgate.core.outcomes import provider_free_statuses, validate_free_statuses
+
+PROVIDERS = (
+    "openai", "azure_openai", "anthropic", "bedrock", "google", "azure_speech", "elevenlabs",
+)  # fmt: skip
+_SHA256 = re.compile(r"[0-9a-f]{64}")
+_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# Same patterns as schema.json, so both validators accept exactly the same strings. Pydantic's
+# `pattern` is unanchored, hence the explicit ^...$ where one is used as a field pattern.
+_DECIMAL = re.compile(r"(0|[1-9][0-9]*)(\.[0-9]+)?")
+_MULTIPLIER = re.compile(r"(0\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\.[0-9]+)?)")
+_ID = re.compile(r"[a-z][a-z0-9_]*/[A-Za-z0-9][A-Za-z0-9._:/-]*")
+_REGION = re.compile(r"[a-z0-9-]+")
+_CHAT_MODES = ("chat", "responses", "messages")
+
+
+def _decimal_string(pattern: re.Pattern[str]) -> BeforeValidator:
+    def check(value: object) -> Decimal:
+        # YAML floats are rejected on purpose: 0.1 as a float is not 0.1.
+        if not isinstance(value, str) or not pattern.fullmatch(value):
+            raise ValueError("must be a quoted decimal string such as '0.012'")
+        return Decimal(value)
+
+    return BeforeValidator(check)
+
+
+def _iso_date(value: object) -> date:
+    if not isinstance(value, str) or not _DATE.fullmatch(value):
+        raise ValueError("must be a quoted YYYY-MM-DD date")
+    return date.fromisoformat(value)
+
+
+Price = Annotated[Decimal, _decimal_string(_DECIMAL)]
+Multiplier = Annotated[Decimal, _decimal_string(_MULTIPLIER)]
+IsoDate = Annotated[date, BeforeValidator(_iso_date)]
+PosInt = Annotated[int, Field(strict=True, ge=1)]
+Text = Annotated[str, Field(strict=True)]
+
+
+class CatalogError(ValueError):
+    """The catalog documents are invalid; nothing is served from them."""
+
+
+class ModelNotPriced(LookupError):
+    """No current price entry for a model: the call must be refused before any upstream contact."""
+
+    def __init__(self, provider: str, model: str, reason: str) -> None:
+        super().__init__(f"{provider}/{model}: {reason}")
+        self.provider = provider
+        self.model = model
+        self.reason = reason
+
+    def refusal(self) -> Refusal:
+        """The protocol refusal for this error."""
+        return Refusal(ErrorCode.MODEL_NOT_PRICED, str(self), param="model")
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class Meters(_Strict):
+    """Per-unit prices; the unit is in the field name."""
+
+    input_per_mtok: Price | None = None
+    output_per_mtok: Price | None = None
+    cached_input_per_mtok: Price | None = None
+    cache_write_per_mtok: Price | None = None
+    reasoning_per_mtok: Price | None = None
+    audio_input_per_mtok: Price | None = None
+    cached_audio_input_per_mtok: Price | None = None
+    audio_output_per_mtok: Price | None = None
+    audio_input_per_minute: Price | None = None
+    audio_granularity_seconds: PosInt = 1
+    per_1k_characters: Price | None = None
+    per_image: Price | None = None
+
+    @model_validator(mode="after")
+    def _not_empty(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("meters needs at least one price")
+        return self
+
+
+class LongContext(_Strict):
+    """Whole-request multipliers once `input_tokens` strictly exceed the threshold."""
+
+    threshold_input_tokens: PosInt
+    input_multiplier: Multiplier
+    output_multiplier: Multiplier
+
+
+class Limits(_Strict):
+    max_output_tokens: PosInt | None = None
+    context_window: PosInt | None = None
+
+
+class PriceEntry(_Strict):
+    """One priced model version."""
+
+    id: Annotated[str, Field(strict=True, pattern=f"^{_ID.pattern}$")]
+    mode: Literal["chat", "responses", "messages", "embedding", "transcription", "speech"]
+    currency: Literal["USD", "EUR"]
+    effective_from: IsoDate
+    source_url: Annotated[str, Field(strict=True, pattern=r"^https://")]
+    verified: Annotated[bool, Field(strict=True)]
+    checked_on: IsoDate | None = None
+    note: Annotated[str, Field(strict=True, max_length=300)] | None = None
+    deployment_type: (
+        Literal[
+            "global", "data_zone", "regional", "standard", "batch", "flex", "priority",
+            "provisioned",
+        ] | None
+    ) = None  # fmt: skip
+    region: Annotated[str, Field(strict=True, pattern=f"^{_REGION.pattern}$")] | None = None
+    price_multiplier: Multiplier = Decimal(1)
+    meters: Meters
+    long_context: LongContext | None = None
+    limits: Limits | None = None
+    deprecation_date: IsoDate | None = None
+
+    @property
+    def provider(self) -> str:
+        return self.id.partition("/")[0]
+
+    @property
+    def model(self) -> str:
+        return self.id.partition("/")[2]
+
+    @property
+    def price_id(self) -> str:
+        """The `(id, effective_from)` pair recorded on every call row."""
+        return f"{self.id}@{self.effective_from.isoformat()}"
+
+    @model_validator(mode="after")
+    def _mode_rules(self) -> Self:
+        if self.provider not in PROVIDERS:
+            raise ValueError(f"provider {self.provider!r} is not one of {', '.join(PROVIDERS)}")
+        m = self.meters
+        if self.mode in _CHAT_MODES:
+            if m.input_per_mtok is None or m.output_per_mtok is None:
+                raise ValueError(f"{self.mode} needs input_per_mtok and output_per_mtok")
+            if self.limits is None or self.limits.max_output_tokens is None:
+                raise ValueError(f"{self.mode} needs limits.max_output_tokens")
+        elif self.mode == "embedding" and m.input_per_mtok is None:
+            raise ValueError("embedding needs input_per_mtok")
+        elif self.mode == "transcription" and (
+            m.audio_input_per_minute is None and m.audio_input_per_mtok is None
+        ):
+            raise ValueError("transcription needs audio_input_per_minute or audio_input_per_mtok")
+        elif self.mode == "speech" and (
+            m.per_1k_characters is None and m.audio_output_per_mtok is None
+        ):
+            raise ValueError("speech needs per_1k_characters or audio_output_per_mtok")
+        return self
+
+
+class _Settlement(_Strict):
+    free_statuses: tuple[Annotated[int, Field(strict=True)], ...] | None = None
+
+    @model_validator(mode="after")
+    def _only_throttling(self) -> Self:
+        if self.free_statuses is not None:
+            if len(set(self.free_statuses)) != len(self.free_statuses):
+                raise ValueError("free_statuses must not repeat a status")
+            validate_free_statuses(self.free_statuses)
+        return self
+
+
+class _Document(_Strict):
+    catalog_version: Literal[1]
+    updated: IsoDate | None = None
+    providers: dict[Text, _Settlement] = Field(default_factory=dict)
+    models: Annotated[list[PriceEntry], Field(min_length=1)]
+
+    @model_validator(mode="after")
+    def _providers_known(self) -> Self:
+        for slug in self.providers:
+            if slug not in PROVIDERS:
+                raise ValueError(f"unknown provider {slug!r} in providers")
+        return self
+
+
+def _validate(raw: Mapping[str, object], index: int) -> _Document:
+    try:
+        doc = _Document.model_validate(dict(raw))
+    except ValidationError as exc:
+        found = "; ".join(
+            f"{'.'.join(str(p) for p in e['loc']) or '<document>'}: {e['msg']}"
+            for e in exc.errors(include_input=False, include_url=False)
+        )
+        raise CatalogError(f"catalog document {index}: {found}") from exc
+    seen: set[tuple[str, date]] = set()
+    for entry in doc.models:
+        key = (entry.id, entry.effective_from)
+        if key in seen:
+            raise CatalogError(f"catalog document {index}: duplicate {entry.price_id}")
+        seen.add(key)
+    return doc
+
+
+@dataclass(frozen=True, slots=True)
+class Catalog:
+    """Resolved prices. Lookup picks the effective entry by date at call time."""
+
+    sha256: str  # recorded on every call row (T-CAT-05)
+    ledger_currency: str
+    fx: tuple[FxSnapshot, ...]
+    _by_model: Mapping[tuple[str, str], tuple[PriceEntry, ...]]  # newest effective_from first
+    _free: Mapping[str, frozenset[int]]
+
+    def lookup(self, provider: str, model: str, now: int) -> PriceEntry:
+        """Entry in force at `now` (epoch ms, UTC date), or `ModelNotPriced`."""
+        today = datetime.fromtimestamp(now // 1000, tz=UTC).date()
+        for entry in self._by_model.get((provider, model), ()):
+            if entry.effective_from > today:
+                continue
+            if entry.deprecation_date is not None and entry.deprecation_date <= today:
+                raise ModelNotPriced(provider, model, "model is past its deprecation date")
+            return entry
+        raise ModelNotPriced(provider, model, "no price entry in force")
+
+    def free_statuses(self, provider: str) -> frozenset[int]:
+        """Statuses that mean 'rejected before processing' for this provider."""
+        if provider in self._free:  # an explicit empty list stays empty (nothing is free)
+            return self._free[provider]
+        return provider_free_statuses(provider)
+
+    def in_ledger(self, amount: Money) -> Money:
+        """Convert a catalog-currency cost to the ledger currency (one ceiling, snapshot rate)."""
+        return convert_to(amount, self.ledger_currency, self.fx)
+
+    def entries(self) -> tuple[PriceEntry, ...]:
+        return tuple(e for group in self._by_model.values() for e in group)
+
+
+def parse(
+    documents: Sequence[Mapping[str, object]],
+    sha256: str,
+    *,
+    ledger_currency: str,
+    fx: Sequence[FxSnapshot] = (),
+) -> Catalog:
+    """Validate the bundled document and overrides, merge them and require FX for every currency.
+
+    Later documents win per `(id, effective_from)` and per provider block. Raises `CatalogError`
+    for invalid data and `MissingFxRate` when a currency cannot reach the ledger currency.
+    """
+    if not _SHA256.fullmatch(sha256):
+        raise CatalogError("sha256 must be 64 lower-case hex characters")
+    merged: dict[tuple[str, date], PriceEntry] = {}
+    free: dict[str, frozenset[int]] = {}
+    for index, raw in enumerate(documents):
+        doc = _validate(raw, index)
+        merged.update({(e.id, e.effective_from): e for e in doc.models})
+        for slug, rule in doc.providers.items():
+            rules: dict[str, object] = {}
+            if rule.free_statuses is not None:
+                rules["free_statuses"] = list(rule.free_statuses)
+            free[slug] = provider_free_statuses(slug, rules)  # the model already validated it
+    if not merged:
+        raise CatalogError("no catalog documents given")
+    for currency in sorted({e.currency for e in merged.values()}):
+        convert_to(Money.zero(currency), ledger_currency, fx)  # raises MissingFxRate
+    grouped: dict[tuple[str, str], list[PriceEntry]] = {}
+    for entry in merged.values():
+        grouped.setdefault((entry.provider, entry.model), []).append(entry)
+    index_by_model = {
+        key: tuple(sorted(group, key=lambda e: e.effective_from, reverse=True))
+        for key, group in grouped.items()
+    }
+    return Catalog(
+        sha256, ledger_currency, tuple(fx), MappingProxyType(index_by_model),
+        MappingProxyType(free),
+    )  # fmt: skip

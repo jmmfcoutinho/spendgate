@@ -1,0 +1,6 @@
+[
+  {"id": "", "object": "", "created": 0, "model": "", "choices": [], "prompt_filter_results": [{"prompt_index": 0, "content_filter_results": {}}]},
+  {"id": "c", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hel"}, "finish_reason": null, "content_filter_results": {}}], "usage": null},
+  {"id": "c", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": null},
+  {"id": "c", "object": "chat.completion.chunk", "choices": [], "usage": {"prompt_tokens": 1000, "completion_tokens": 50, "total_tokens": 1050, "prompt_tokens_details": {"cached_tokens": 100}, "completion_tokens_details": {"reasoning_tokens": 0}}}
+]

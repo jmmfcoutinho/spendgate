@@ -1,0 +1,54 @@
+name: Price cross-check
+
+# Weekly comparison of the bundled catalog with LiteLLM's community price file at the latest commit.
+# Informational for maintainers: LiteLLM is never a source of truth and nothing is fetched at
+# runtime. A red run means a price we carry disagrees (or a deprecation date is missing): read the
+# report, check the provider's own page, then fix prices.yaml by hand.
+
+on:
+  schedule:
+    - cron: "43 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prices-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.9.11"
+
+jobs:
+  crosscheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - name: Resolve the latest LiteLLM commit
+        id: litellm
+        run: |
+          sha="$(git ls-remote https://github.com/BerriAI/litellm refs/heads/main | cut -f1)"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "could not resolve the LiteLLM commit" >&2; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Diff the catalog against that commit
+        env:
+          LITELLM_SHA: ${{ steps.litellm.outputs.sha }}
+        run: uv run python scripts/litellm_prices.py diff --commit "$LITELLM_SHA" --out price-diff.txt
+      - name: Upload the diff report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: litellm-price-diff
+          path: price-diff.txt
+          if-no-files-found: ignore
+          retention-days: 30

@@ -1,0 +1,10 @@
+{
+  "recorded_on": "2026-11-17",
+  "kind": "hand-transcribed response shapes, not live recordings (no key was used)",
+  "sources": {
+    "request": "https://elevenlabs.io/docs/api-reference/text-to-speech/convert (POST /v1/text-to-speech/{voice_id}?output_format=...)",
+    "billed characters": "the 'character-cost' response header, as used by the earlier in-house guard (not in the API reference page)",
+    "errors": "{detail: {status, message}} as returned by the ElevenLabs API"
+  },
+  "secrets": "none; ids and text are placeholders"
+}

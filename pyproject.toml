@@ -1,0 +1,165 @@
+[project]
+name = "spendgate"
+version = "0.1.0"
+description = "A small, auditable LLM spend guard: SDK and proxy with hard budgets"
+readme = "README.md"
+authors = [{ name = "jmmfcoutinho" }]
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic>=2.14.3",
+    "pyyaml>=6.0.3",
+    "starlette>=1.10.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.optional-dependencies]
+postgres = [
+    "psycopg[binary,pool]>=3.3.8",
+]
+tokenizer = [
+    "tiktoken>=0.14.0",
+]
+bedrock = [
+    "botocore>=1.43.125",
+]
+google = [
+    "google-auth>=2.62.1",
+    "requests>=2.34.2",
+]
+azure = [
+    "azure-identity>=1.27.0",
+]
+openai = [
+    "openai>=3.46.0",
+]
+anthropic = [
+    "anthropic>=2.6.0",
+]
+
+[project.scripts]
+spendgate = "spendgate.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.11,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "detect-secrets>=1.5.0",
+    "hypothesis>=6.170.14",
+    "import-linter>=2.15",
+    "jsonschema>=4.26.0",
+    "mypy>=2.4.1",
+    "pip-audit>=2.10.1",
+    "pre-commit>=4.7.0",
+    "pytest>=9.2.0",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.4",
+    "types-botocore>=1.0.2",
+    "types-jsonschema>=4.26.0.20261006",
+    "types-pyyaml>=6.0.12.20261103",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+# Ruff 0.17 also formats Python blocks inside Markdown; the docs are prose, not gated code.
+extend-exclude = ["docs", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "SIM", "PL", "RUF", "TID", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests assert by design and use magic numbers as expected values.
+"tests/**" = ["S101", "PLR2004"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["spendgate"]
+
+[tool.mypy]
+strict = true
+python_version = "3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -m 'not live'"
+markers = [
+    "slow: long-running test",
+    "postgres: needs a Postgres server (SPENDGATE_TEST_POSTGRES_URL); loopback allowed",
+    "docker: needs Docker; loopback allowed",
+    "live: calls a real provider; never run in CI",
+    "tokenizer: needs the tiktoken extra and a locally cached encoding (skips otherwise)",
+    "load: multi-process load and overhead runs (make load); excluded from make test",
+    "fuzz: Hypothesis fuzz targets (make fuzz); short by default, long with SPENDGATE_FUZZ_SECONDS; excluded from make test",
+]
+# A leaked connection or file is a bug, not noise.
+filterwarnings = ["error::ResourceWarning", "error::pytest.PytestUnraisableExceptionWarning"]
+
+[tool.coverage.run]
+branch = true
+source_pkgs = ["spendgate"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
+[tool.importlinter]
+root_package = "spendgate"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "core imports nothing internal and no I/O libraries"
+type = "forbidden"
+source_modules = ["spendgate.core"]
+forbidden_modules = [
+  "spendgate.ledger", "spendgate.providers", "spendgate.pipeline", "spendgate.gateway",
+  "spendgate.client", "spendgate.local", "spendgate.config", "spendgate.cli",
+  "httpx", "starlette", "uvicorn", "yaml", "psycopg", "sqlite3",
+]
+
+[[tool.importlinter.contracts]]
+name = "leaf packages are independent of each other"
+type = "independence"
+modules = [
+  "spendgate.ledger", "spendgate.providers", "spendgate.config", "spendgate.client",
+]
+
+[[tool.importlinter.contracts]]
+name = "ledger backends are independent"
+type = "independence"
+modules = ["spendgate.ledger.sqlite", "spendgate.ledger.postgres"]
+
+[[tool.importlinter.contracts]]
+name = "provider adapters are independent"
+type = "independence"
+modules = [
+  "spendgate.providers.openai", "spendgate.providers.azure_openai",
+  "spendgate.providers.anthropic", "spendgate.providers.bedrock",
+  "spendgate.providers.google", "spendgate.providers.azure_speech",
+  "spendgate.providers.elevenlabs",
+]
+
+[[tool.importlinter.contracts]]
+name = "layers: cli > gateway | local > pipeline > leaf packages > core"
+type = "layers"
+layers = [
+  "spendgate.cli",
+  "spendgate.gateway | spendgate.local",
+  "spendgate.pipeline",
+  "spendgate.ledger | spendgate.providers | spendgate.config | spendgate.client",
+  "spendgate.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "pipeline has no HTTP framework"
+type = "forbidden"
+source_modules = ["spendgate.pipeline"]
+forbidden_modules = ["starlette", "uvicorn"]
+
+[tool.uv]
+# Supply-chain cooldown: ignore releases newer than this date when resolving (move it forward
+# deliberately, at least 7 days behind today, matching the Dependabot cooldown).
+exclude-newer = "2026-11-06T00:00:00Z"

@@ -1,0 +1,91 @@
+# Reviewed allow-list for `scripts/litellm_prices.py diff`.
+#
+# A difference listed here no longer fails the weekly cross-check. Rules, enforced by the script:
+#   - differences: only `relation: ours_higher` exists. Our price below LiteLLM's always fails.
+#   - deprecations: LiteLLM-only dates Microsoft's own schedule does not list ("unconfirmed"). The
+#     exact LiteLLM date is part of the item, so a changed date fails again.
+#   - Every item names who accepted it and when, and expires at most 90 days later. After that it
+#     fails again until someone re-reviews it against the provider's page and renews it.
+# Add an item only after reading the provider's own page; do not add one to silence a failure.
+differences:
+  - id: azure_openai/whisper
+    meters: [audio_input_per_minute]
+    relation: ours_higher
+    reason: "Catalog stores the highest regional batch meter (0.4752 USD/h) as an upper bound; LiteLLM has the global 0.36 USD/h. Azure Retail Prices API, verified 2026-11-13."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-transcribe
+    meters: [audio_input_per_minute]
+    relation: ours_higher
+    reason: "Catalog stores the Data Zone meter (0.297 USD/h); LiteLLM has the global 0.27 USD/h. Azure Retail Prices API, verified 2026-11-13."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-live-transcribe
+    meters: [audio_input_per_minute]
+    relation: ours_higher
+    reason: "Catalog stores the Data Zone meter (1.122 USD/h); LiteLLM has the global 1.02 USD/h. Azure Retail Prices API, verified 2026-11-13."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-4o-transcribe
+    meters: [input_per_mtok, output_per_mtok, audio_input_per_mtok]
+    relation: ours_higher
+    reason: "Catalog stores the highest regional token meters as an upper bound; LiteLLM has the global ones. Azure Retail Prices API, verified 2026-11-13. The model is retired 2026-10-15 and refused by the catalog."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-4o-mini-transcribe
+    meters: [input_per_mtok, output_per_mtok, audio_input_per_mtok]
+    relation: ours_higher
+    reason: "Catalog stores the highest regional token meters as an upper bound; LiteLLM has the global ones. Azure Retail Prices API, verified 2026-11-13."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: bedrock/anthropic.claude-haiku-5-5
+    meters: [input_per_mtok, cached_input_per_mtok, cache_write_per_mtok, output_per_mtok]
+    relation: ours_higher
+    reason: "Catalog stores the regional us-east-1 price, 10% above the global price LiteLLM lists (the dearer choice). AWS Bedrock pricing page, verified 2026-11-13."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+
+deprecations:
+  # Microsoft's model retirement schedule (read 2026-11-18) does not list these. They stay out of
+  # the catalog until Microsoft confirms a date.
+  - id: azure_openai/gpt-6-astra
+    litellm_date: "2028-01-11"
+    status: unconfirmed
+    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-6-luna
+    litellm_date: "2028-03-11"
+    status: unconfirmed
+    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-6.1-sol
+    litellm_date: "2028-03-11"
+    status: unconfirmed
+    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-transcribe
+    litellm_date: "2028-02-01"
+    status: unconfirmed
+    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"
+  - id: azure_openai/gpt-live-transcribe
+    litellm_date: "2028-02-01"
+    status: unconfirmed
+    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-18"
+    expires: "2027-02-16"

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spendgate.invalid/schema/catalog-v1.json",
+  "title": "spendgate price catalog",
+  "description": "Prices and model metadata. All prices are decimal STRINGS (never floats). Unit is in the field name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["catalog_version", "models"],
+  "properties": {
+    "catalog_version": { "const": 1 },
+    "updated": { "$ref": "#/$defs/date" },
+    "providers": {
+      "type": "object",
+      "description": "Optional per-provider settlement rules, keyed by the provider part of a model id.",
+      "propertyNames": { "$ref": "#/$defs/slug" },
+      "additionalProperties": { "$ref": "#/$defs/settlement" }
+    },
+    "models": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/entry" }
+    }
+  },
+  "$defs": {
+    "date": { "type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+    "slug": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Provider slug = adapter module name (openai, azure_openai, anthropic, bedrock, google, azure_speech, elevenlabs). Vertex is an auth mode of google, not a slug." },
+    "decimal": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$",
+      "description": "Non-negative decimal as a string, e.g. \"0.012\"."
+    },
+    "multiplier": {
+      "type": "string",
+      "pattern": "^(0\\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\\.[0-9]+)?)$",
+      "description": "Strictly positive decimal string."
+    },
+    "settlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Catalog data can never fail open: there is no zero-charge option. Fail-open knobs live only in spendgate.yaml under fail_open.",
+      "properties": {
+        "free_statuses": {
+          "type": "array",
+          "items": { "enum": [429, 529] },
+          "uniqueItems": true,
+          "default": [429],
+          "description": "Upstream HTTP statuses (throttling only) that mean the provider rejected the call before processing it: the attempt costs 0 and the request may fail over (core predicate not_processed). Default [429] for every provider; anthropic sets [429, 529]."
+        }
+      }
+    },
+    "long_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threshold_input_tokens", "input_multiplier", "output_multiplier"],
+      "description": "When a single request's input_tokens EXCEED the threshold, the whole request is priced at the multiplied rates.",
+      "properties": {
+        "threshold_input_tokens": { "type": "integer", "minimum": 1 },
+        "input_multiplier": { "$ref": "#/$defs/multiplier", "description": "Applies to input, cached input and cache-write meters (text and audio)." },
+        "output_multiplier": { "$ref": "#/$defs/multiplier", "description": "Applies to output and reasoning meters." }
+      }
+    },
+    "meters": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "input_per_mtok": { "$ref": "#/$defs/decimal" },
+        "output_per_mtok": { "$ref": "#/$defs/decimal" },
+        "cached_input_per_mtok": { "$ref": "#/$defs/decimal" },
+        "cache_write_per_mtok": { "$ref": "#/$defs/decimal" },
+        "reasoning_per_mtok": { "$ref": "#/$defs/decimal" },
+        "audio_input_per_mtok": { "$ref": "#/$defs/decimal" },
+        "cached_audio_input_per_mtok": { "$ref": "#/$defs/decimal" },
+        "audio_output_per_mtok": { "$ref": "#/$defs/decimal" },
+        "audio_input_per_minute": { "$ref": "#/$defs/decimal" },
+        "audio_granularity_seconds": { "type": "integer", "minimum": 1, "default": 1, "description": "Audio duration is rounded UP to a multiple of this many seconds (min one unit)." },
+        "per_1k_characters": { "$ref": "#/$defs/decimal" },
+        "per_image": { "$ref": "#/$defs/decimal" }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "mode", "currency", "effective_from", "source_url", "verified", "meters"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_]*/[A-Za-z0-9][A-Za-z0-9._:/-]*$", "description": "provider-slug/model, as the caller names it." },
+        "mode": { "enum": ["chat", "responses", "messages", "embedding", "transcription", "speech"] },
+        "currency": { "enum": ["USD", "EUR"] },
+        "effective_from": { "$ref": "#/$defs/date" },
+        "source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "verified": { "type": "boolean", "description": "true only if a person compared every price to source_url on checked_on." },
+        "checked_on": { "$ref": "#/$defs/date" },
+        "note": { "type": "string", "maxLength": 300 },
+        "deployment_type": { "enum": ["global", "data_zone", "regional", "standard", "batch", "flex", "priority", "provisioned"] },
+        "region": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "price_multiplier": { "$ref": "#/$defs/multiplier", "default": "1", "description": "Applied to every meter after long-context, before FX." },
+        "meters": { "$ref": "#/$defs/meters" },
+        "long_context": { "$ref": "#/$defs/long_context" },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_output_tokens": { "type": "integer", "minimum": 1 },
+            "context_window": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "deprecation_date": { "$ref": "#/$defs/date", "description": "First day the model is refused (the provider's shutdown date). Unset means no known end." }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "enum": ["chat", "responses", "messages"] } } },
+          "then": {
+            "required": ["limits"],
+            "properties": {
+              "meters": { "required": ["input_per_mtok", "output_per_mtok"] },
+              "limits": { "required": ["max_output_tokens"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "embedding" } } },
+          "then": { "properties": { "meters": { "required": ["input_per_mtok"] } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "transcription" } } },
+          "then": { "properties": { "meters": { "anyOf": [{ "required": ["audio_input_per_minute"] }, { "required": ["audio_input_per_mtok"] }] } } }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "speech" } } },
+          "then": { "properties": { "meters": { "anyOf": [{ "required": ["per_1k_characters"] }, { "required": ["audio_output_per_mtok"] }] } } }
+        }
+      ]
+    }
+  }
+}

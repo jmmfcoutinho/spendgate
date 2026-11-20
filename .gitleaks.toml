@@ -1,0 +1,21 @@
+# Extends the default gitleaks rules. Each exception names its rule, scope and reason;
+# keep them narrow.
+title = "spendgate gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# Rule: generic-api-key. Scope: .secrets.baseline only.
+# Reason: detect-secrets stores SHA-1 hashes of allowlisted fixtures there, not secrets.
+[[allowlists]]
+description = "detect-secrets baseline hashes"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)\.secrets\.baseline$''']
+
+# Rule: generic-api-key. Scope: the two test fixtures below.
+# Reason: obviously fake keys used to prove that keys never reach logs or app containers.
+[[allowlists]]
+description = "fake keys in leak tests"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)tests/perimeter/test_leaks\.py$''', '''(^|/)tests/unit/test_observability\.py$''']
+regexes = ['''sg-abcdef123456-''', '''sg-live-abcdef1234567890SECRET''']  # pragma: allowlist secret

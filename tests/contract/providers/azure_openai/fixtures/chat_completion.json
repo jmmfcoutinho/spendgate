@@ -1,0 +1,23 @@
+{
+  "id": "chatcmpl-fixture",
+  "object": "chat.completion",
+  "model": "gpt-6-luna-2026-09-01",
+  "prompt_filter_results": [
+    {"prompt_index": 0, "content_filter_results": {"hate": {"filtered": false, "severity": "safe"}}}
+  ],
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {"role": "assistant", "content": "Hello"},
+      "content_filter_results": {"hate": {"filtered": false, "severity": "safe"}}
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1000,
+    "completion_tokens": 50,
+    "total_tokens": 1050,
+    "prompt_tokens_details": {"cached_tokens": 100, "audio_tokens": 0},
+    "completion_tokens_details": {"reasoning_tokens": 0, "audio_tokens": 0}
+  }
+}

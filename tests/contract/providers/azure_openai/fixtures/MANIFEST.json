@@ -1,0 +1,11 @@
+{
+  "recorded_on": "2026-11-17",
+  "kind": "hand-transcribed response shapes, not live recordings (no API key was used)",
+  "sources": {
+    "chat answer with prompt_filter_results and content_filter_results": "https://learn.microsoft.com/azure/ai-foundry/openai/concepts/content-filter",
+    "content filter 400 (code content_filter)": "https://learn.microsoft.com/azure/ai-foundry/openai/concepts/content-filter",
+    "429 and retry-after-ms": "https://learn.microsoft.com/azure/ai-foundry/openai/quotas-limits",
+    "URL shapes and auth": "https://learn.microsoft.com/azure/foundry/openai/api-version-lifecycle"
+  },
+  "secrets": "none; all ids and text are placeholders"
+}

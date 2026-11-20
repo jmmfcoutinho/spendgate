@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in spendgate does not work as it should.
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Secrets and privacy:** never paste API keys, virtual keys (`sg-…`, `sga-…`), the key pepper, database
+        URLs, prompts, model outputs or personal data. Refer to calls by request id (`X-Spendgate-Request-Id`)
+        and describe data in general terms. **Security problems** (budget bypass, key leak, auth bypass) go to a
+        private advisory, not here: see SECURITY.md.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Proxy / pipeline, Budgets / ledger, Provider adapter, Prices / catalog, SDK / client helpers, Library mode, Admin API / CLI, Configuration, Docker / deployment, Docs, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands, requests (with secrets removed) and the relevant config keys (never secret values).
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and request ids
+      description: spendgate version or commit, ledger backend (SQLite / Postgres), and request ids if any.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: How bad is it?
+      options:
+        - Money is wrong (over- or under-charged, a budget passed, a hold never settled)
+        - A call reached the provider when it should have been refused
+        - Blocks use or loses data
+        - Wrong result or error, with a workaround
+        - Cosmetic or docs
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Short excerpts only; remove keys, prompts and personal data first.
