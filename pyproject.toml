@@ -67,7 +67,8 @@ dev = [
 target-version = "py313"
 line-length = 100
 # Ruff 0.17 also formats Python blocks inside Markdown; the docs are prose, not gated code.
-extend-exclude = ["docs", "*.md"]
+# "docs/*" (not "docs") so tests/docs is still linted.
+extend-exclude = ["docs/*", "*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "S", "SIM", "PL", "RUF", "TID", "ANN"]

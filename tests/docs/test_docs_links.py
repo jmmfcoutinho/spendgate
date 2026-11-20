@@ -25,6 +25,7 @@ PAGES = [
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)\)")
 FENCE = re.compile(r"^```.*?^```", re.DOTALL | re.MULTILINE)
 
+
 def slug(heading: str) -> str:
     text = re.sub(r"[`*_]", "", heading.strip().lower())
     return re.sub(r"\s", "-", re.sub(r"[^\w\s-]", "", text))
