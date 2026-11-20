@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-20
+
+### Fixed
+
+- `X-Spendgate-Budget-Remaining`, `X-Spendgate-Budget-Scope` and the
+  `spendgate_budget_remaining_nano` gauge now consider only the budgets the call's hold took. A
+  budget whose `model_filter` does not match the call's model was reported as the call's tightest
+  budget. Reporting only: holds, refusals and charges were already correct.
+
 ## [0.1.0] - 2026-11-20
 
 ### Added

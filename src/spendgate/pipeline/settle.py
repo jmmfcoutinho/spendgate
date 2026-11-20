@@ -69,6 +69,7 @@ class Book:
     flight: Flight | None = None
     actual: Money | None = None  # ledger-currency cost of the last attempt's usage, if known
     usage: Usage | None = None
+    budget_ids: frozenset[str] | None = None  # what the hold took: the headers report only these
 
     def note(self, reading: Reading) -> None:
         """Remember what the attempt that just ended is worth (what `decide` charges)."""

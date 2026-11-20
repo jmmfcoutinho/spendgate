@@ -61,7 +61,7 @@ class Closer:
         if not booked:
             self._unsettled[call.id] = (decision, self._now())
         await self._finish_limits(call, book, decision)
-        left = await self.remaining(call.principal.scope_id)  # best effort; also fills the chain
+        left = await self.remaining(call.principal.scope_id, book.budget_ids)  # best effort
         self._settled(call, book, decision, left, ttft_ms)
         return Closed(decision, booked, left)
 
@@ -138,14 +138,22 @@ class Closer:
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._observer.on_settled(event)
 
-    async def remaining(self, scope_id: str) -> tuple[Money, str] | None:
-        """Room left in the tightest budget on the key's scope chain, best effort (headers only)."""
+    async def remaining(
+        self, scope_id: str, budget_ids: frozenset[str] | None = None
+    ) -> tuple[Money, str] | None:
+        """Room left in the tightest budget on the key's scope chain, best effort (headers only).
+
+        `budget_ids` limits it to the budgets the call's hold took, so a budget filtered to another
+        model is never reported as this call's remainder.
+        """
         try:
             chain = await self._chain(scope_id)
             now = self._now()
             best: tuple[int, str] | None = None
             for sid, path in chain:
                 for row in await self._ledger.totals(sid, now):
+                    if budget_ids is not None and row.budget_id not in budget_ids:
+                        continue
                     room = max(row.effective_cap_nano - row.spent_nano - row.held_nano, 0)
                     if best is None or room < best[0]:
                         best = (room, path)

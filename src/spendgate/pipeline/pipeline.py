@@ -217,6 +217,7 @@ class Pipeline:
             await self._closer.free_limits(call.admit)
             return self._refuse(call.id, call.inbound.endpoint, held, call.principal, call.inbound)
         self._owned.add(call.id)  # renewed by the heartbeat until its one transition is made
+        book.budget_ids = frozenset(item.budget_id for item in held.items)
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._observer.on_held(
                 HeldEvent(call.id, prepared.route.catalog_id, prepared.pricing.worst)
@@ -265,7 +266,7 @@ class Pipeline:
         pre: tuple[Money, str] | None = None
         try:
             if job.request.stream:  # headers go out before the cost exists: room after the hold
-                pre = await self._closer.remaining(call.principal.scope_id)
+                pre = await self._closer.remaining(call.principal.scope_id, book.budget_ids)
                 standing = await self._standing(call, held)
             async with asyncio.timeout(self._max_request_s):  # SR-13: no call runs forever
                 result = await self._forwarder.run(job, book)
