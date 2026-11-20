@@ -44,6 +44,12 @@ Stored key hashes depend on it: lose or change the pepper and every key stops wo
   Keys can also be declared under `bootstrap.keys`; `spendgate migrate --bootstrap` creates them
   (printing each secret once) and never changes them afterwards. `serve` creates the bootstrap
   scopes and budgets but never keys, so no secret reaches the server's log.
+- **Where a printed secret goes:** `keys create`, `keys rotate` and `migrate --bootstrap` print it
+  to the terminal. Run them interactively; in containers, as a one-off
+  `docker compose run --rm spendgate …` (with `--rm` the container and its log are deleted when it
+  exits). Never put them in a service's command or entrypoint, where the output stays in the
+  container log. If your Docker log driver ships output elsewhere (journald, a cloud log service),
+  that copy holds the secret too: delete it there, or rotate the key.
 - **Rotate** with no downtime: `spendgate keys rotate KEY_ID --grace-seconds 3600`. It issues a
   replacement with the same settings; the old key keeps working for the grace period (default one
   hour, at most seven days), so you can roll the new one out first.
