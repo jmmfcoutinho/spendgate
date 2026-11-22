@@ -25,6 +25,7 @@ from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.health import DeploymentHealth, HealthConfig
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.port import AttemptRecord
+from spendgate.pipeline import diagnostics
 from spendgate.pipeline.model import AttemptEvent, Clock, Observer, Sender
 from spendgate.pipeline.settle import Book, Flight, Reading, attempt_record, read_usage
 from spendgate.pipeline.streaming import Live
@@ -255,7 +256,8 @@ class Forwarder:
             upstream = job.provider.translate(job.request, target.deployment)
         except Untranslatable as refused:
             return Failed(refused.refusal, 400)  # never sent: nothing recorded, hold released
-        except Exception:
+        except Exception as exc:
+            diagnostics.report_internal(exc)
             internal = Refusal(ErrorCode.INTERNAL_ERROR, "The upstream request could not be built.")
             return Failed(internal, 500)
         started = self._now()
@@ -282,7 +284,8 @@ class Forwarder:
         """A 2xx stream head: the attempt stays in flight (sent, unfinished) until it ends."""
         try:
             relay = job.provider.relay(job.request, self._limits)
-        except Exception:
+        except Exception as exc:
+            diagnostics.report_internal(exc)
             await opened.aclose()  # the request was sent: charged at the full hold
             self._record(job, book, target, started, Outcome.INTERNAL_ERROR, opened.status_code,
                          not_processed=False, error_code="relay_error")  # fmt: skip
@@ -374,7 +377,8 @@ class Forwarder:
         )  # fmt: skip
         try:
             converted = job.provider.response(job.request, response)
-        except Exception:
+        except Exception as exc:
+            diagnostics.report_internal(exc)
             internal = Refusal(ErrorCode.INTERNAL_ERROR, "The provider answer could not be read.")
             return Failed(internal, 500)
         if converted.status >= _HTTP_ERROR:  # an unreadable 2xx: the adapter gave a bodiless 502

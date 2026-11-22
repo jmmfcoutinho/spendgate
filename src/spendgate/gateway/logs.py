@@ -13,13 +13,17 @@ from datetime import UTC, datetime
 
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
+from spendgate.pipeline.diagnostics import FIELD_ATTR as _EXTRA_ATTR
 
 # The only fields that may reach a log line. Adding one is a reviewed change.
+# `error_type` and `frames` are the redacted shape of an unexpected exception
+# (`pipeline.diagnostics`): a class name and `file:line`, never a message or a local.
 ALLOWED_FIELDS: frozenset[str] = frozenset(
     {
         "event", "request_id", "key_prefix", "scope_path", "model", "deployment", "outcome",
         "input_tokens", "output_tokens", "cached_tokens", "cost", "currency", "latency_ms",
         "ttft_ms", "status", "http_status", "reason", "level", "ts", "logger",
+        "error_type", "frames",
     }
 )  # fmt: skip
 
@@ -27,7 +31,6 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
 # Hyphen only: key secrets are sg-/sga-/sk-; request ids (sg_req_...) must stay in the logs.
 _SECRET_SHAPE = re.compile(r"(?i)\b(?:sga?|sk)-[a-z0-9_-]{8,}|bearer\s+\S+")
 KEY_PREFIX_LEN = 8
-_EXTRA_ATTR = "spendgate_fields"
 LOGGER_NAME = "spendgate.call"
 
 

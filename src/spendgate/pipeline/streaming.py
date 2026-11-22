@@ -35,7 +35,7 @@ from spendgate.core.catalog import Catalog
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.estimate import RequestKind
 from spendgate.core.outcomes import Outcome
-from spendgate.pipeline import replies
+from spendgate.pipeline import diagnostics, replies
 from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import AttemptEvent, Clock, Endpoint, Observer
 from spendgate.pipeline.settle import Book, Closed, Flight, attempt_record, read_usage
@@ -216,7 +216,8 @@ class StreamBody:
         except StreamBroken as exc:  # malformed framing or an SSE limit (C-22)
             self._cut = True
             await self._break(type(exc).__name__, _CUT_MESSAGE)
-        except Exception:
+        except Exception as exc:
+            diagnostics.report_internal(exc)
             await self._break("relay_error", "The stream could not be relayed.")
 
     async def _end(self) -> None:

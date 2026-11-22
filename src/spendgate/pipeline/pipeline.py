@@ -25,7 +25,7 @@ from spendgate.core.outcomes import Outcome
 from spendgate.ledger.ids import new_id
 from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
-from spendgate.pipeline import answers, intake, replies, steps
+from spendgate.pipeline import answers, diagnostics, intake, replies, steps
 from spendgate.pipeline.auth import authenticate
 from spendgate.pipeline.closing import Call, Closer, Sleeper
 from spendgate.pipeline.leases import Leases
@@ -197,7 +197,8 @@ class Pipeline:
         call = Call(rid, inbound, who, prepared, admit, now)
         try:
             return await self._hold_and_forward(call)
-        except Exception:
+        except Exception as exc:
+            diagnostics.report_internal(exc)
             self._owned.discard(call.id)  # whatever is held is left to the sweeper, not renewed
             await self._closer.free_limits(call.admit)
             return self._refuse(rid, endpoint, _INTERNAL, who, inbound)
@@ -276,7 +277,8 @@ class Pipeline:
         except TimeoutError:  # the deadline: sent means the full hold (TIMEOUT), else released
             interrupted = Outcome.TIMEOUT
             result = unavailable(job.targets[0].provider, "The request took too long.", 504)
-        except Exception:
+        except Exception as exc:
+            diagnostics.report_internal(exc)
             interrupted = Outcome.INTERNAL_ERROR
             result = Failed(_INTERNAL, 500)
         finally:

@@ -30,6 +30,7 @@ from spendgate.ledger.key_types import AdminScope, KeyKind, Principal
 from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import ConflictError, LedgerError, LedgerUnavailable, NotFoundError
 from spendgate.ledger.usage import UsageQueryError, UsageRangeError
+from spendgate.pipeline import diagnostics
 from spendgate.pipeline.model import Clock
 from spendgate.pipeline.replies import REQUEST_ID_HEADER, error_body
 
@@ -222,6 +223,7 @@ def guarded(
         except Exception as exc:
             refusal = refusal_for(exc)
             if refusal is None:
+                diagnostics.report_internal(exc)  # an unmapped exception is a bug: leave a trace
                 refusal = Refusal(ErrorCode.INTERNAL_ERROR, "Internal error.")
             return error_response(refusal, request_id)
         response.headers[REQUEST_ID_HEADER] = request_id
