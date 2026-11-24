@@ -1,6 +1,6 @@
 # spendgate wire protocol
 
-Status: implemented in v0.1. Provider shapes checked 2026-11-13: Anthropic error page (platform.claude.com/docs/en/api/errors) fetched; OpenAI reference pages returned HTTP 403 to the fetch tool, so OpenAI field lists below come from an earlier in-house allowlist plus prior knowledge and were re-checked against recorded fixtures. Admin API: [admin-openapi.yaml](./admin-openapi.yaml).
+Status: implemented in v0.1. Provider shapes checked 2026-11-13: Anthropic error page (platform.claude.com/docs/en/api/errors) fetched; OpenAI reference pages returned HTTP 403 to the fetch tool, so OpenAI field lists below come from the allowlist of a private tool that predates spendgate, plus prior knowledge, and were re-checked against recorded fixtures. Admin API: [admin-openapi.yaml](./admin-openapi.yaml).
 
 **Additions to the glossary error codes:** `invalid_request` (400), `unauthorized` (401), `forbidden` (403), `not_found` (404, admin only), `conflict` (409, admin only; on the data plane a ledger `conflict` on a gateway-generated request id maps to `internal_error`), `internal_error` (500). Nothing else is added.
 

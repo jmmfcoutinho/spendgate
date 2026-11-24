@@ -24,9 +24,16 @@ pip install "spendgate[openai]"         # or: uv pip install "spendgate[openai]"
 export OPENAI_API_KEY=sk-...            # your real key
 ```
 
-The commands in steps 2 and 3 run from a checkout of this repository (`uv sync`, then `uv run ...`),
-because they use its example config and Compose files. With the package installed from PyPI, drop
-the `uv run` prefix, or run the CLI without installing it with `uvx spendgate ...`.
+The commands in steps 2 and 3 run from a checkout of this repository, because they use its example
+config and Compose files. Get one with:
+
+```bash
+git clone https://github.com/jmmfcoutinho/spendgate && cd spendgate
+uv sync --extra openai
+```
+
+With the package installed from PyPI instead, drop the `uv run` prefix, or run the CLI without
+installing it with `uvx spendgate ...`.
 
 Save as `guard_demo.py`. The cap is tiny so you see the refusal at once:
 
@@ -201,14 +208,23 @@ Your own app joins the `apps` network and nothing else; give it only the virtual
 provider key. To call from the host, uncomment the loopback `ports:` line in `compose.yaml`; that opens the
 guard to every process on the host.
 
-To use the released image instead of building one, pull it, verify it (see
-[Container image](#container-image)) and tag it with the name Compose expects, then start without
-`--build`:
+To use the released image instead of building one, verify it first (see
+[Container image](#container-image)), then pull it by the digest `cosign verify` printed, tag it with
+the name Compose expects and start without `--build`:
 
 ```bash
-docker pull ghcr.io/jmmfcoutinho/spendgate:0.1.1
-docker tag ghcr.io/jmmfcoutinho/spendgate:0.1.1 spendgate:core
+docker pull "ghcr.io/jmmfcoutinho/spendgate@$digest"     # $digest from the verify step
+docker tag "ghcr.io/jmmfcoutinho/spendgate@$digest" spendgate:core
 docker compose up -d
+```
+
+For the `full` variant (Postgres ledger, Bedrock, Google, Azure), verify `:<version>-full` and use its
+own digest:
+
+```bash
+docker pull "ghcr.io/jmmfcoutinho/spendgate@$digest"     # the -full image's digest
+docker tag "ghcr.io/jmmfcoutinho/spendgate@$digest" spendgate:full
+SPENDGATE_VARIANT=full docker compose up -d
 ```
 
 Postgres, publishing the admin API and the full guarantee list are in
@@ -237,14 +253,17 @@ The image carries its own Python, so the host needs neither Python 3.13 nor a ch
 a non-root user; the entrypoint is `spendgate` and the default command is
 `serve --config /etc/spendgate/spendgate.yaml` (data port 8080, admin port 8081, a `/data`
 volume for the SQLite ledger). Verify the signature before you run it; the identity is the
-release workflow at the version's tag:
+release workflow at the version's tag (the command below also needs `jq`):
 
 ```bash
-v=0.1.1
-cosign verify "ghcr.io/jmmfcoutinho/spendgate:$v" \
+v=0.1.1          # for the full image, verify "ghcr.io/jmmfcoutinho/spendgate:$v-full" instead
+digest=$(cosign verify "ghcr.io/jmmfcoutinho/spendgate:$v" \
   --certificate-identity "https://github.com/jmmfcoutinho/spendgate/.github/workflows/release.yml@refs/tags/v$v" \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  | jq -r '.[0].critical.image."docker-manifest-digest"')
+echo "$digest"   # sha256:...: the signed image
 ```
 
-Use the same command with `:$v-full` for the full image. Pin the digest it prints in your own
-deployment files.
+A failed verification exits non-zero and prints no digest. Pull and run the image by that digest
+(`ghcr.io/jmmfcoutinho/spendgate@$digest`), never by the tag alone, and pin the same digest in your
+own deployment files: a tag can be moved, a digest cannot.

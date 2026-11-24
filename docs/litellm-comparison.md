@@ -76,14 +76,20 @@ keep the money right:
 
 1. **Point the `openai` provider at LiteLLM.** Set `providers.openai.base_url` to LiteLLM's
    OpenAI-compatible root and `credential` to a LiteLLM key. The URL must be `https`, or `http`
-   on loopback only.
-2. **Price each route with an override entry carrying the real model's prices.** spendgate refuses
-   a model it cannot price, and LiteLLM's model group names are not in the bundled catalog. Write
+   to `localhost`, `127.0.0.1` or `[::1]` only; anything else fails `check-config` ("must be an
+   https:// URL (http:// only for localhost)"). In Docker Compose that means LiteLLM serves TLS,
+   or runs in spendgate's network namespace so it is on spendgate's loopback: a plain
+   `http://litellm:4000` service name is refused.
+2. **Price each route with an override entry carrying the real model's prices.** A route whose
+   catalog id has no price fails `check-config` and `serve`, and LiteLLM's model group names are
+   not in the bundled catalog. Write
    one [override entry](catalog-how-to.md) per group you route, named `openai/<group name>`, with
    the prices and output limit of the model the group really calls (copy them from that model's
    bundled entry or its provider's page, and set `source_url` to that page). If a group can reach
-   several models, price it at the most expensive one: spendgate cannot see which one LiteLLM
-   chose.
+   several models, take the highest price for each meter (input, cached input, output and any
+   other meter) and the largest `max_output_tokens` across all of them, even when no single model
+   has that combination: spendgate cannot see which one LiteLLM chose, so the entry must cover the
+   worst of each.
 3. **Disable LiteLLM's cross-model fallbacks for those routes.** A fallback to another model is
    billed at that model's price while spendgate charges the price of the route. Leave the groups
    out of LiteLLM's `fallbacks`, `context_window_fallbacks`, `content_policy_fallbacks` and
@@ -121,7 +127,8 @@ models:
 Settlement uses the usage LiteLLM returns, priced with your entry. What spendgate cannot see stays
 outside its guarantee: a call LiteLLM retries upstream is booked once, and a price copied wrong is
 charged wrong. Keep LiteLLM's own retries low, and keep LiteLLM on spendgate's side of the
-perimeter (only spendgate may reach it), so apps cannot call LiteLLM directly.
+perimeter (only spendgate may reach it, over TLS or spendgate's loopback as in step 1), so apps
+cannot call LiteLLM directly.
 
 ## Switching
 
