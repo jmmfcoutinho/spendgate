@@ -10,7 +10,8 @@ minor versions. v0.1 targets local deployments: one machine, Docker Compose, SQL
 spendgate is a small, auditable guard for LLM spending: an OpenAI- and Anthropic-compatible proxy
 plus a Python SDK and a no-server library mode. Before a call is forwarded it holds the worst-case
 cost in every budget the call belongs to, refuses anything it cannot price, and settles the real
-cost exactly once afterwards.
+cost exactly once afterwards. Small means about 12.7k product lines today, provider adapters not
+counted, as measured by `scripts/lightweight_report.py`.
 
 ## What it guarantees
 
@@ -26,8 +27,9 @@ tests that prove it.
   the full hold unless usage was seen.
 - **Overruns are recorded, never clamped.** Usage above the hold is booked as reported. A breach of
   the cap blocks the budget until an operator acknowledges it (the default, `strict_overrun`).
-- **Session limits.** A session id gets a budget, a step limit, a time limit and an idle expiry,
-  so a runaway loop ends with `session_limit_reached`.
+- **Session limits.** A call that sends `X-Spendgate-Session` gets that session's budget, step
+  limit, time limit and idle expiry, so a runaway loop ends with `session_limit_reached`. A call
+  without the header has no session limits; the key's parent budgets are the backstop.
 - **Throttling costs nothing.** A provider 429 cools that deployment down and the call goes to the
   next deployment of the same model inside the same reservation, at no charge.
 - **A perimeter you can test.** In the reference Docker Compose setup only the proxy holds provider

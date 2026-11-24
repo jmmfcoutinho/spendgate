@@ -4,7 +4,7 @@
 
 ## What it guarantees
 
-1. **Hard budgets.** Before forwarding, the worst-case cost is held in every budget the call belongs to (org → project → service → user → session), in one database transaction. Afterwards the real cost is settled once. Invariant: `spent + held ≤ effective cap + recorded overrun + recorded excess`. Overruns (real cost above the hold) are recorded and alerted. By default they block the budget until acknowledged. A call is free only if it never reached the provider, the provider throttled it (429), or the provider rejected it with an error and no usage. Anything else after sending (5xx, timeout, stream cut, client cancel) is charged the full hold unless usage came back, so the provider can never bill something we didn't book.
+1. **Hard budgets.** Before forwarding, the worst-case cost is held in every budget the call belongs to (org → project → service → user → session), in one database transaction. Afterwards the real cost is settled once. Invariant: `spent + held ≤ effective cap + recorded overrun + recorded excess`. Overruns (real cost above the hold) are recorded, exposed as metrics and shown in status. By default they block the budget until acknowledged. A call is free only if it never reached the provider, the provider throttled it (429), or the provider rejected it with an error and no usage. Anything else after sending (5xx, timeout, stream cut, client cancel) is charged the full hold unless usage came back, so the provider can never bill something we didn't book.
 2. **Fail closed.** The guard refuses before any upstream contact on any of these:
    - unknown or unpriced model
    - missing FX rate or output ceiling
@@ -13,7 +13,7 @@
    - bad key
 
    Price data cannot switch this off. Any opt-out lives in `spendgate.yaml` under `fail_open:` and is logged at start.
-3. **Agent sessions are bounded.** Each session id gets a budget, a step limit, a time limit and an idle expiry, taken from the key's defaults. A runaway loop gets `session_limit_reached`.
+3. **Agent sessions are bounded.** A call that sends `X-Spendgate-Session` gets that session's budget, step limit, time limit and idle expiry, taken from the key's defaults. A runaway loop gets `session_limit_reached`. A call without the header has no session limits; the key's parent budgets are the backstop.
 4. **Provider throttling handled.** A provider 429 cools that deployment down (honouring `Retry-After`). The guard then tries the next deployment of the same model within the same reservation. Failover happens only when the provider did not process the attempt, so it is free and never double-charged. If none is left, it returns `upstream_throttled`, never `budget_exhausted`.
 5. **Traceable.** Every call records key, scopes, session, user, tags, model, deployment, tokens, price row, catalog checksum, cost, FX and latency. `spendgate usage --by service,model --since 7d` answers who spent what.
 6. **Unbypassable when deployed with the perimeter.** In Docker Compose, apps sit on an internal network and only the guard has provider keys and internet access. Automated tests prove it.
