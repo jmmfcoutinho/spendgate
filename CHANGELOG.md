@@ -25,7 +25,7 @@ All notable changes to this project are documented here. The format follows
   (`schema_migrations.compatible`), and code starts on a schema exactly one such step ahead, so
   the previous release can run after an upgrade's migration. Postgres commits each migration on
   its own. A lint test checks new migrations (a Postgres `CHECK` needs `NOT VALID` and a later
-  `VALIDATE`; a compatible migration may not be destructive). Upgrade and rollback runbook in
+  `VALIDATE`; a compatible migration may not be destructive or add a constraint). Upgrade and rollback runbook in
   [operations](docs/operations.md#upgrades-and-rollbacks); see
   [ADR-0018](docs/adr/0018-migration-policy.md).
 - `server.keep_alive_seconds` (default 75) and `server.graceful_shutdown_seconds` (default 30),

@@ -1,8 +1,9 @@
 """Numbered plain-SQL migrations, one folder per dialect (`NNNN_name.sql`, versions 1, 2, 3...).
 
 Expand/contract (ADR-0018): a migration whose file carries the line
-`-- compatible_with_previous: true` only adds (a nullable column, a table, an index, a
-`NOT VALID` constraint), so the previous release still works on the schema it leaves. The flag
+`-- compatible_with_previous: true` only adds (a nullable or defaulted column, a table, a
+non-unique index), so the previous release still works on the schema it leaves. A new
+constraint, even `NOT VALID`, tightens later writes, so it is a contract step. The flag
 is stored with the applied row, which is how that older code knows it may start one version
 ahead. Every other migration is a contract step and refuses older code.
 """

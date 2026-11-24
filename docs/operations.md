@@ -61,10 +61,12 @@ it) and `false` for Postgres. The `--local` admin commands follow the same setti
 (SQLite) always migrates.
 
 **What a release accepts.** A release starts on a schema that is current, or exactly one version
-ahead when that newer migration is marked compatible (an expand step: it only adds a nullable
-column, a table, an index or a `NOT VALID` constraint). Anything newer is refused with `the ledger
-was migrated by a newer spendgate`. The changelog of each release says whether it has migrations
-and whether they are compatible.
+ahead when that newer migration is marked compatible (an expand step: it only adds a nullable column
+or one with a default, a table without foreign keys or a non-unique index). A new constraint,
+`NOT VALID` or not, a unique index or a foreign key is a contract step: the previous release could
+write a row it rejects and fail mid-call. Anything newer is refused with `the ledger was migrated by
+a newer spendgate`. The changelog of each release says whether it has migrations and whether they
+are compatible.
 
 **Upgrade (Postgres, any number of instances):**
 
@@ -93,9 +95,12 @@ and whether they are compatible.
 
 **Writing a migration** (contributors): add `NNNN_name.sql` for both dialects with the same number
 and name. Mark an expand step with the line `-- compatible_with_previous: true` in both files; a
-marked migration must not drop, rename, retype, delete rows or add a `NOT NULL` column without a
-default. On Postgres a `CHECK` is added `NOT VALID` and validated with `VALIDATE CONSTRAINT` in a
-later migration, so the table is not scanned under the lock that adding the constraint takes.
+marked migration must not drop, rename, retype, drop a default, delete rows, add a `NOT NULL`
+column without a default, or tighten (add a constraint, a unique index or a foreign key). On
+Postgres a `CHECK` is added by name and `NOT VALID`, then validated with `VALIDATE CONSTRAINT` in a
+later migration, so the table is not scanned under the lock that adding the constraint takes; a
+`CHECK` on a new column goes in its own `ADD CONSTRAINT`, since a column constraint cannot be
+`NOT VALID`.
 `tests/unit/test_migration_lint.py` enforces these rules. A release that should stay
 rollback-safe ships at most one migration, and marks it compatible.
 

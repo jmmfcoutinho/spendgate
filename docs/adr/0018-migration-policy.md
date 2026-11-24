@@ -38,12 +38,18 @@ migration only added a nullable column.
   commit. A failure leaves the schema at the last version that committed; running `migrate` again
   continues from there. SQLite keeps one `BEGIN IMMEDIATE` transaction for all of them (one writer
   anyway, no `NOT VALID`).
+- Tightening is a contract step. A new constraint (`CHECK`, even `NOT VALID`, `UNIQUE`, a foreign
+  key) or a unique index applies to every later write, so the previous release, which does not
+  know it, could fail mid-call on a write after a rollback. An expand step adds only a nullable
+  column or one with a default, a table without foreign keys, or a non-unique index.
 - A lint test (`tests/unit/test_migration_lint.py`) checks every migration after 0004: a Postgres
-  `ADD CONSTRAINT ... CHECK` needs `NOT VALID` and its `VALIDATE` in a later file; a migration
-  marked compatible may not drop a table, view or column, rename, change a column type, set
-  `NOT NULL`, delete or truncate rows, or add a `NOT NULL` column without a default. Both
-  dialects must have the same versions, names and markers. Migrations 0001 to 0004 are never
-  edited (their checksums are recorded in every ledger) and predate the rules.
+  `CHECK` added to an existing table (named or not, also inside `ADD COLUMN`) needs a name,
+  `NOT VALID` and its `VALIDATE` in a later file; a migration marked compatible may not drop a
+  table, view or column, rename, change a column type, set `NOT NULL`, drop a default, delete or
+  truncate rows, add a `NOT NULL` column without a default, add a constraint or foreign key, or
+  create a unique index. The patterns err towards a finding (a false alarm costs a reworded
+  migration). Both dialects must have the same versions, names and markers. Migrations 0001 to 0004
+  are never edited (their checksums are recorded in every ledger) and predate the rules.
 
 ## Consequences
 
@@ -56,9 +62,10 @@ migration only added a nullable column.
   current, even without the new column; `migrate` adds the column, which that previous release
   ignores, so rolling back past this change still works.
 - A rollback without a restore works for one release with at most one migration, marked
-  compatible. A release that needs a contract step (drop, rename, tighten) ships it after the
-  expand step it depends on has been out for a release, and its changelog says so; rolling it
-  back means restoring the backup taken before `migrate`.
+  compatible. A release that needs a contract step (drop, rename, or tighten: any new constraint,
+  unique index or foreign key) ships it after the expand step it depends on has been out for a
+  release, and its changelog says so; rolling it back means restoring the backup taken before
+  `migrate`.
 - A refused open is now printed as one `error:` line with exit code 5, not a traceback, for every
   ledger error at start.
 - One new config key and one bookkeeping column. No new error codes, endpoints or dependencies.
