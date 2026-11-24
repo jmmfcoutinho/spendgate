@@ -8,10 +8,12 @@ HTTP call to Entra or Google), so it runs in a worker thread, one fetch at a tim
 
 Each identity library is an optional extra, imported only when its kind is configured: `rds_iam`
 uses botocore (the `bedrock` extra), `entra` azure-identity (`azure`), `cloudsql_iam` google-auth
-(`google`). A failure is `LedgerUnavailable`, naming the kind and the error class only.
+(`google`); `db_tokens` refuses a kind whose extra is missing. A failure is `LedgerUnavailable`,
+naming the kind and the error class only.
 """
 
 import asyncio
+import importlib.util
 import time
 from collections.abc import Callable
 from datetime import UTC
@@ -29,6 +31,12 @@ RDS_TOKEN_SECONDS: Final = 900  # the lifetime AWS documents for an RDS auth tok
 UNKNOWN_EXPIRY_SECONDS: Final = REFRESH_MARGIN_SECONDS + 60  # no expiry given: reuse ~1 minute
 CLOUDSQL_SCOPE: Final = "https://www.googleapis.com/auth/sqlservice.login"
 KINDS: Final = ("rds_iam", "entra", "cloudsql_iam")
+# The extra each kind needs, and the modules that must be importable for it.
+EXTRAS: Final = {
+    "rds_iam": ("bedrock", ("botocore",)),
+    "entra": ("azure", ("azure.identity",)),
+    "cloudsql_iam": ("google", ("google.auth", "requests")),
+}
 
 type Clock = Callable[[], float]  # Unix seconds
 type Fetch = Callable[[], tuple[str, float]]  # blocking: (token, expires at in Unix seconds)
@@ -158,12 +166,9 @@ class GoogleCredentials(Protocol):  # google.auth.credentials.Credentials, as fa
     def refresh(self, request: object) -> None: ...
 
 
-def _missing(extra: str) -> RuntimeError:
-    return RuntimeError(f"this ledger auth kind needs the optional extra: spendgate[{extra}]")
-
-
 def _login(dsn: str) -> tuple[str, int, str]:
     """Host, port and user of the DSN, which must name the user and carry no password."""
+    params: dict[str, Any] = {}
     try:
         params = conninfo_to_dict(dsn)
         port = int(str(params.get("port") or 5432))
@@ -192,10 +197,8 @@ def rds_fetch(
 
     def fetch() -> tuple[str, float]:
         if not made:
-            try:
-                import botocore.session  # noqa: PLC0415 - optional extra, rds_iam only
-            except ImportError as missing:  # pragma: no cover - the extra is installed in CI
-                raise _missing("bedrock") from missing
+            import botocore.session  # noqa: PLC0415 - optional extra, checked by `db_tokens`
+
             client = botocore.session.get_session().create_client("rds", region_name=region)
             made.append(cast("RdsClient", client))  # the method is added at client creation
         token = made[0].generate_db_auth_token(DBHostname=host, Port=port, DBUsername=user)
@@ -211,10 +214,8 @@ def entra_fetch(dsn: str, scope: str, *, credential: TokenCredential | None = No
 
     def fetch() -> tuple[str, float]:
         if not made:
-            try:
-                from azure.identity import DefaultAzureCredential  # noqa: PLC0415 - optional extra
-            except ImportError as missing:  # pragma: no cover - the extra is installed in CI
-                raise _missing("azure") from missing
+            from azure.identity import DefaultAzureCredential  # noqa: PLC0415 - optional extra
+
             made.append(DefaultAzureCredential())
         got = made[0].get_token(scope)
         return str(got.token), float(got.expires_on)
@@ -223,10 +224,8 @@ def entra_fetch(dsn: str, scope: str, *, credential: TokenCredential | None = No
 
 
 def _default_google() -> GoogleCredentials:
-    try:
-        import google.auth  # noqa: PLC0415 - optional extra, cloudsql_iam only
-    except ImportError as missing:  # pragma: no cover - the extra is installed in CI
-        raise _missing("google") from missing
+    import google.auth  # noqa: PLC0415 - optional extra, checked by `db_tokens`
+
     creds, _ = google.auth.default(scopes=[CLOUDSQL_SCOPE])
     found: GoogleCredentials = creds
     return found
@@ -253,8 +252,25 @@ def cloudsql_fetch(
     return fetch
 
 
+def _installed(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:  # a parent package (`azure`, `google`) is missing
+        return False
+
+
 def db_tokens(kind: str, dsn: str, *, region: str | None = None, scope: str = "") -> DbTokens:
-    """The token source for `ledger.backend.auth`; ValueError when the DSN does not fit it."""
+    """The token source for `ledger.backend.auth`.
+
+    ValueError when the DSN does not fit it or the kind's optional extra is not installed: both
+    are configuration problems, found at start rather than at the first login.
+    """
+    extra, modules = EXTRAS.get(kind, ("", ()))
+    if missing := [m for m in modules if not _installed(m)]:
+        raise ValueError(
+            f"ledger.backend.auth kind {kind} needs the optional extra spendgate[{extra}] "
+            f"({', '.join(missing)} is not installed)"
+        )
     if kind == "rds_iam":
         return DbTokens(kind, rds_fetch(dsn, region))
     if kind == "entra":

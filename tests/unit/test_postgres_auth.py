@@ -1,6 +1,7 @@
 """Database tokens for `ledger.backend.auth` and DSN rotation: fake identities, no network."""
 
 import asyncio
+import importlib.util
 import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -287,6 +288,32 @@ async def test_a_failed_connect_never_quotes_the_connection_string(
         await PostgresLedger.open(UNENCODED, currency="USD")
     assert "fragment" not in str(opened.value) and "%40" in str(opened.value)
     assert opened.value.__cause__ is None and opened.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "module", "extra"),
+    [
+        ("rds_iam", "botocore", "bedrock"),
+        ("entra", "azure.identity", "azure"),
+        ("cloudsql_iam", "requests", "google"),
+    ],
+)
+def test_a_kind_whose_extra_is_missing_is_refused_naming_the_extra(
+    monkeypatch: pytest.MonkeyPatch, kind: str, module: str, extra: str
+) -> None:
+    real = importlib.util.find_spec
+
+    def find_spec(name: str) -> object:
+        if name == module:
+            raise ModuleNotFoundError(name)  # as when a parent package is missing
+        return real(name)
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    with pytest.raises(ValueError, match=rf"needs the optional extra spendgate\[{extra}\]"):
+        db_tokens(kind, DSN)
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    with pytest.raises(ValueError, match=module):
+        db_tokens(kind, DSN)
 
 
 def test_a_malformed_dsn_is_refused_without_quoting_it() -> None:

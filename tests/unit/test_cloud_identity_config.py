@@ -135,6 +135,23 @@ def test_a_dsn_with_a_password_under_token_auth_is_a_config_error(
     assert "pw-secret" not in str(info.value)
 
 
+def test_a_missing_extra_for_token_auth_is_a_config_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import importlib.util  # noqa: PLC0415 - patched for this test only
+
+    from spendgate.ledger.postgres import PostgresLedger  # noqa: PLC0415 - optional extra
+
+    monkeypatch.setattr(PostgresLedger, "open", _Opened())
+    monkeypatch.setattr(importlib.util, "find_spec", lambda name: None)
+    settings = load(write(tmp_path, _with_ledger(auth=", auth: {kind: entra}")), env=ENV)
+    with pytest.raises(CliError) as info:
+        asyncio.run(
+            _postgres(settings, "postgresql://spendgate@db.example.test/spend", migrate=False)
+        )
+    assert info.value.code == EXIT_CONFIG and "spendgate[azure]" in str(info.value)
+
+
 # --- SIGHUP: `file:` secrets read again --------------------------------------------------------
 
 
