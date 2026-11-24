@@ -105,6 +105,19 @@ All notable changes to this project are documented here. The format follows
   the request names none. New money rule M-15. OpenAI and Azure OpenAI upstreams, including
   OpenAI-compatible servers behind `base_url`, must honour `max_completion_tokens`; on Azure the
   v1 API is recommended.
+### Added
+
+- Weekly fuzz workflow (`.github/workflows/fuzz.yml`): every `tests/fuzz` target in long mode
+  for 60 seconds with a new seed each run, one JSON report per target uploaded.
+
+### Changed
+
+- `make test` now enforces the coverage floors CONTRIBUTING.md documents: >= 90% over
+  `src/spendgate`, then `core/` >= 95%, `ledger/` >= 90% and `pipeline/` >= 90% each
+  (`make coverage-gates`). Before, only the 90% aggregate was checked.
+- `make test-postgres` (CI's integration job) measures coverage and holds the Postgres ledger
+  backend (`ledger/postgres*.py`) to >= 90% on the Postgres run; it now refuses to start without
+  `SPENDGATE_TEST_POSTGRES_URL`.
 
 ## [0.1.1] - 2026-11-20
 

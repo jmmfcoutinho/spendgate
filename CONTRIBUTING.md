@@ -37,7 +37,8 @@ Rules:
 - No network. Tests that need a real provider are marked `@pytest.mark.live`, excluded by default (`-m "not live"`) and never run in CI.
 - Injected clock; no `sleep` in tests. Time moves by `clock.advance(...)`.
 - A bug fix starts with a failing test.
-- Coverage: >= 90% line on `core/`, `ledger/` and `pipeline/`; >= 95% on `core/`.
+- Coverage (line and branch, `make test`): >= 90% over all of `src/spendgate`, then per package >= 95% on `core/`, >= 90% on `ledger/` and >= 90% on `pipeline/`. Without a Postgres server the `ledger/` figure counts the Postgres backend at what the other tests reach; `make test-postgres` (CI's integration job) holds `ledger/postgres*.py` to >= 90% on the Postgres run alone. The floors are `COVERAGE_GATES` and `COVERAGE_POSTGRES_FLOOR` in the `Makefile`.
+- Fuzz (`tests/fuzz`, marker `fuzz`): `make fuzz` is the short mode and is not part of `make test`; the pinned regressions (`test_regression_*.py`) are. `.github/workflows/fuzz.yml` runs every target weekly in long mode (`SPENDGATE_FUZZ_SECONDS=60` each, a new seed per run) and uploads one JSON report per target. A failure there is a finding: pin a regression test with its seed, then fix.
 - Every money rule has an id `M-NN` in the money-rule table (section 7) and a test named for it.
 
 ## 3. Gates
@@ -49,17 +50,19 @@ All gates run locally and in CI with the same commands. None is added "later". C
 | Lint | `uv run ruff check .` | zero findings |
 | Format | `uv run ruff format --check .` | no diff |
 | Types | `uv run mypy --strict src tests` | zero errors |
-| Tests + coverage | `uv run pytest -m "not live" --cov=spendgate.core --cov=spendgate.ledger --cov=spendgate.pipeline --cov-fail-under=90` | >= 90% on `core/`, `ledger/` and `pipeline/` |
-| Core coverage | `uv run pytest tests/unit --cov=spendgate.core --cov-fail-under=95` | >= 95% on `core/` |
+| Tests + coverage | `make test`: `uv run pytest -m "not live and not load and not fuzz" --cov --cov-fail-under=90` | >= 90% over `src/spendgate` |
+| Package coverage | `make coverage-gates` (run by `make test`): `uv run coverage report --include="src/spendgate/<pkg>/*" --precision=2 --fail-under=<floor>` | `core/` >= 95%, `ledger/` >= 90%, `pipeline/` >= 90% |
+| Postgres + coverage | `make test-postgres` (needs `SPENDGATE_TEST_POSTGRES_URL`; CI integration job): `pytest -m postgres --cov`, then `coverage report --include="src/spendgate/ledger/postgres*" --fail-under=90` | >= 90% on the Postgres backend |
+| Fuzz (weekly) | `SPENDGATE_FUZZ_SECONDS=60 make fuzz` (`.github/workflows/fuzz.yml`) | no failing case |
 | Architecture | `uv run lint-imports` | all contracts kept (core imports nothing; layers `cli` > `gateway` \| `local` > `pipeline` > leaf packages > `core`; `local` never imports `gateway`; no Starlette/uvicorn in `pipeline`; providers never import each other) |
 | Dependencies | `uv run pip-audit` | no known vulnerabilities (documented, dated ignores only) |
 | Secrets | `uv run detect-secrets-hook --baseline .secrets.baseline $(git ls-files)` | no new findings |
 | Image scan | `docker build -t spendgate:ci . && trivy image --exit-code 1 --severity HIGH,CRITICAL spendgate:ci` | no HIGH/CRITICAL with a fix available |
 | Lightweight report | `uv run python scripts/lightweight_report.py` | see below |
 
-Coverage `fail_under` and the pre-commit hooks (ruff, ruff-format, mypy, detect-secrets) live in
-`pyproject.toml` and `.pre-commit-config.yaml`; `uv run pre-commit run --all-files` runs the fast
-gates locally. Python 3.13 and 3.14 both run the test gate.
+Coverage floors live in the `Makefile` (what is measured, in `pyproject.toml`); the pre-commit
+hooks (ruff, ruff-format, mypy, detect-secrets) live in `.pre-commit-config.yaml`;
+`uv run pre-commit run --all-files` runs the fast gates locally. Python 3.13 and 3.14 both run the test gate.
 
 ### Lightweight report
 
