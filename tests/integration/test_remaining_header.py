@@ -8,9 +8,11 @@ hold and the settlement (issue #7): a header costs no ledger read of its own.
 from pathlib import Path
 
 from spendgate.core.budgets import Period
+from spendgate.core.outcomes import ReservationState
 from spendgate.core.sessions import SessionDefaults
-from spendgate.ledger.port import BudgetTotals, LedgerPort
+from spendgate.ledger.port import BudgetRoom, BudgetTotals, LedgerPort, Settlement
 from spendgate.ledger.sqlite import SqliteLedger
+from spendgate.pipeline.closing import Closer
 from tests.integration.harness import NOW_MS, Stack, async_test, open_stack, usd
 
 USER = [{"role": "user", "content": "hi"}]
@@ -108,3 +110,23 @@ async def test_a_session_budget_is_not_reported_as_the_remainder(tmp_path: Path)
         assert r.headers["x-spendgate-budget-remaining"] == (
             f"{(usd('10') - spent) / 1_000_000_000:.9f} USD"
         )
+
+
+@async_test
+async def test_settlement_rooms_are_used_only_when_they_cover_every_held_budget(
+    tmp_path: Path,
+) -> None:
+    async with open_stack(tmp_path, budget="10") as s:
+        closer = Closer(s.settings, s.ledger, None, s.observer, s.clock.now)  # type: ignore[arg-type]
+        mine = frozenset({s.budget.id})
+        room = BudgetRoom(s.budget.id, s.scope.id, usd("3"))
+        settled = Settlement(True, ReservationState.SETTLED, rooms=(room,))
+        covered = await closer.left_after(s.scope.id, settled, mine)
+        assert covered is not None and covered[0].nano == usd("3")  # from the settlement
+        # A room missing (the hold's period has ended since, the budget was disabled, or the
+        # settlement was not applied): a fresh lock-free read instead, here the full 10 USD.
+        for done in (Settlement(True, ReservationState.SETTLED), None):
+            fresh = await closer.left_after(s.scope.id, done, mine)
+            assert fresh is not None and fresh[0].nano == usd("10")
+        partial = await closer.left_after(s.scope.id, settled, mine | {"another-budget"})
+        assert partial is not None and partial[0].nano == usd("10")

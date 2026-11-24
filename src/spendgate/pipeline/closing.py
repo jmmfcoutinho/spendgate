@@ -68,11 +68,7 @@ class Closer:
         if done is None:
             self._unsettled[call.id] = (decision, self._now())
         await self._finish_limits(call, book, decision)
-        scope_id = call.principal.scope_id
-        if done is not None and done.rooms:
-            left = await self.room_left(scope_id, done.rooms, book.budget_ids)
-        else:
-            left = await self.remaining(scope_id, book.budget_ids)  # best effort
+        left = await self.left_after(call.principal.scope_id, done, book.budget_ids)
         self._settled(call, book, decision, left, ttft_ms)
         return Closed(decision, done is not None, left)
 
@@ -176,6 +172,17 @@ class Closer:
         except Exception:
             return None
         return (Money(best[0], self._settings.ledger_currency), best[1]) if best else None
+
+    async def left_after(
+        self, scope_id: str, done: Settlement | None, budget_ids: frozenset[str] | None
+    ) -> tuple[Money, str] | None:
+        """The header after a close: from the settlement's rooms when they cover every budget the
+        hold took, else (not applied, late, a period boundary since the hold, a disabled budget, a
+        ledger that did not answer) the lock-free read."""
+        rooms = done.rooms if done is not None else ()
+        if budget_ids is not None and budget_ids <= {r.budget_id for r in rooms}:
+            return await self.room_left(scope_id, rooms, budget_ids)
+        return await self.remaining(scope_id, budget_ids)  # best effort
 
     async def room_left(
         self,

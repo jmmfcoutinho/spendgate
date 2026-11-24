@@ -194,3 +194,19 @@ def test_rooms_name_their_owning_scope(rig: Rig) -> None:
         ],
         key=lambda r: r.budget_id,
     )
+
+
+JAN_31_LAST_SECOND = 1_769_903_999_000  # 2026-01-31T23:59:59Z
+FEB_1 = 1_769_904_001_000  # 2026-02-01T00:00:01Z
+
+
+def test_a_settlement_across_a_month_boundary_reports_no_room_for_the_old_period(rig: Rig) -> None:
+    w = rig.world("10", period=Period.MONTH, now=JAN_31_LAST_SECOND)
+    rig.hold_ok(w, "spent", "6", JAN_31_LAST_SECOND)
+    rig.settle("spent", "6", JAN_31_LAST_SECOND)
+    held = rig.hold_ok(w, "late", "3", JAN_31_LAST_SECOND)
+    assert [r.room_nano for r in held.rooms] == [E("1")]  # January: 10 - 6 - 3
+    done = rig.settle("late", "1", FEB_1)  # booked into January, where the hold was taken
+    assert done.applied and done.rooms == ()  # January's room is not what a header shows now
+    february = rig.totals(w, FEB_1)
+    assert february.effective_cap_nano - february.spent_nano - february.held_nano == E("10")

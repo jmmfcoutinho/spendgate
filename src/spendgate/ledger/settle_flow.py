@@ -7,7 +7,14 @@ terminal transition already happened, which makes each one idempotent per reques
 import json
 from dataclasses import dataclass
 
-from spendgate.core.budgets import AlertKind, Budget, BudgetAlert, PeriodState, effective_cap
+from spendgate.core.budgets import (
+    AlertKind,
+    Budget,
+    BudgetAlert,
+    PeriodState,
+    effective_cap,
+    period_start,
+)
 from spendgate.core.outcomes import Outcome, ReservationState
 from spendgate.ledger import sql
 from spendgate.ledger.common import (
@@ -114,7 +121,11 @@ def _locked_items(reads: list[list[Row]]) -> list[_Item]:
 
 
 def _rooms(locked: list[_Item], now: int, *, spent: int) -> tuple[BudgetRoom, ...]:
-    """Room in each enabled budget once its hold left `held` and `spent` entered `spent`."""
+    """Room in each enabled budget once its hold left `held` and `spent` entered `spent`.
+
+    Only for an item booked in the budget's current period: a hold taken before a period
+    boundary books into the old period, whose room is not what a header reports now.
+    """
     return tuple(
         BudgetRoom(
             lk.budget.id,
@@ -123,7 +134,7 @@ def _rooms(locked: list[_Item], now: int, *, spent: int) -> tuple[BudgetRoom, ..
             - (lk.period.held_nano - lk.held),
         )
         for lk in locked
-        if lk.enabled
+        if lk.enabled and lk.start == period_start(lk.budget.period, now)
     )  # fmt: skip
 
 
