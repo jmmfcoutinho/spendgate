@@ -217,7 +217,11 @@ D: dict[str, str] = {
     "BootstrapBudget.period": "`none` is a lifetime cap; `day` and `month` reset at UTC.",
     "BootstrapBudget.cap": 'Quoted amount in the ledger currency, such as `"50 EUR"`.',
     "BootstrapBudget.soft_pct": "Percentage of the cap that raises a warning, never a refusal.",
-    "BootstrapBudget.model_filter": "Apply the budget only to calls of matching models.",
+    "BootstrapBudget.model_filter": (
+        "Apply the budget only to calls whose catalog id (`provider/model`, not the alias) "
+        "matches this case-sensitive glob, such as `openai/gpt-6-*`. `check-config` and `serve` "
+        "warn when it matches no routed catalog id."
+    ),
     "BootstrapBudget.strict_overrun": "Overrides `defaults.strict_overrun` for this budget.",
     "BootstrapKey.name": "Label of the key. A name already in use is left alone.",
     "BootstrapKey.scope": "Scope path of a data key. Give this or `admin_scopes`, not both.",

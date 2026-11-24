@@ -163,6 +163,7 @@ def _state(rig: Rig, rid: str) -> ReservationState:
 def test_scenario_13_m04_late_settle_books_the_overrun_and_updates_the_sweepers_row(
     rig: Rig,
 ) -> None:
+    """The reservation row shows what was booked: the hold plus the late overrun."""
     w = rig.world("10")
     spend(rig, w, "8")
     rig.hold_ok(w, "A", "1")
@@ -175,7 +176,7 @@ def test_scenario_13_m04_late_settle_books_the_overrun_and_updates_the_sweepers_
     assert_i1(t)
     reservation = rig.run(rig.ledger.get_reservation("A"))
     assert reservation is not None and reservation.state is ReservationState.EXPIRED
-    assert reservation.charged_nano == E("1")  # the reservation keeps what the sweeper charged
+    assert reservation.charged_nano == E("1.80")  # the swept hold 1.00 plus the overrun 0.80
     assert reservation.item_overruns == {w.budget.id: E("0.80")}
     (row,) = rig.run(rig.ledger.get_calls("A"))
     assert (row.outcome, row.settled_by) == (Outcome.OK, "sweeper")
@@ -187,15 +188,31 @@ def test_scenario_13_m04_late_settle_books_the_overrun_and_updates_the_sweepers_
 
 
 def test_late_settle_twice_changes_nothing(rig: Rig) -> None:
+    """A repeat with a different amount must not rewrite the reservation's absolute charge."""
     w = rig.world("10")
     rig.hold_ok(w, "A", "1")
     rig.sweep(T0 + 60_100)
     assert rig.settle("A", "1.80", T0 + 61 * SECOND, usage="1.80").late
     before = rig.totals(w)
-    again = rig.settle("A", "1.80", T0 + 62 * SECOND, usage="1.80")
+    again = rig.settle("A", "2.50", T0 + 62 * SECOND, usage="2.50")
     assert (again.applied, again.charged_nano) == (False, 0)
     assert rig.totals(w) == before
     assert len(rig.run(rig.ledger.get_calls("A"))) == 1
+    reservation = rig.run(rig.ledger.get_reservation("A"))
+    assert reservation is not None and reservation.charged_nano == E("1.80")
+
+
+def test_m04_late_settle_under_the_hold_keeps_the_reservation_at_the_swept_hold(rig: Rig) -> None:
+    """`charge <= held` books nothing more, so the reservation still shows the full hold."""
+    w = rig.world("10")
+    rig.hold_ok(w, "A", "1")
+    rig.sweep(T0 + 60_100)
+    late = rig.settle("A", "0.40", T0 + 61 * SECOND, usage="0.40")
+    assert (late.late, late.overrun_nano) == (True, 0)
+    reservation = rig.run(rig.ledger.get_reservation("A"))
+    assert reservation is not None and reservation.state is ReservationState.EXPIRED
+    assert reservation.charged_nano == E("1")
+    assert figures(rig.totals(w)) == (E("1"), 0, 0, 0)
 
 
 def test_late_settle_with_attempts_rewrites_the_sweeper_row_as_the_consuming_attempt(

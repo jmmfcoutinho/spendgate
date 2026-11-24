@@ -128,6 +128,14 @@ All notable changes to this project are documented here. The format follows
   body instead of sleeping 10 ms, and the settlement tests await `drain()` instead of polling.
 - `BudgetExhausted.hold` in the Python SDK: the refused call's worst-case hold from
   `details.hold`, parsed like `remaining`.
+- The admin API refuses to create a budget whose `model_filter` matches no routed catalog id
+  (`invalid_request`, `param: model_filter`): such a budget would never apply. The filter is a
+  case-sensitive glob over the catalog id (such as `openai/gpt-6-*`), never the alias; the
+  configuration reference, the OpenAPI document and the operations guide now say so
+  ([ADR-0011](docs/adr/0011-model-filter-validation-and-late-settle-reservation.md)).
+- `spendgate check-config` and `spendgate serve` warn about each `bootstrap.budgets` entry whose
+  `model_filter` matches no routed catalog id. A warning, not an error: the configuration still
+  loads (ADR-0011).
 
 ### Fixed
 
@@ -156,6 +164,11 @@ All notable changes to this project are documented here. The format follows
 - `spendgate_requests_total` on refused calls no longer takes its `model` label from the request
   body. It is the routed model's catalog id, as on settled calls, or `unknown` when the request
   names no routed model, so clients cannot create a new series per model string they send.
+- A settle that arrives after the sweeper expired its hold now also updates the reservation's
+  `charged_nano` (as the ledger's `get_reservation` reads it) to the hold plus the late overrun,
+  in the same transaction. Before, the reservation kept showing only the swept hold
+  while the budget and the call row already carried the overrun. Reporting only: the money
+  booked to the budgets was already correct (ADR-0011).
 
 ## [0.1.1] - 2026-11-20
 

@@ -1,11 +1,15 @@
 """The admission transaction (ledger-state-machine.md, "Admission"): one flow for both backends."""
 
 from dataclasses import dataclass
-from fnmatch import fnmatchcase
 
 from spendgate.core.budgets import Admission, ScopeKind, check_admission, period_start
 from spendgate.core.errors import ErrorCode, LimitName, Refusal
-from spendgate.core.policy import KillSwitch, KillTarget, matching_kill_switch
+from spendgate.core.policy import (
+    KillSwitch,
+    KillTarget,
+    matching_kill_switch,
+    model_filter_matches,
+)
 from spendgate.core.sessions import SessionAction, SessionState, gate_session, session_path
 from spendgate.ledger import sql
 from spendgate.ledger.common import (
@@ -123,7 +127,9 @@ def _budget_owners(req: HoldRequest, leaf_id: str) -> Flow[dict[str, str]]:
     wanted: dict[str, str] = {}
     for row in rows:
         pattern = row["model_filter"]
-        if pattern is None or (isinstance(pattern, str) and fnmatchcase(req.model, pattern)):
+        if pattern is None or (
+            isinstance(pattern, str) and model_filter_matches(pattern, req.model)
+        ):
             wanted[s(row, "id")] = s(row, "scope_id")
     if req.plan is not None:
         for planned in req.plan.budgets:  # a stale plan may add a budget, never remove one

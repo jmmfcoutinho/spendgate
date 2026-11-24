@@ -134,6 +134,15 @@ def matching_kill_switch(
     return None
 
 
+def model_filter_matches(pattern: str | None, catalog_id: str) -> bool:
+    """A budget's `model_filter` is a case-sensitive glob over the catalog id (`openai/gpt-*`).
+
+    Never over the alias the client sent: aliases are config names (several may route to one
+    catalog id), while the catalog id names the priced model. None matches every model.
+    """
+    return pattern is None or fnmatchcase(catalog_id, pattern)
+
+
 def select_budgets(
     budgets: Collection[Budget], chain_scope_ids: Collection[str], model: str, now: int
 ) -> tuple[PlannedBudget, ...]:
@@ -141,8 +150,7 @@ def select_budgets(
     chosen = [
         b
         for b in budgets
-        if b.scope_id in chain_scope_ids
-        and (b.model_filter is None or fnmatchcase(model, b.model_filter))
+        if b.scope_id in chain_scope_ids and model_filter_matches(b.model_filter, model)
     ]
     return tuple(PlannedBudget(b, period_start(b.period, now)) for b in sorted(chosen, key=_id))
 

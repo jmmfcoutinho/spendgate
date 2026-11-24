@@ -17,6 +17,7 @@ from spendgate.core.policy import (
     Plan,
     check_labels,
     model_allowed,
+    model_filter_matches,
     resolve,
 )
 from spendgate.core.sessions import SessionAction, SessionDefaults, SessionState
@@ -65,6 +66,16 @@ def test_a_model_filtered_budget_applies_only_to_matching_models() -> None:
     ]
     ids = [p.budget.id for p in plan(run(budgets=budgets)).budgets]
     assert ids == ["a", "b"]
+
+
+def test_a_model_filter_is_a_case_sensitive_glob_over_the_catalog_id() -> None:
+    assert model_filter_matches(None, "openai/gpt-6-luna")
+    assert model_filter_matches("openai/gpt-6-luna", "openai/gpt-6-luna")
+    assert model_filter_matches("openai/gpt-6-*", "openai/gpt-6-luna")
+    assert model_filter_matches("*luna", "openai/gpt-6-luna")
+    assert not model_filter_matches("gpt-6-*", "openai/gpt-6-luna")  # the provider is part of it
+    assert not model_filter_matches("OpenAI/*", "openai/gpt-6-luna")
+    assert not model_filter_matches("", "openai/gpt-6-luna")
 
 
 def test_labels_never_add_or_remove_a_budget_the_key_is_not_bound_to() -> None:

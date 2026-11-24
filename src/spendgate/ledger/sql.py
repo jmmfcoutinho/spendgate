@@ -97,6 +97,8 @@ RES_EXPIRE = f"""UPDATE reservations SET state = 'expired', outcome = 'expired',
   charged_nano = (SELECT COALESCE(MAX(held_nano), 0) FROM reservation_items
                   WHERE reservation_id = reservations.id)
   WHERE id = :id AND state = 'pending' AND lease_expires_at < :now {_GUARDED}"""
+# Late settle: the reservation shows what was booked, the swept hold plus the overrun (M-04).
+RES_LATE = "UPDATE reservations SET charged_nano = :charged WHERE id = :id AND state = 'expired'"
 RES_GET = """SELECT id, state, owner_instance, lease_expires_at, key_id, scope_id, session_id,
   outcome, charged_nano, meta, created_at FROM reservations WHERE id = :id"""
 # One id at a time: the caller names the holds it still owns (a hold nobody owns must expire).

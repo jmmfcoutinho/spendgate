@@ -127,7 +127,8 @@ def _late_settle(
     """The sweeper already charged the full hold; book only `max(0, charge - held)` (M-04).
 
     The sweeper's `calls` row is rewritten as the attempt that consumed the hold; its
-    `outcome = 'expired'` marks "not yet late-settled", so a repeat finds nothing to do.
+    `outcome = 'expired'` marks "not yet late-settled", so a repeat finds nothing to do. The
+    reservation's `charged_nano` follows the same `max(held, charge)` as that row.
     """
     items = yield q(sql.ITEMS_OF, id=request_id)
     held = max((i(it, "held_nano") for it in items), default=0)
@@ -144,6 +145,7 @@ def _late_settle(
     )
     if not updated:  # another late settle won the race
         return Settlement(False, ReservationState.EXPIRED)
+    yield q(sql.RES_LATE, id=request_id, charged=max(held, charge))
     flagged = yield from _book_late(request_id, items if over else [], over, now)
     res = (yield q(sql.RES_GET, id=request_id))[0]
     meta = HoldMeta.from_json(s(res, "meta"))
