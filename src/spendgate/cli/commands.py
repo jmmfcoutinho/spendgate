@@ -4,6 +4,7 @@ A command returns `(data, text)`: `--json` prints `data` (the API's own JSON), o
 Nothing here touches a ledger; `--local` runs the same admin app in-process.
 """
 
+import shlex
 from argparse import Namespace
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -41,6 +42,11 @@ def until(text: str) -> str:
     return text
 
 
+def _json(a: Namespace) -> bool:
+    """`--json` prints the API's data only, so lookups made for the text are skipped."""
+    return bool(getattr(a, "json", False))
+
+
 def _strs(**fields: str | None) -> dict[str, str]:
     return {k: v for k, v in fields.items() if v is not None}
 
@@ -53,21 +59,22 @@ def _compact(**fields: object) -> Json:
 
 
 async def _scope_path(c: Client, scope_id: object) -> object:
-    """The scope's path (`org:acme/service:api`), or its id when the lookup is refused.
+    """The scope's path (`org:acme/service:api`), or its id when the lookup fails.
 
     A key without the read scope can still create keys: the secret must print all the same.
     """
     try:
         return (await c.call("GET", f"{BASE}/scopes/{scope_id}"))["path"]
-    except CliError:
+    except (CliError, KeyError, TypeError, ValueError):
         return scope_id
 
 
-async def _key_rows(c: Client, keys: list[Json]) -> str:
-    """The SCOPE column shows each scope's path, not its id."""
-    paths = {s: await _scope_path(c, s) for s in dict.fromkeys(k["scope_id"] for k in keys)}
+async def _key_rows(c: Client, keys: list[Json], *, paths: bool = True) -> str:
+    """The SCOPE column: each scope's path (one lookup per scope), or the ids if not `paths`."""
+    ids = dict.fromkeys(k["scope_id"] for k in keys)
+    shown = {s: await _scope_path(c, s) if paths else s for s in ids}
     rows = [
-        (k["id"], k["name"], paths[k["scope_id"]], k["prefix"], dash(k["expires_at"]), k["revoked"])
+        (k["id"], k["name"], shown[k["scope_id"]], k["prefix"], dash(k["expires_at"]), k["revoked"])
         for k in keys
     ]
     return table(("ID", "NAME", "SCOPE", "PREFIX", "EXPIRES", "REVOKED"), rows)
@@ -82,8 +89,12 @@ async def keys_create(c: Client, a: Namespace) -> Output:
         allowed_models=a.models.split(",") if a.models else None, limits=limits or None,
     )  # fmt: skip
     made = await c.call("POST", f"{BASE}/keys", body=body)
-    text = f"{await _key_rows(c, [made])}\n\nsecret (shown once, store it now): {made['secret']}"
-    return made, text
+    secret = f"secret (shown once, store it now): {made['secret']}"
+    try:
+        rows = await _key_rows(c, [made], paths=not _json(a))
+    except Exception:  # the secret exists only here: no display step may lose it
+        rows = f"created key {made.get('id')}"
+    return made, f"{rows}\n\n{secret}"
 
 
 async def keys_update(c: Client, a: Namespace) -> Output:
@@ -109,7 +120,7 @@ async def keys_update(c: Client, a: Namespace) -> Output:
 async def keys_list(c: Client, a: Namespace) -> Output:
     query = _strs(scope_id=a.scope, include_revoked="true" if a.include_revoked else None)
     data = await c.call("GET", f"{BASE}/keys", query=query)
-    return data, await _key_rows(c, items(data))
+    return data, await _key_rows(c, items(data), paths=not _json(a))
 
 
 async def keys_revoke(c: Client, a: Namespace) -> Output:
@@ -183,7 +194,7 @@ async def kill_on(c: Client, a: Namespace) -> Output:
     made = await c.call("POST", f"{BASE}/kill-switches", body=body)
     # The same --local/--config/--url the user typed, so the hint works when pasted as is.
     again = getattr(a, "again", "")
-    lift = f"spendgate kill off {made['id']}{again}"
+    lift = f"spendgate kill off {shlex.quote(str(made['id']))}{again}"
     return made, f"kill switch {made['id']} engaged ({kind}); lift it with: {lift}"
 
 

@@ -9,18 +9,20 @@ The admin key is read from `SPENDGATE_ADMIN_KEY` only, never from a flag, and ne
 
 import argparse
 import asyncio
+import ipaddress
 import json
 import os
 import shlex
 import sys
 from collections.abc import Sequence
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 
 from spendgate import package_version
 from spendgate.cli import serve
-from spendgate.cli.client import EXIT_AUTH, EXIT_OK, Client, CliError
+from spendgate.cli.client import EXIT_AUTH, EXIT_CONFIG, EXIT_OK, Client, CliError
 from spendgate.cli.commands import COMMANDS, Command
 from spendgate.cli.runtime import open_runtime
 from spendgate.config import ConfigError, read_config
@@ -168,7 +170,24 @@ def admin_url(args: argparse.Namespace) -> str | int:
         return serve.config_failed(args.config, exc)
     at = serve.parse_listen(server.listen if server.admin is None else server.admin.listen)
     host = _WILDCARD.get(at.host, at.host)  # a bind-all listener is reached on loopback
+    if not _loopback(host):
+        # The admin key goes in plain HTTP to this address: only to this machine unless asked.
+        print(
+            f"error: {args.config}: the admin listener {host} is not on loopback; "
+            f"pass --url or set {ENV_URL}",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG
     return f"http://{f'[{host}]' if ':' in host else host}:{at.port}"
+
+
+def _loopback(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback  # 127.0.0.0/8 and ::1
+    except ValueError:
+        return False  # any other name
 
 
 async def _run_admin(args: argparse.Namespace) -> int:
@@ -202,12 +221,19 @@ async def _emit(command: Command, client: Client, args: argparse.Namespace) -> i
     return EXIT_OK
 
 
+def _without_userinfo(url: str) -> str:
+    """`http://u:p@h:1/x` as `http://h:1/x`: a hint is printed, credentials never are."""
+    parts = urlsplit(url)
+    return parts._replace(netloc=parts.netloc.rpartition("@")[2]).geturl()
+
+
 def resolve_defaults(args: argparse.Namespace) -> None:
     """Fill the defaults left as None, keeping the flags the user typed for hints (`a.again`)."""
     typed = ["--local"] if getattr(args, "local", False) else []
-    for flag in ("config", "url"):
-        if getattr(args, flag, None) is not None:
-            typed += [f"--{flag}", shlex.quote(getattr(args, flag))]
+    if args.config is not None:
+        typed += ["--config", shlex.quote(args.config)]
+    if getattr(args, "url", None) is not None:
+        typed += ["--url", shlex.quote(_without_userinfo(args.url))]
     args.again = "".join(f" {t}" for t in typed)
     args.config_given = args.config is not None or bool(os.environ.get(ENV_CONFIG))
     args.config = args.config or os.environ.get(ENV_CONFIG) or DEFAULT_CONFIG

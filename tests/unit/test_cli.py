@@ -1,15 +1,17 @@
 """CLI pieces that need no ledger: parsing, amounts, durations, tables, exit code for usage."""
 
 import argparse
+import asyncio
 import importlib.metadata
 from pathlib import Path
 
+import httpx
 import pytest
 
 from spendgate import package_version
 from spendgate.cli import main
-from spendgate.cli.client import EXIT_REFUSED, CliError
-from spendgate.cli.commands import amount, until
+from spendgate.cli.client import EXIT_REFUSED, Client, CliError
+from spendgate.cli.commands import COMMANDS, amount, until
 from spendgate.cli.entry import admin_url, build_parser, resolve_defaults
 from spendgate.cli.render import money, table
 from spendgate.cli.serve import Listen, parse_listen, run_check_config
@@ -160,3 +162,78 @@ def test_check_config_prints_each_error_once(
     assert len(lines) == len(set(lines)) == 2  # three deployments share one missing credential
     assert all(line.startswith("error: ") for line in lines)
     assert any("gpt-0-nothing" in line for line in lines)
+
+
+@pytest.mark.parametrize("listen", ["evil.example:80", "10.0.0.5:80", "'[2001:db8::1]:80'"])
+def test_admin_url_from_the_config_must_be_on_loopback(
+    listen: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("SPENDGATE_URL", raising=False)
+    monkeypatch.setenv("SPENDGATE_ADMIN_KEY", "sga-fake-not-a-key")  # pragma: allowlist secret
+    path = tmp_path / "spendgate.yaml"
+    path.write_text(CONFIG.format(server=f"listen: {listen}"), encoding="utf-8")
+
+    def no_client(*_: object, **__: object) -> None:
+        raise AssertionError("no request may be made")
+
+    monkeypatch.setattr(httpx, "AsyncClient", no_client)
+    assert main(["status", "--config", str(path)]) == 3
+    assert "pass --url or set SPENDGATE_URL" in capsys.readouterr().err
+    for ok in ("127.0.0.2:9", "localhost:9", "'[::1]:9'"):
+        path.write_text(CONFIG.format(server=f"listen: {ok}"), encoding="utf-8")
+        assert isinstance(admin_url(_args("status", "--config", str(path))), str)
+
+
+def test_hints_never_repeat_url_credentials_and_quote_the_id() -> None:
+    url = "http://ops:pw@h:1/x"  # pragma: allowlist secret
+    assert _args("kill", "on", "--url", url, "--reason", "r").again == " --url http://h:1/x"
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"id": "ks 1"})
+
+    async def run() -> str:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(answer), base_url="http://a"
+        ) as h:
+            _, text = await COMMANDS["kill on"](Client(h), _args("kill", "on", "--reason", "r"))
+        return text
+
+    assert asyncio.run(run()).endswith("spendgate kill off 'ks 1'")
+
+
+@pytest.mark.parametrize("lookup", [b"[]", b"not json", b'{"no": "path"}'])
+def test_keys_create_prints_the_secret_when_the_scope_lookup_misbehaves(lookup: bytes) -> None:
+    made: dict[str, object] = {
+        "id": "k1",
+        "name": "n",
+        "scope_id": "s1",
+        "prefix": "p",
+        "expires_at": None,
+    }
+    made |= {"revoked": False, "secret": "sg-fake-secret"}  # pragma: allowlist secret
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request.method)
+        return (
+            httpx.Response(200, json=made)
+            if request.method == "POST"
+            else httpx.Response(200, content=lookup)
+        )
+
+    async def run(*argv: str) -> str:
+        args = _args("keys", "create", "--scope", "org:a", *argv)
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(answer), base_url="http://a"
+        ) as h:
+            _, text = await COMMANDS["keys create"](Client(h), args)
+        return text
+
+    text = asyncio.run(run())
+    assert "sg-fake-secret" in text and "s1" in text
+    seen.clear()
+    assert "sg-fake-secret" in asyncio.run(run("--json"))
+    assert seen == ["POST"]  # --json prints the API's data: no lookup for the table
