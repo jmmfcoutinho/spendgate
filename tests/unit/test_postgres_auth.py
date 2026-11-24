@@ -24,7 +24,9 @@ from spendgate.ledger.postgres_auth import (
     rds_fetch,
 )
 
-pytestmark = pytest.mark.anyio
+# Also `postgres`: these need no server, but `make test-postgres` gates `ledger/postgres*` coverage
+# on the Postgres run alone, and the token code is exercised only here.
+pytestmark = [pytest.mark.anyio, pytest.mark.postgres]
 
 DSN = "postgresql://spendgate@db.example.test:6432/spendgate?sslmode=verify-full"
 NOW = 1_800_000_000.0
