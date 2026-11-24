@@ -9,7 +9,7 @@ The sweeper may run on every instance: each expiry is a state-guarded UPDATE (`W
 'pending'`), so a second sweeper finds nothing to do. No advisory lock is needed for
 correctness; it would only save duplicate scans, so it is not used.
 
-Every pooled connection is bounded (`SESSION_DEFAULTS`, `KEEPALIVES`) so that a locked row or a
+Every pooled connection is bounded (`SESSION_DEFAULTS`, `TCP_DEFAULTS`) so that a locked row or a
 silent server ends in `LedgerUnavailable` instead of holding a call; what the operator set wins.
 """
 
@@ -43,13 +43,19 @@ SESSION_DEFAULTS: Final = {
     "statement_timeout": "5s",
     "idle_in_transaction_session_timeout": "10s",
 }
-# A dead server or a dropped network is noticed in about 30 s; a DSN that names any of these wins.
-KEEPALIVES: Final = {
+# libpq TCP options; a DSN that names any of them wins. Keepalives notice a dead server or a
+# dropped network on an idle connection in about 30 s; tcp_user_timeout (ms) gives up on data the
+# server never acknowledges (a COMMIT to a silent host) after 30 s, not ~15 min of retransmission.
+TCP_DEFAULTS: Final = {
     "keepalives": "1",
     "keepalives_idle": "15",
     "keepalives_interval": "5",
     "keepalives_count": "3",
+    "tcp_user_timeout": "30000",
 }
+# Callers that may queue for a pooled connection, per connection. Past that a caller fails at once
+# (ledger_unavailable) instead of queueing without bound while the server stalls.
+WAITING_PER_CONNECTION: Final = 2
 _SET_DEFAULTS = (
     "SELECT set_config(s.name, d.value, false) FROM pg_settings AS s"
     " JOIN unnest(%s::text[], %s::text[]) AS d(name, value) ON d.name = s.name"
@@ -88,10 +94,10 @@ async def _migrate(conn: Conn, clock: Callable[[], int]) -> None:
             )
 
 
-def keepalives_for(dsn: str) -> dict[str, str]:
-    """The keepalive options the DSN does not set itself (libpq options it names are kept)."""
+def tcp_options_for(dsn: str) -> dict[str, str]:
+    """The `TCP_DEFAULTS` the DSN does not set itself (libpq options it names are kept)."""
     named = conninfo_to_dict(dsn)
-    return {k: v for k, v in KEEPALIVES.items() if k not in named}
+    return {k: v for k, v in TCP_DEFAULTS.items() if k not in named}
 
 
 async def bound_session(conn: Conn) -> None:
@@ -117,7 +123,7 @@ class PostgresLedger(LedgerEngine):
     ) -> None:
         super().__init__(currency, new_id)
         self._dsn = dsn
-        self._keepalives = keepalives_for(dsn)
+        self._tcp = tcp_options_for(dsn)
         self._sizes = (min_size, max_size)
         self._pool_timeout = pool_timeout
         self._pool: Pool | None = None
@@ -138,9 +144,9 @@ class PostgresLedger(LedgerEngine):
     ) -> Self:
         """Migrate and check the ledger currency. Never touches a reservation."""
         try:
-            # No session bounds here: a migration may wait for a peer's lock or run long.
+            # TCP options only: a migration may wait for a peer's lock or run long.
             async with await AsyncConnection.connect(
-                make_conninfo(dsn, **keepalives_for(dsn)),
+                make_conninfo(dsn, **tcp_options_for(dsn)),
                 autocommit=True,
                 row_factory=dict_row,
                 connect_timeout=_CONNECT_TIMEOUT_S,
@@ -186,8 +192,9 @@ class PostgresLedger(LedgerEngine):
                     "autocommit": True,  # transactions are explicit, as the flows ask for them
                     "row_factory": dict_row,
                     "connect_timeout": _CONNECT_TIMEOUT_S,
-                    **self._keepalives,
+                    **self._tcp,
                 },
+                max_waiting=high * WAITING_PER_CONNECTION,
                 configure=bound_session,
                 check=AsyncConnectionPool.check_connection,
             )
@@ -195,7 +202,9 @@ class PostgresLedger(LedgerEngine):
         await pool.open()  # idempotent
         return pool
 
-    async def _run[T](self, make_flow: Callable[[], Flow[T]], *, write: bool = True) -> T:
+    async def _run[T](
+        self, make_flow: Callable[[], Flow[T]], *, write: bool = True, slow: bool = False
+    ) -> T:
         # `write` is moot here: reads still lock budget rows, so every flow gets the same shape.
         pool = await self._ensure_pool()
-        return await run_with_retry(pool, make_flow, self.stats)
+        return await run_with_retry(pool, make_flow, self.stats, slow=slow)

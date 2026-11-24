@@ -17,9 +17,15 @@ from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from spendgate.ledger import sql
 from spendgate.ledger.common import i
 from spendgate.ledger.port import Held, LedgerUnavailable
-from spendgate.ledger.postgres import KEEPALIVES, SESSION_DEFAULTS, PostgresLedger, keepalives_for
+from spendgate.ledger.postgres import (
+    SESSION_DEFAULTS,
+    TCP_DEFAULTS,
+    WAITING_PER_CONNECTION,
+    PostgresLedger,
+    tcp_options_for,
+)
 from spendgate.ledger.sql import Flow, q
-from tests.contract.rig import CURRENCY, Rig, workdir_location
+from tests.contract.rig import CURRENCY, T0, Rig, workdir_location
 
 pytestmark = pytest.mark.postgres
 
@@ -62,16 +68,16 @@ def overriding(location: str, **libpq: str) -> str:
     return make_conninfo(location, options=f"{options}{extra}", **libpq)
 
 
-def test_pooled_connections_get_the_session_bounds_and_keepalives(pg: Rig) -> None:
+def test_pooled_connections_get_the_session_bounds_and_tcp_options(pg: Rig) -> None:
     ledger = pg_ledger(pg)
     assert pg.run(ledger._run(show(tuple(SESSION_DEFAULTS)))) == SESSION_DEFAULTS
     parameters = pg.run(pooled_parameters(ledger))
-    assert {k: parameters.get(k) for k in KEEPALIVES} == KEEPALIVES
+    assert {k: parameters.get(k) for k in TCP_DEFAULTS} == TCP_DEFAULTS
 
 
-def test_bounds_and_keepalives_the_dsn_sets_win(pg: Rig) -> None:
+def test_bounds_and_tcp_options_the_dsn_sets_win(pg: Rig) -> None:
     dsn = overriding(pg.location, keepalives_idle="7")
-    assert "keepalives_idle" not in keepalives_for(dsn)
+    assert "keepalives_idle" not in tcp_options_for(dsn)
     other = pg.run(PostgresLedger.open(dsn, currency=CURRENCY))
     try:
         assert pg.run(other._run(show(tuple(SESSION_DEFAULTS)))) == {
@@ -122,3 +128,60 @@ def test_m12_a_statement_over_the_timeout_is_ledger_unavailable_and_not_retried(
     assert isinstance(caught.value.__cause__, errors.QueryCanceled)  # 57014
     assert attempts == [1]
     assert other.stats.total == 0
+
+
+def test_renewal_skips_a_row_another_session_has_locked_and_renews_the_rest(pg: Rig) -> None:
+    """A hold being settled elsewhere (its row locked) must not fail the whole heartbeat."""
+    w = pg.world("100")
+    for rid in ("busy", "free-1", "free-2"):
+        pg.hold_ok(w, rid, "1")
+    ledger = pg_ledger(pg)
+    with psycopg.connect(pg.location) as locker:
+        locker.execute("SELECT id FROM reservations WHERE id = 'busy' FOR UPDATE")
+        started = time.monotonic()
+        renewed = pg.run(
+            asyncio.wait_for(ledger.renew_all("A", {"busy", "free-1", "free-2"}, T0, 60_000), 15)
+        )
+        waited = time.monotonic() - started
+        locker.rollback()
+    assert renewed == ("free-1", "free-2")  # no error: the heartbeat stops no stream
+    assert waited < 1  # skipped, not waited for up to lock_timeout
+    assert pg.run(ledger.renew_all("A", {"busy"}, T0, 60_000)) == ("busy",)  # next beat
+
+
+def test_reports_and_retention_get_a_longer_statement_timeout_unless_the_operator_set_one(
+    pg: Rig,
+) -> None:
+    ledger = pg_ledger(pg)
+    names = ("statement_timeout",)
+    assert pg.run(ledger._run(show(names), slow=True)) == {"statement_timeout": "1min"}
+    assert pg.run(ledger._run(show(names))) == {"statement_timeout": "5s"}  # SET LOCAL ended
+    other = pg.run(PostgresLedger.open(overriding(pg.location), currency=CURRENCY))
+    try:
+        assert pg.run(other._run(show(names), slow=True)) == {"statement_timeout": "300ms"}
+    finally:
+        pg.run(other.aclose())
+
+
+def test_callers_past_the_pool_waiting_limit_are_ledger_unavailable_at_once(pg: Rig) -> None:
+    small = pg.run(PostgresLedger.open(pg.location, currency=CURRENCY, max_size=1))
+    names = ("lock_timeout",)
+
+    async def stall() -> None:
+        pool = await small._ensure_pool()
+        async with pool.connection():  # the only connection is busy: a stalled server
+            waiting = [asyncio.ensure_future(small._run(show(names))) for _ in range(2)]
+            for _ in range(200):  # until both queue for the connection
+                if pool.get_stats().get("requests_waiting", 0) == WAITING_PER_CONNECTION:
+                    break
+                await asyncio.sleep(0.005)
+            started = time.monotonic()
+            with pytest.raises(LedgerUnavailable):
+                await small._run(show(names))
+            assert time.monotonic() - started < 1  # refused, not queued for the pool timeout
+        assert len(await asyncio.gather(*waiting)) == 2  # the queued callers still finish
+
+    try:
+        pg.run(stall())
+    finally:
+        pg.run(small.aclose())

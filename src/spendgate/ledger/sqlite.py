@@ -177,7 +177,10 @@ class SqliteLedger(LedgerEngine):
         with self._lock:
             self._conn.close()
 
-    async def _run[T](self, make_flow: Callable[[], Flow[T]], *, write: bool = True) -> T:
+    async def _run[T](
+        self, make_flow: Callable[[], Flow[T]], *, write: bool = True, slow: bool = False
+    ) -> T:
+        # `slow` is moot: SQLite has no statement timeout.
         return await asyncio.to_thread(self._drive, make_flow, write)
 
     def _drive[T](self, make_flow: Callable[[], Flow[T]], write: bool) -> T:
