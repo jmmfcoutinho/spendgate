@@ -166,6 +166,8 @@ class SqliteLedger(LedgerEngine):
         """Open (creating it 0600) and migrate, or with `migrate` False refuse a schema that is
         behind (`SchemaBehind`). Never touches a reservation."""
         file = Path(path)
+        if not migrate and not file.exists():  # refuse before creating an empty file
+            migrations.require_current(migrations.load("sqlite"), {})
         _prepare_file(file)
         try:
             conn = sqlite3.connect(

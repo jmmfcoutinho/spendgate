@@ -106,6 +106,9 @@ def test_without_migrate_an_empty_database_is_refused_and_nothing_is_created(
 ) -> None:
     with pytest.raises(SchemaBehind, match="version 0"):
         open_and_close(adapter, location, migrate=False)
+    if adapter == "sqlite":  # not even an empty file (looking would create one)
+        assert not Path(location).exists()
+        return
     assert not has_table(adapter, location, "schema_migrations")
     assert not has_table(adapter, location, "budgets")
 
