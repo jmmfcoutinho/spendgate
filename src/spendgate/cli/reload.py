@@ -5,15 +5,18 @@ restart and no drain. What is reloaded is in `config.reload`; this module applie
 config paths that were read, changed or failed (never a value). Calls already in flight finish
 with the credential they started with; the next call uses the new one.
 
-The files are read in a worker thread: a slow or hung mount must not stall the event loop and
-every request on it. Only applying the result runs on the loop.
+The files are read in a daemon thread of their own: a slow or hung mount must not stall the event
+loop and every request on it, nor hold shutdown (`asyncio.run` waits for the default executor's
+threads; a daemon thread is left behind). Only applying the result runs on the loop.
 """
 
 import asyncio
+import contextlib
 import logging
 import signal
+import threading
 from asyncio import AbstractEventLoop
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 
 from spendgate.config import Reread, Settings, reread_file_secrets
@@ -41,6 +44,7 @@ class SecretReload:
         self._read = read
         self._task: asyncio.Task[None] | None = None  # kept: the loop holds tasks only weakly
         self._again = False  # a SIGHUP arrived while a reload ran: read once more after it
+        self._closed = False
 
     @property
     def settings(self) -> Settings:
@@ -49,6 +53,8 @@ class SecretReload:
 
     def __call__(self) -> None:
         """Runs on the loop (`add_signal_handler`); returns at once, never raises."""
+        if self._closed:
+            return
         if self._task is not None and not self._task.done():
             self._again = True  # the file may have changed after this reload read it
             return
@@ -59,11 +65,17 @@ class SecretReload:
         if self._task is not None:
             await asyncio.shield(self._task)
 
+    def close(self) -> None:
+        """At shutdown: no more reloads, and a read still under way is abandoned, not awaited."""
+        self._closed = True
+        if self._task is not None:
+            self._task.cancel()
+
     async def _run(self) -> None:
         while True:
             self._again = False
             try:
-                self._apply(await asyncio.to_thread(self._read, self._settings))
+                self._apply(await _in_daemon_thread(self._read, self._settings))
             except Exception as exc:  # the server keeps the secrets it has
                 log_event(
                     self._logger, "secret_reload_failed", logging.ERROR,
@@ -100,6 +112,43 @@ class SecretReload:
         except ValueError as exc:  # fixed texts from `rotate_dsn`, never the DSN itself
             return f"{exc}; the old DSN stays in use"
         return None
+
+
+def _in_daemon_thread(read: Reader, settings: Settings) -> "asyncio.Future[Reread]":
+    """`read(settings)` in a new daemon thread; its result or error lands in the future."""
+    loop = asyncio.get_running_loop()
+    done: asyncio.Future[Reread] = loop.create_future()
+
+    def post[T](setter: Callable[[T], object], value: T) -> None:
+        def run() -> None:
+            if not done.cancelled():  # closed or shut down while the files were read
+                setter(value)
+
+        with contextlib.suppress(RuntimeError):  # the loop has closed: nobody is waiting
+            loop.call_soon_threadsafe(run)
+
+    def work() -> None:
+        try:
+            result = read(settings)
+        except Exception as exc:  # handed to the loop, which logs it
+            post(done.set_exception, exc)
+        else:
+            post(done.set_result, result)
+
+    threading.Thread(target=work, name="spendgate-secret-reload", daemon=True).start()
+    return done
+
+
+@contextlib.contextmanager
+def on_sighup(loop: AbstractEventLoop, reload: SecretReload) -> Iterator[None]:
+    """`reload` runs on SIGHUP inside the block; on leaving it, the handler and the task go."""
+    installed = install(loop, reload)
+    try:
+        yield
+    finally:
+        if installed:
+            loop.remove_signal_handler(signal.SIGHUP)
+        reload.close()
 
 
 def install(loop: AbstractEventLoop, handler: Callable[[], None]) -> bool:

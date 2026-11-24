@@ -8,18 +8,22 @@ import asyncio
 import io
 import json
 import logging
+import signal
 import threading
 from dataclasses import replace
 from pathlib import Path
+from typing import cast
 
 import pytest
 
-from spendgate.cli.reload import SecretReload, install
-from spendgate.config import Reread, Secret, Settings, reread_file_secrets
+from spendgate.cli.reload import SecretReload, install, on_sighup
+from spendgate.config import Reread, Secret, Settings, load, reread_file_secrets
 from spendgate.config.schema import PostgresLedger as PostgresBackend
 from spendgate.gateway.logs import configure_json_logging
 from spendgate.ledger.postgres import PostgresLedger
+from spendgate.pipeline.pipeline import Pipeline
 from tests.integration.harness import Stack, async_test, open_stack
+from tests.unit.test_config import ENV, write
 
 OLD = "sk-test-rotated-old-0000"  # pragma: allowlist secret
 NEW = "sk-test-rotated-new-0000"  # pragma: allowlist secret
@@ -211,6 +215,32 @@ async def test_install_registers_the_handler_for_sighup() -> None:
     calls: list[int] = []
     if not install(loop, lambda: calls.append(1)):  # pragma: no cover - POSIX in CI
         pytest.skip("no SIGHUP on this platform")
-    import signal  # noqa: PLC0415 - SIGHUP exists only on POSIX
-
     assert loop.remove_signal_handler(signal.SIGHUP) is True
+
+
+def test_shutdown_does_not_wait_for_a_reader_stuck_on_its_files(tmp_path: Path) -> None:
+    started, gate, finished = threading.Event(), threading.Event(), threading.Event()
+    settings = load(write(tmp_path), env=ENV)
+
+    def stuck(settings: Settings) -> Reread:  # a hung mount
+        started.set()
+        gate.wait(timeout=30)
+        finished.set()
+        return reread_file_secrets(settings)
+
+    async def serve_then_stop() -> bool:
+        loop = asyncio.get_running_loop()
+        never_applied = cast("Pipeline", None)  # the stuck read never returns a result to apply
+        reload = SecretReload(settings, never_applied, logging.getLogger("test"), read=stuck)
+        with on_sighup(loop, reload):  # the server's lifetime
+            reload()
+            assert await asyncio.to_thread(started.wait, 10)
+        reload()  # after shutdown began: ignored
+        return loop.remove_signal_handler(signal.SIGHUP)
+
+    try:
+        still_installed = asyncio.run(serve_then_stop())
+        # `asyncio.run` returned while the read was still stuck: shutdown did not wait for it.
+        assert not finished.is_set() and not still_installed
+    finally:
+        gate.set()
