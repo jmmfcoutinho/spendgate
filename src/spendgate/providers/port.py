@@ -1,8 +1,11 @@
 """The provider contract every adapter implements, plus the small shared types it needs.
 
 Pure data and protocols: no I/O, no HTTP client. The pipeline owns sending; an adapter validates,
-translates, converts answers back, relays streams, reads usage and maps errors. The pipeline never
-branches on `Provider.name` and calls nothing but this protocol.
+readies its credentials, translates, converts answers back, relays streams, reads usage and maps
+errors. The pipeline never branches on `Provider.name` and calls nothing but this protocol.
+
+`translate` is synchronous by contract, so the one blocking step an adapter may need (a token
+refresh) lives in the async `prepare`, which the pipeline awaits just before each `translate`.
 """
 
 import functools
@@ -272,6 +275,18 @@ class Provider(Protocol):
     def validate(self, req: CleanRequest) -> Refusal | None:
         """Pure endpoint, body, header and file checks, once before routing (one provider serves
         every candidate of a catalog id). Adapter configuration is given to the constructor."""
+        ...
+
+    async def prepare(self, deployment: Deployment) -> None:
+        """Ready the deployment's credentials before `translate`, without blocking the loop.
+
+        A token refresh (Entra ID, google-auth, the AWS chain) is a blocking network call: an
+        adapter that needs one runs it here in a worker thread, one refresh at a time per
+        credential (`providers.refresh`), so `translate` then finds a cached token. Static-key
+        adapters do nothing. A credential fault raises, as it would from `translate`: the
+        pipeline answers internal_error and nothing is sent. `translate` still works without it
+        (refreshing inline), for direct callers and tests.
+        """
         ...
 
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:

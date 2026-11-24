@@ -53,6 +53,9 @@ class AzureSpeech:
             return refused.refusal
         return None
 
+    async def prepare(self, deployment: Deployment) -> None:
+        """Nothing yet: the Entra token source is opaque (no expiry), so `translate` asks it."""
+
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request Azure cannot carry."""
         audio = self._check(req)

@@ -104,6 +104,9 @@ class ElevenLabs:
             return refused.refusal
         return None
 
+    async def prepare(self, deployment: Deployment) -> None:
+        """A static API key: nothing to refresh."""
+
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request ElevenLabs cannot carry."""
         fmt, voice, text = _check(req)

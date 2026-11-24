@@ -40,6 +40,7 @@ from spendgate.providers.port import (
     never_raises_usage,
     retry_after_ms_seconds,
 )
+from spendgate.providers.refresh import Refreshes
 from spendgate.providers.sse import SseRelay
 
 # Classic path tail per endpoint; the deployment goes in the URL for all but Responses.
@@ -72,6 +73,10 @@ def endpoint_url(deployment: Deployment, endpoint: str) -> str:
     return f"{root}/openai/deployments/{name}/{_CLASSIC_TAIL[endpoint]}{query}"
 
 
+def _scope(deployment: Deployment) -> str:
+    return CLASSIC_SCOPE if deployment.api_version else V1_SCOPE
+
+
 class AzureOpenAIProvider:
     name = "azure_openai"
 
@@ -80,12 +85,21 @@ class AzureOpenAIProvider:
     ) -> None:
         self._remote_ok = remote_ok  # config: may image parts be remote URLs (provider fetches)
         self._tokens = EntraTokens(credential)
+        self._refreshes = Refreshes()
 
     def __repr__(self) -> str:
         return "AzureOpenAIProvider()"
 
     def validate(self, req: CleanRequest) -> Refusal | None:
         return shapes.validate(req.endpoint, req.body, req.files, remote_ok=self._remote_ok)
+
+    async def prepare(self, deployment: Deployment) -> None:
+        """Fetch the Entra token in a worker thread when the cache has none fresh."""
+        if deployment.auth is not AuthMode.BEARER_TOKEN or deployment.credential:
+            return  # an API key or a configured static token: nothing to refresh
+        scope = _scope(deployment)
+        stale = lambda: not self._tokens.fresh(scope)  # noqa: E731 - a one-line check
+        await self._refreshes.ensure(scope, stale, lambda: self._tokens.bearer(scope))
 
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request that cannot be carried."""
@@ -108,8 +122,7 @@ class AzureOpenAIProvider:
             return {"api-key": deployment.credential}
         if deployment.auth is AuthMode.BEARER_TOKEN:
             # A configured credential is a ready-made token; none means Entra ID via azure-identity.
-            scope = CLASSIC_SCOPE if deployment.api_version else V1_SCOPE
-            token = deployment.credential or self._tokens.bearer(scope)
+            token = deployment.credential or self._tokens.bearer(_scope(deployment))
             return {"Authorization": f"Bearer {token}"}
         raise ValueError(f"azure_openai does not support auth mode {deployment.auth.value}")
 

@@ -132,7 +132,16 @@ def test_every_provider_module_has_an_adapter() -> None:
 @pytest.mark.parametrize("adapter", ADAPTERS, ids=lambda a: a.name)
 def test_an_adapter_exposes_exactly_the_port_and_no_other_public_hooks(adapter: Provider) -> None:
     port = typing.get_protocol_members(Provider)
-    assert port == {"name", "validate", "translate", "response", "relay", "usage", "error"}
+    assert port == {
+        "name",
+        "validate",
+        "prepare",
+        "translate",
+        "response",
+        "relay",
+        "usage",
+        "error",
+    }
     public = {n for n in dir(type(adapter)) if not n.startswith("_")}
     assert public == port, f"extra: {public - port}, missing: {port - public}"
     assert not {n for n in vars(adapter) if not n.startswith("_")}  # no public instance state

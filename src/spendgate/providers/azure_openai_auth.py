@@ -1,9 +1,9 @@
 """Entra ID bearer tokens for Azure OpenAI: a cached, injectable token source.
 
 `azure-identity` is an optional extra, so it is imported only when no credential object was
-injected, and only here. The port's `translate` is synchronous, so a refresh (a network call to
-Entra, typically 100 ms to a few seconds) blocks the calling thread: the pipeline should run
-`translate` off the event loop. The cache makes that rare: one refresh per token lifetime.
+injected, and only here. A refresh is a blocking network call to Entra (typically 100 ms to a
+few seconds), so the adapter's async `prepare` makes it in a worker thread (`providers.refresh`)
+and `translate` then reads the cache. The cache makes refreshes rare: one per token lifetime.
 """
 
 import threading
@@ -57,7 +57,13 @@ class EntraTokens:
         self._lock = threading.Lock()
         self._cache: dict[str, tuple[str, int]] = {}  # scope -> (token, expires_on)
 
+    def fresh(self, scope: str) -> bool:
+        """A cached token for `scope` outside the refresh margin (a lookup: never blocks)."""
+        cached = self._cache.get(scope)
+        return cached is not None and cached[1] - self._clock() > REFRESH_MARGIN_SECONDS
+
     def bearer(self, scope: str) -> str:
+        """The token for `scope`, fetched from Entra (blocking) when the cache has none fresh."""
         with self._lock:
             cached = self._cache.get(scope)
             if cached and cached[1] - self._clock() > REFRESH_MARGIN_SECONDS:

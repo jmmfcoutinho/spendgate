@@ -254,6 +254,9 @@ class Forwarder:
         self, job: Job, book: Book, target: Target
     ) -> _Retry | Answered | Failed | Live:
         try:
+            # Token refreshes are blocking network calls: `prepare` runs them in a worker thread,
+            # so a slow identity provider never stalls the other requests on this event loop.
+            await job.provider.prepare(target.deployment)
             upstream = job.provider.translate(job.request, target.deployment)
         except Untranslatable as refused:
             return Failed(refused.refusal, 400)  # never sent: nothing recorded, hold released
