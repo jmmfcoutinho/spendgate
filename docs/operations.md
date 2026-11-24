@@ -150,7 +150,8 @@ A lock timeout (SQLSTATE 55P03) or a cancelled statement (57014) is refused as
 later. Deadlocks (40P01) and serialization failures (40001) are still retried, up to 3 times;
 keep `lock_timeout` above the server's `deadlock_timeout` (1 s by default) so a deadlock is
 reported as one. Migrations at start (`serve`, `spendgate migrate`) run without these timeouts,
-because they may wait for another instance's migration.
+because they may wait for another instance's migration. The reasoning is in
+[ADR-0012](adr/0012-bounded-ledger-waits.md).
 
 **Overriding.** A value you set wins. The timeouts are applied only where the server still
 reports its built-in default, so anything set in the URL, `PGOPTIONS`, `ALTER ROLE ... SET`,

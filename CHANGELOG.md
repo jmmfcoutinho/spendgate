@@ -248,7 +248,8 @@ All notable changes to this project are documented here. The format follows
   commits after that is released at 0. Postgres connections get `lock_timeout` 2 s,
   `statement_timeout` 5 s, `idle_in_transaction_session_timeout` 10 s and TCP keepalives, unless
   the DSN or the server already sets them; a lock or statement timeout is not retried. See
-  [Postgres connections](docs/operations.md#postgres-connections).
+  [Postgres connections](docs/operations.md#postgres-connections) and
+  [ADR-0012](docs/adr/0012-bounded-ledger-waits.md).
 
 ## [0.1.1] - 2026-11-20
 
