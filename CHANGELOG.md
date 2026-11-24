@@ -32,6 +32,22 @@ All notable changes to this project are documented here. The format follows
 - The operations guide states what a ledger outage or failover looks like per backend (calls are
   refused with `ledger_unavailable` until the ledger is back, no restart needed) and sizes the
   drain with the new settings.
+- Key option `session_required` (`bootstrap.keys[].session_required` in the config,
+  `session_required` on `POST` and `PATCH /admin/v1/keys`, shown on every key): a call on such a
+  key without `X-Spendgate-Session` is refused with `invalid_request`
+  (`param: X-Spendgate-Session`) before any hold, so an agent cannot leave its session limits
+  behind by dropping the header. It needs `session_defaults`
+  ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
+
+### Changed
+
+- Safer defaults for agents ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)):
+  `defaults.limits.concurrency` is 16 when the config leaves it out (it was unlimited), and
+  `session_defaults.max_new_sessions_per_hour` is 60 when a key's session defaults leave it out,
+  in the config and the admin API (it was unlimited). An explicit `null` keeps either unlimited.
+  Keys already stored keep the session limits they were created with. The example config has
+  an agent key with `session_required` and these limits, and `how-money-is-protected.md` states
+  the overrun bound at a cap crossing that the concurrency limit gives.
 
 ### Fixed
 

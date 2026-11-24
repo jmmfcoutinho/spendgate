@@ -101,6 +101,14 @@ local principal's session defaults, and the ledger copies them onto the session 
 its id is used. Later blocks with the same id keep the limits the session started with. A session
 budget is its own cap inside the shared one; reaching it returns `session_limit_reached`.
 
+## Calls in flight
+
+A transport admits at most 16 calls in flight at once by default, as the proxy does per key: more
+are refused with `rate_limited` (`details.limit: concurrency`) until one finishes. The bound also
+limits how far past the cap a budget can go when calls settle above their holds
+([how money is protected](how-money-is-protected.md)). With a config file,
+`defaults.limits.concurrency` sets it (`null` removes it).
+
 ## Several scripts, one machine
 
 Scripts that name the same ledger file share one pool, and the cap holds across processes: the
