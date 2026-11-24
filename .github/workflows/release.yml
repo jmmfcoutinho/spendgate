@@ -1,7 +1,8 @@
 name: Release
 
 # Runs when the maintainer pushes a version tag (the tag ruleset lets only the maintainer create v* tags).
-# Both publishing jobs also wait for approval in the `release` environment.
+# Both publishing jobs also wait for approval in the `release` environment; once both succeed,
+# github-release creates the GitHub Release with the tag's CHANGELOG section as its notes.
 # No long-lived tokens: PyPI uses trusted publishing (OIDC); GHCR uses the job token;
 # the image is signed keyless with cosign.
 on:
@@ -42,6 +43,26 @@ jobs:
           fi
           grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
+      # Here, before anything is published, so an empty section stops the release early.
+      - name: Release notes from the CHANGELOG section
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES: ${{ runner.temp }}/release-notes/notes.md
+        run: |
+          set -euo pipefail
+          mkdir -p "$(dirname "$NOTES")"
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > "$NOTES"
+          grep -q '[^[:space:]]' "$NOTES" || { echo "::error::CHANGELOG.md [$VERSION] section is empty"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes/
+          if-no-files-found: error
+          retention-days: 7
 
   build:
     needs: check
@@ -131,3 +152,31 @@ jobs:
           REF: ${{ steps.tag.outputs.ref }}
           DIGEST: ${{ steps.push.outputs.digest }}
         run: cosign sign --yes "${REF%%:*}@$DIGEST"
+
+  github-release:
+    # Last, so the Release only appears once PyPI and the image are published. No checkout: gh
+    # works from GH_REPO and the notes come from the check job, so no job checks out with a write
+    # token.
+    needs: [check, pypi, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the GitHub Release for the tag
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: ${{ runner.temp }}/release-notes/
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.check.outputs.version }}
+          NOTES: ${{ runner.temp }}/release-notes/notes.md
+        run: |
+          set -euo pipefail
+          pre=()
+          # PEP 440 pre-releases (0.2.0a1, 0.2.0b2, 0.2.0rc1) are not marked as the latest release.
+          if [[ "$VERSION" =~ (a|b|rc)[0-9]+$ ]]; then pre=(--prerelease); fi
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$NOTES" "${pre[@]}"

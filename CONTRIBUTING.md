@@ -101,10 +101,10 @@ and the image scan run on every PR and weekly on `main`.
 ## 6. Supply chain
 
 - GitHub Actions pinned by full commit SHA (with a `# v4.x.y` comment); updates via Dependabot.
-- Workflow `permissions: {}` by default; each job grants only what it needs (`contents: read`; `id-token: write` only in the release job; `packages: write` only for GHCR push). No `pull_request_target` with untrusted code; no long-lived secrets.
+- Workflow `permissions: {}` by default; each job grants only what it needs (`contents: read`; `id-token: write` only in the release job; `packages: write` only for GHCR push; `contents: write` only in the job that creates the GitHub Release). No `pull_request_target` with untrusted code; no long-lived secrets.
 - Tools pinned by exact version in `uv.lock` (dev tools in the `dev` dependency group); CI installs with `uv sync --frozen`.
 - Base images pinned by digest (`python:3.13-slim@sha256:...`), refreshed by Dependabot; final image is non-root, read-only root filesystem, no shell tools beyond need.
-- Release: PyPI through trusted publishing (OIDC, no token); GHCR image with SBOM and keyless signature (cosign); built in CI from a tagged commit; tag only after the independent code and security reviews pass.
+- Release: PyPI through trusted publishing (OIDC, no token); GHCR image with SBOM and keyless signature (cosign); a GitHub Release whose notes are the tag's CHANGELOG section, created after both publish; built in CI from a tagged commit; tag only after the independent code and security reviews pass.
 - Base install stays at <= 6 runtime dependencies; each addition needs an ADR entry naming why and what was considered.
 - Releases are reproducible from the tag: `uv build` and the Dockerfile use pinned inputs only.
 

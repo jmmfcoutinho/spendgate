@@ -1,5 +1,9 @@
 # spendgate
 
+[![CI](https://github.com/jmmfcoutinho/spendgate/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jmmfcoutinho/spendgate/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/spendgate)](https://pypi.org/project/spendgate/)
+[![Python](https://img.shields.io/pypi/pyversions/spendgate)](https://pypi.org/project/spendgate/)
+
 **Status: pre-1.0.** The configuration format, error codes and ledger schema may change between
 minor versions. v0.1 targets local deployments: one machine, Docker Compose, SQLite or Postgres.
 
@@ -10,7 +14,7 @@ cost exactly once afterwards.
 
 ## What it guarantees
 
-[How money is protected](docs/how-money-is-protected.md) links each guarantee to the code and the
+[How money is protected](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/how-money-is-protected.md) links each guarantee to the code and the
 tests that prove it.
 
 - **Fail closed.** An unknown or unpriced model, a missing exchange rate or output ceiling, an
@@ -30,7 +34,7 @@ tests that prove it.
   keys and has internet access; apps on the internal network cannot reach a provider at all.
 
 Library mode is cooperative: code that holds the provider key can skip it. Use the proxy with the
-perimeter when something must be enforced. See [Running locally](docs/deploy/local.md).
+perimeter when something must be enforced. See [Running locally](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/deploy/local.md).
 
 ## Quickstart: proxy mode
 
@@ -95,8 +99,8 @@ See who spent what:
 spendgate usage --local --config spendgate.yaml --by model
 ```
 
-Next: [running locally with the perimeter](docs/deploy/local.md), [operations](docs/operations.md)
-(keys, kill switch, backups) and the [configuration reference](docs/configuration.md).
+Next: [running locally with the perimeter](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/deploy/local.md), [operations](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/operations.md)
+(keys, kill switch, backups) and the [configuration reference](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/configuration.md).
 
 ## Quickstart: library mode
 
@@ -112,7 +116,7 @@ client.chat.completions.create(model="gpt-6-luna", messages=[{"role": "user", "c
 ```
 
 The cap lasts for the life of the ledger file and is shared by every script that opens it.
-[Details and limits](docs/library-mode.md).
+[Details and limits](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/library-mode.md).
 
 ## Feature matrix
 
@@ -131,18 +135,23 @@ streams and the stream is settled from its usage.
 
 Endpoints are the OpenAI paths (`/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`,
 `/v1/audio/transcriptions`, `/v1/audio/speech`) and Anthropic's `/v1/messages`. Fields outside the
-allowlist are refused rather than forwarded; see the [wire protocol](docs/protocol.md). Realtime
+allowlist are refused rather than forwarded; see the [wire protocol](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/protocol.md). Realtime
 and hosted tools are not supported. Backends: SQLite (one host) and Postgres (shared).
 
 ## Documentation
 
-- [How money is protected](docs/how-money-is-protected.md): each guarantee with its code and test.
-- [Documentation index](docs/README.md), [configuration reference](docs/configuration.md),
-  [operations](docs/operations.md).
-- How to [add a model](docs/catalog-how-to.md) or [a provider](docs/provider-how-to.md).
-- [spendgate and LiteLLM](docs/litellm-comparison.md): when to use which.
-- [Roadmap](ROADMAP.md): what may come next.
-- [Threat model](docs/threat-model.md), [contributing](CONTRIBUTING.md), [security policy](SECURITY.md).
+- [How money is protected](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/how-money-is-protected.md):
+  each guarantee with its code and test.
+- [Documentation index](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/README.md),
+  [configuration reference](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/configuration.md),
+  [operations](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/operations.md).
+- How to [add a model](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md)
+  or [a provider](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/provider-how-to.md).
+- [spendgate and LiteLLM](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/litellm-comparison.md): when to use which.
+- [Roadmap](https://github.com/jmmfcoutinho/spendgate/blob/main/ROADMAP.md): what may come next.
+- [Threat model](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/threat-model.md),
+  [contributing](https://github.com/jmmfcoutinho/spendgate/blob/main/CONTRIBUTING.md),
+  [security policy](https://github.com/jmmfcoutinho/spendgate/blob/main/SECURITY.md).
 
 ## Development
 
@@ -155,4 +164,4 @@ make check   # every quality gate
 
 ## Licence
 
-[Apache-2.0](LICENSE).
+[Apache-2.0](https://github.com/jmmfcoutinho/spendgate/blob/main/LICENSE).
