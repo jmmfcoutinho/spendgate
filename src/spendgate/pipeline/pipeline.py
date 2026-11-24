@@ -1,7 +1,8 @@
 """The request pipeline: ten steps, one entry point, ports injected (no globals).
 
 `Pipeline.serve` is the one entry point for a call, from the HTTP adapter and from library mode
-alike: it authenticates once and passes the principal on. A refusal is a `Refusal` value turned
+alike: it authenticates once and passes the principal on (after the upload it only re-checks
+that the same key is still active). A refusal is a `Refusal` value turned
 into a `Reply`; it never reaches a provider. After the hold, `_forward_and_settle` guarantees
 exactly one money transition (`release` or `settle`) even when the client cancels: the transition
 runs in a task that a cancel cannot interrupt (T-MON-11, M-13). A streamed answer returns a live
@@ -27,7 +28,7 @@ from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
 from spendgate.pipeline import answers, intake, replies, steps
 from spendgate.pipeline.alerts import log_alerts
-from spendgate.pipeline.auth import authenticate
+from spendgate.pipeline.auth import authenticate, recheck
 from spendgate.pipeline.closing import Call, Closer, Sleeper
 from spendgate.pipeline.faults import InternalEvent, fault_of
 from spendgate.pipeline.leases import Leases
@@ -185,6 +186,8 @@ class Pipeline:
             if isinstance(inbound, Refusal):
                 status = intake.status_of(inbound)
                 return self._refuse(rid, endpoint, inbound, who, status=status)
+            if (gone := await recheck(self._keys, who, self._now())) is not None:
+                return self._refuse(rid, endpoint, gone, who)  # revoked or expired during upload
             return await self._handle(inbound, rid, who)
         finally:
             slot.release()

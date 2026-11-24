@@ -114,6 +114,9 @@ class KeyService:
         self._max = max_entries
         self._cache: OrderedDict[str, tuple[StoredKey, int]] = OrderedDict()
         self._misses: OrderedDict[str, int] = OrderedDict()  # prefix -> when it was not found
+        # key id -> prefix, for `still_active`. A key's prefix never changes (rotation makes a new
+        # key), so an entry can only be missing, never wrong; it is bounded like the cache.
+        self._prefixes: OrderedDict[str, str] = OrderedDict()
 
     # --- verification ---
 
@@ -145,6 +148,23 @@ class KeyService:
             return _UNAUTHORIZED
         return Principal(rec.id, rec.kind, rec.scope_id, rec.policy, rec.admin_scopes)
 
+    async def still_active(self, principal: Principal, now: int) -> bool:
+        """Whether `principal`'s key is still unrevoked and unexpired, through the cached lookup.
+
+        Not a second authentication: no secret is compared. A revoke through this service is seen
+        at once; one made elsewhere within `ttl_ms`, the same bound as `verify_api`.
+        """
+        prefix = self._prefixes.get(principal.key_id)
+        if prefix is None:  # pushed out of the bounded map meanwhile: read the record by id
+            record = await self._ledger.get_key(principal.key_id)
+        else:
+            stored = await self._lookup(prefix, now)
+            record = stored.record if stored is not None else None
+        if record is None or record.id != principal.key_id or record.kind is not principal.kind:
+            return False
+        expired = record.expires_at is not None and now >= record.expires_at
+        return record.revoked_at is None and not expired
+
     async def _lookup(self, prefix: str, now: int) -> StoredKey | None:
         hit = self._cache.get(prefix)
         if hit is not None and 0 <= now - hit[1] < self._ttl_ms:
@@ -158,8 +178,12 @@ class KeyService:
         stored = await self._ledger.find_key(prefix)
         if stored is not None and stored.record.revoked_at is None:
             self._cache[prefix] = (stored, now)
+            self._prefixes[stored.record.id] = prefix
+            self._prefixes.move_to_end(stored.record.id)
             while len(self._cache) > self._max:
                 self._cache.popitem(last=False)
+            while len(self._prefixes) > self._max:
+                self._prefixes.popitem(last=False)
         elif self._ttl_ms > 0:  # unknown or revoked: remember briefly, bounded like the cache
             self._misses[prefix] = now
             while len(self._misses) > self._max:

@@ -38,3 +38,15 @@ async def authenticate(
         return await verifier.verify_api(key, now)
     except LedgerError:
         return _UNAVAILABLE
+
+
+async def recheck(verifier: KeyVerifier, who: Principal, now: int) -> Refusal | None:
+    """None if `who`'s key is still active; else the refusal `authenticate` would give now.
+
+    Run after the body upload, which can take minutes: a key revoked or expired meanwhile is
+    refused before anything is held. The principal itself stays the one `authenticate` made.
+    """
+    try:
+        return None if await verifier.still_active(who, now) else _UNAUTHORIZED
+    except LedgerError:
+        return _UNAVAILABLE
