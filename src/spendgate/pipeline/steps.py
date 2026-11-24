@@ -3,7 +3,6 @@
 Each returns its result or a `Refusal` (data, never raised); no step contacts a provider.
 """
 
-import logging
 import math
 import re
 from collections.abc import Mapping
@@ -27,7 +26,8 @@ from spendgate.core.policy import (
     resolve,
 )
 from spendgate.ledger.port import Candidate, HoldMeta, HoldRequest
-from spendgate.pipeline.model import Inbound
+from spendgate.pipeline.faults import InternalEvent, fault_of
+from spendgate.pipeline.model import Inbound, Observer, report_internal
 from spendgate.pipeline.routing import Target
 from spendgate.pipeline.settle import Pricing, fx_rate_nano
 from spendgate.providers.port import CleanRequest, Json, Provider
@@ -43,8 +43,6 @@ _CEILING = {
 }
 _STREAMING = frozenset({RequestKind.CHAT, RequestKind.RESPONSES, RequestKind.MESSAGES})
 _SECRET_HEADERS = frozenset({"authorization", "x-api-key"})
-
-_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +158,7 @@ class Context:
     key: KeyPolicy
     request_id: str
     now: int
+    observer: Observer | None = None  # told about a surprise the catch-all below turns away
 
 
 def prepare(ctx: Context) -> Prepared | Refusal:
@@ -172,8 +171,8 @@ def prepare(ctx: Context) -> Prepared | Refusal:
         return _prepare(ctx)
     except (RecursionError, ArithmeticError):
         return Refusal(ErrorCode.INVALID_REQUEST, "The request body could not be processed.")
-    except Exception:  # defence in depth: nothing is held yet, so refuse rather than 500
-        _LOG.warning("request preparation raised unexpectedly", exc_info=True)
+    except Exception as exc:  # defence in depth: nothing is held yet, so refuse rather than 500
+        report_internal(ctx.observer, InternalEvent(ctx.request_id, fault_of("steps.prepare", exc)))
         return Refusal(ErrorCode.INVALID_REQUEST, "The request body could not be processed.")
 
 

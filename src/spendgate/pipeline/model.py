@@ -4,6 +4,7 @@ No HTTP framework here. The gateway turns an `Inbound` into a call to `Pipeline`
 back into a Starlette response; library mode can do the same without Starlette.
 """
 
+import contextlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -16,6 +17,7 @@ from spendgate.core.estimate import RequestKind
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.key_types import Principal
+from spendgate.pipeline.faults import InternalEvent
 from spendgate.providers.port import Json
 
 type Clock = Callable[[], int]  # epoch milliseconds
@@ -159,6 +161,8 @@ class Observer(Protocol):
 
     def on_settled(self, event: SettledEvent) -> None: ...
 
+    def on_internal(self, event: InternalEvent) -> None: ...
+
 
 class NoopObserver:
     def on_refused(self, event: RefusedEvent) -> None:
@@ -172,3 +176,13 @@ class NoopObserver:
 
     def on_settled(self, event: SettledEvent) -> None:
         pass
+
+    def on_internal(self, event: InternalEvent) -> None:
+        pass
+
+
+def report_internal(observer: Observer | None, event: InternalEvent) -> None:
+    """Hand a redacted trace to the observer; a failing (or older) observer changes nothing."""
+    if observer is not None:
+        with contextlib.suppress(Exception):
+            observer.on_internal(event)

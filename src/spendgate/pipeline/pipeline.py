@@ -28,6 +28,7 @@ from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, 
 from spendgate.pipeline import answers, intake, replies, steps
 from spendgate.pipeline.auth import authenticate
 from spendgate.pipeline.closing import Call, Closer, Sleeper
+from spendgate.pipeline.faults import InternalEvent, fault_of
 from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import (
     Clock,
@@ -42,6 +43,7 @@ from spendgate.pipeline.model import (
     Reply,
     Sender,
     models_endpoint,
+    report_internal,
 )
 from spendgate.pipeline.routing import Answered, Failed, Forwarder, Job, Router, unavailable
 from spendgate.pipeline.settle import Book, Closed
@@ -189,7 +191,9 @@ class Pipeline:
         who = await authenticate(self._keys, inbound.headers, now)
         if isinstance(who, Refusal):
             return self._refuse(rid, endpoint, who)
-        context = steps.Context(self.settings, self._providers, inbound, who.policy, rid, now)
+        context = steps.Context(
+            self.settings, self._providers, inbound, who.policy, rid, now, self._observer
+        )
         prepared = steps.prepare(context)
         if isinstance(prepared, Refusal):
             return self._refuse(rid, endpoint, prepared, who, inbound)
@@ -201,8 +205,9 @@ class Pipeline:
         call = Call(rid, inbound, who, prepared, admit, now)
         try:
             return await self._hold_and_forward(call)
-        except Exception:
+        except Exception as exc:
             self._owned.discard(call.id)  # whatever is held is left to the sweeper, not renewed
+            report_internal(self._observer, InternalEvent(rid, fault_of("pipeline.handle", exc)))
             await self._closer.free_limits(call.admit)
             return self._refuse(rid, endpoint, _INTERNAL, who, inbound)
 
@@ -280,15 +285,17 @@ class Pipeline:
         except TimeoutError:  # the deadline: sent means the full hold (TIMEOUT), else released
             interrupted = Outcome.TIMEOUT
             result = unavailable(job.targets[0].provider, "The request took too long.", 504)
-        except Exception:
+        except Exception as exc:
             interrupted = Outcome.INTERNAL_ERROR
-            result = Failed(_INTERNAL, 500)
+            result = Failed(_INTERNAL, 500, fault=fault_of("pipeline.forward", exc))
         finally:
             if not isinstance(result, Live):  # a live stream settles itself when it ends
                 closing = self._spawn(self._close(call, book, interrupted))
                 closed = await asyncio.shield(closing)  # a second cancel cannot stop the settle
         if isinstance(result, Live):
             return self._stream_reply(call, book, result, pre, standing)
+        if isinstance(result, Failed) and result.fault is not None:  # after the close: charged?
+            report_internal(self._observer, InternalEvent(call.id, result.fault, closed.charged))
         return answers.finished_reply(call, result, closed)
 
     async def _close(

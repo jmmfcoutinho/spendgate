@@ -36,8 +36,9 @@ from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.estimate import RequestKind
 from spendgate.core.outcomes import Outcome
 from spendgate.pipeline import replies
+from spendgate.pipeline.faults import Fault, InternalEvent, fault_of
 from spendgate.pipeline.leases import Leases
-from spendgate.pipeline.model import AttemptEvent, Clock, Endpoint, Observer
+from spendgate.pipeline.model import AttemptEvent, Clock, Endpoint, Observer, report_internal
 from spendgate.pipeline.settle import Book, Closed, Flight, attempt_record, read_usage
 from spendgate.pipeline.transport import classify
 from spendgate.providers.port import SseLimits, StreamBroken, StreamRelay
@@ -126,6 +127,7 @@ class StreamBody:
         self._tail = b""  # chat's `[DONE]`, held back so the cost comment can precede it
         self._first_upstream: int | None = None
         self._ttft: int | None = None
+        self._fault: Fault | None = None  # an adapter's surprise, reported once it is settled
         deadline = held_at + env.max_ms if env.max_ms is not None else None
         env.leases.register(request_id, held_at, self, deadline)
 
@@ -216,7 +218,8 @@ class StreamBody:
         except StreamBroken as exc:  # malformed framing or an SSE limit (C-22)
             self._cut = True
             await self._break(type(exc).__name__, _CUT_MESSAGE)
-        except Exception:
+        except Exception as exc:
+            self._fault = fault_of("stream.relay", exc)
             await self._break("relay_error", "The stream could not be relayed.")
 
     async def _end(self) -> None:
@@ -299,6 +302,10 @@ class StreamBody:
             self._record(outcome, code)
         finally:  # NF-04: the one transition always runs; a flight left open means the full hold
             closed = await self._env.close(self._book, self._ttft)
+        if self._fault is not None:
+            report_internal(
+                self._env.observer, InternalEvent(self._id, self._fault, closed.charged)
+            )
         return closed
 
     def _record(self, outcome: Outcome | None, code: str | None) -> None:
@@ -310,8 +317,10 @@ class StreamBody:
         """
         book, live, now = self._book, self._live, self._env.now()
         usage = None
-        with contextlib.suppress(Exception):  # an adapter that raises is unreadable usage
+        try:
             usage = live.relay.usage()
+        except Exception as exc:  # an adapter that raises is unreadable usage: the full hold
+            self._fault = self._fault or fault_of("stream.usage", exc)
         reading = read_usage(self._env.catalog, book.pricing.entry, usage)
         book.note(reading)
         outcome = outcome or (Outcome.OK if reading.cost else Outcome.OK_NO_USAGE)

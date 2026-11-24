@@ -150,7 +150,40 @@ Alert on `spendgate_overruns_total`, on a growing `spendgate_holds_in_flight` th
 **Logs** are one JSON object per line on the `spendgate.call` logger, written for every settled
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,
 `request_id`, `key_prefix`, `scope_path`, `model`, `deployment`, `outcome`, token counts, `cost`,
-`currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`. Prompts, response bodies,
-headers and secrets are never logged: a field not on the list is dropped, and strings shaped like
-keys are dropped too. Refused requests write a log line but no call row. `fail_open` opt-outs are
-logged as warnings at start.
+`currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`, and for internal errors
+`where`, `error_class`, `frames`, `charged`. Prompts, response bodies, headers and secrets are
+never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
+Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
+start.
+
+An unexpected exception (a bug in an adapter, the pipeline or an admin handler) that a catch-all
+turns away writes one `spendgate.internal` event at level `ERROR`:
+
+| Field | Meaning |
+|---|---|
+| `request_id` | The request (`sg_req_...`, or `sg_adm_...` for the admin API) |
+| `where` | Which catch-all caught it (table below) |
+| `error_class` | The exception's class name, e.g. `KeyError` |
+| `frames` | The innermost 20 frames as `module:function:line`, outermost first, joined by ` > ` |
+| `charged` | `true` when the call is charged (settled, not released) although it hit the bug |
+
+| `where` | What the client sees | Money |
+|---|---|---|
+| `steps.prepare` | `400 invalid_request` | Nothing held |
+| `pipeline.handle` | `500 internal_error` | Any hold is left to the sweeper; `charged` is `false` (not known) |
+| `pipeline.forward` | `500 internal_error` | Full hold if the request was sent, else released |
+| `routing.translate` | `500 internal_error` | Never sent: released |
+| `routing.relay` | `500 internal_error` (stream not started) | Sent: the full hold |
+| `routing.usage` | `500 internal_error` | Usage unreadable: the full hold |
+| `routing.response` | `500 internal_error` | The provider answered: actual usage |
+| `routing.error` | `500 internal_error` | Unknown what the provider did: the full hold |
+| `stream.relay` | An in-stream `error` event after the `200` (then `[DONE]` for chat) | Usage seen so far, else the full hold |
+| `stream.usage` | A normal end of the stream | Usage unreadable: the full hold |
+| `admin.handler` | `500 internal_error` from the admin API | None |
+
+The exception's message, local variables and source lines are never logged: a message can quote a
+body or a secret. With `charged: true` the client got an error for a call it was charged for; the
+`call` line with the same `request_id` carries the cost (when the ledger could not book the close,
+the sweeper charges the hold later). `false` means released, refused or not known. In library mode
+the same facts (never the message) go to the `spendgate.local` logger at level `ERROR`. Alert on
+any `spendgate.internal` line and report it as a bug.

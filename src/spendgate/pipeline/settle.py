@@ -99,6 +99,12 @@ class Closed:
     booked: bool  # False: the ledger could not be reached; the sweeper charges the hold
     remaining: tuple[Money, str] | None = None  # tightest budget room and its scope path
 
+    @property
+    def charged(self) -> bool:
+        """The call is charged: a settle, not a release, was decided. Booked or not: when the
+        ledger did not take it, the sweeper charges the full hold."""
+        return not self.decision.release
+
 
 def ledger_usage(usage: Usage) -> LedgerUsage:
     return LedgerUsage(

@@ -29,6 +29,7 @@ from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import LedgerPort, ScopeRow
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.pipeline.adapters import build_providers
+from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import (
     AttemptEvent,
     HeldEvent,
@@ -174,6 +175,7 @@ class Recorder:
         self.held: list[HeldEvent] = []
         self.attempts: list[AttemptEvent] = []
         self.settled: list[SettledEvent] = []
+        self.internal: list[InternalEvent] = []
 
     def on_refused(self, event: RefusedEvent) -> None:
         self.refused.append(event)
@@ -186,6 +188,9 @@ class Recorder:
 
     def on_settled(self, event: SettledEvent) -> None:
         self.settled.append(event)
+
+    def on_internal(self, event: InternalEvent) -> None:
+        self.internal.append(event)
 
 
 @dataclass(slots=True)
