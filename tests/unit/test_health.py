@@ -1,9 +1,17 @@
-"""Deployment health: cooldown and circuit breaker transitions on a fake clock."""
+"""Deployment health: cooldown and circuit breaker transitions on a fake clock and seeded RNG."""
+
+import random
 
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from spendgate.core.health import DeploymentHealth, HealthConfig, HealthState
+from spendgate.core.health import DeploymentHealth, Draw, HealthConfig, HealthState
+
+SHORT = HealthConfig().throttle_max_ms  # the default draw takes the longest short cooldown
+
+
+def seeded(seed: int) -> Draw:
+    return random.Random(seed).randint  # noqa: S311 - cooldown jitter, not a secret
 
 
 def _tripped(now: int = 0, config: HealthConfig | None = None) -> DeploymentHealth:
@@ -80,36 +88,66 @@ def test_probe_failure_reopens_for_a_full_cooldown() -> None:
     assert health.allow(10_500)
 
 
-def test_throttle_cools_immediately_for_default_cooldown() -> None:
+def test_throttle_without_retry_after_cools_at_once_for_the_short_interval() -> None:
     health = DeploymentHealth()
-    health.record_throttled(0)
+    assert health.record_throttled(0) == SHORT == 500
     assert health.state is HealthState.OPEN
-    assert health.retry_after(0) == 5_000
+    assert health.retry_after(0) == 500  # not the 5 s breaker cooldown
+
+
+def test_throttle_without_retry_after_is_a_seeded_jittered_draw() -> None:
+    config = HealthConfig()
+    first = DeploymentHealth(config, seeded(36)).record_throttled(0)
+    shared = seeded(36)
+    spread = [DeploymentHealth(config, shared).record_throttled(0) for _ in range(20)]
+    assert first == spread[0]  # one seed, one schedule: reproducible
+    assert all(config.throttle_min_ms <= ms <= config.throttle_max_ms for ms in spread)
+    assert len(set(spread)) > 1  # deployments of one model do not all come back at once
 
 
 def test_throttle_honours_longer_retry_after() -> None:
     health = DeploymentHealth()
-    health.record_throttled(0, retry_after_ms=30_000)
+    assert health.record_throttled(0, retry_after_ms=30_000) == 30_000
     assert not health.allow(29_000)
     assert health.allow(30_000)
 
 
-def test_short_retry_after_never_shortens_the_cooldown() -> None:
+def test_retry_after_below_the_breaker_cooldown_is_honoured_as_given() -> None:
     health = DeploymentHealth()
     health.record_throttled(0, retry_after_ms=1_000)
-    assert health.retry_after(0) == 5_000
+    assert health.retry_after(0) == 1_000  # the 5 s breaker cooldown is no floor for a 429
+
+
+def test_retry_after_zero_still_cools_for_the_short_interval() -> None:
+    health = DeploymentHealth(draw=lambda low, high: low)
+    assert health.record_throttled(0, retry_after_ms=0) == 250
+
+
+def test_a_busy_cooldown_ends_closed_without_a_probe() -> None:
+    health = DeploymentHealth()
+    health.record_throttled(0)
+    assert not health.allow(499)
+    assert health.allow(500) and health.allow(500)  # everyone, not one probe: it was only busy
+    assert _state(health) is HealthState.CLOSED
+
+
+def test_a_throttle_during_a_breaker_open_still_ends_in_one_probe() -> None:
+    health = _tripped()
+    health.record_throttled(1_000, retry_after_ms=10_000)
+    assert health.allow(11_000) and not health.allow(11_000)
+    assert _state(health) is HealthState.HALF_OPEN
 
 
 def test_retry_after_is_capped() -> None:
     health = DeploymentHealth()
-    health.record_throttled(0, retry_after_ms=86_400_000)
+    assert health.record_throttled(0, retry_after_ms=86_400_000) == 300_000
     assert health.retry_after(0) == 300_000
 
 
 def test_throttle_while_open_extends_but_never_shortens() -> None:
     health = DeploymentHealth()
     health.record_throttled(0, retry_after_ms=20_000)
-    health.record_throttled(1_000)  # would end at 6_000, earlier than 20_000
+    health.record_throttled(1_000)  # would end at 1_500, earlier than 20_000
     assert health.retry_after(1_000) == 19_000
     health.record_throttled(2_000, retry_after_ms=60_000)
     assert health.retry_after(2_000) == 60_000
@@ -125,8 +163,8 @@ def test_throttled_probe_reopens_honouring_retry_after() -> None:
 
 def test_results_while_open_are_ignored() -> None:
     health = _tripped()
-    health.record_success(1_000)
-    health.record_failure(1_000)
+    assert not health.record_success(1_000)
+    assert not health.record_failure(1_000)
     assert health.state is HealthState.OPEN
     assert health.retry_after(1_000) == 4_000
 
