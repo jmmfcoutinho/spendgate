@@ -20,7 +20,9 @@ would change public behaviour gets an ADR first (see [CONTRIBUTING.md](CONTRIBUT
 - A shared limiter store (for example Redis) so RPM and TPM limits are exact across several
   instances. Limits are per process in v0.1; budgets are already exact in the ledger.
 - A bounded wait queue per model group, to smooth provider throttling instead of failing fast.
-- Soft-threshold alerts (webhook, email) before a cap is reached.
+- Soft-threshold alerts before a cap is reached: **done** as `spendgate.budget` log warnings and
+  an optional signed webhook (`alerts.webhook`, see
+  [operations](docs/operations.md#budget-warning-webhook)). Email alerts are still open.
 - Reconciliation against provider billing and usage APIs (a drift report).
 - Daily usage rollups, so long-term reporting survives the `calls` retention window.
 - A read-only web dashboard for usage.

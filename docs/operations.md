@@ -310,6 +310,7 @@ path (`unknown` if it could not be read). Names:
 | `spendgate_upstream_latency_ms`, `spendgate_time_to_first_token_ms` | Latency histograms |
 | `spendgate_tokens_total{kind}` | Tokens by kind |
 | `spendgate_catalog_age_seconds`, `spendgate_catalog_info{sha}` | Age and checksum of the price catalog |
+| `spendgate_alert_webhooks_total{result}` | Budget-warning webhook posts: `delivered`, `failed` (gave up after retries), `dropped` (queue full or server stopping); only with `alerts.webhook` |
 
 Alert on `spendgate_overruns_total`, on a growing `spendgate_holds_in_flight` that does not fall
 (stuck calls) and on a large `spendgate_catalog_age_seconds` (prices may be stale).
@@ -380,3 +381,51 @@ The lines are notices, not the record. A line can be lost when a settlement comm
 never reaches the gateway: the retry finds the reservation already settled, does nothing and
 reports nothing. The ledger stays authoritative: `review_required_at` (`spendgate status`, the
 admin API) for a block, `soft_alerted_at` for the threshold, and the metrics above.
+
+## Budget-warning webhook
+
+With `alerts.webhook` set ([configuration](configuration.md#alertwebhook)), `spendgate serve` also
+posts each budget warning above to one HTTPS endpoint. Library mode does not post; it only logs.
+
+```yaml
+alerts:
+  webhook:
+    url: env:SPENDGATE_ALERT_WEBHOOK_URL               # a secret reference: the URL often holds a token
+    signing_secret: env:SPENDGATE_ALERT_WEBHOOK_SECRET
+    # timeout_seconds: 5, max_attempts: 5, queue_size: 1000 (the defaults)
+```
+
+The URL comes from operator config only, as a secret reference, and must be `https://` (`http://`
+only for localhost, as for a provider `base_url`). Redirects are not followed. The URL is never
+logged.
+
+**Body.** One JSON object per warning, `POST` with `Content-Type: application/json`: the fields
+of the `spendgate.budget` log line (the same allowlist: `event`, `logger`, `budget_id`,
+`scope_path`, `scope_kind`, `period`, `period_start`, `spent`, `cap`, `currency`) plus `event_id`
+(`sg_evt_...`, unique per warning) and `ts` (RFC 3339 UTC, when the warning was raised).
+Nothing about the request, the key or the user.
+
+```json
+{"budget_id":"bud_01j...","cap":"200.000000000","currency":"EUR","event":"soft_threshold",
+ "event_id":"sg_evt_01j...","logger":"spendgate.budget","period":"month",
+ "period_start":"2026-11-01T00:00:00Z","scope_path":"org:acme","spent":"160.250000000",
+ "ts":"2026-11-23T10:04:05.120+00:00"}
+```
+
+**Signature.** `X-Spendgate-Signature: sha256=<hex>` is the HMAC-SHA256 of the exact body bytes
+with `signing_secret`. Verify it over the raw body before parsing, with a constant-time compare
+(Python: `hmac.compare_digest`). The id and time are inside the signed body: drop an `event_id`
+already seen, and reject a `ts` older than you accept.
+
+**Delivery.** Raising a warning only queues it; the call that raised it never waits for the
+receiver and never fails because of it. One background task posts the queue in order. A network
+error, a timeout (`timeout_seconds` for the whole attempt), a 429 or a 5xx is retried after 1, 2,
+4, ... seconds (at most 30) up to `max_attempts`; a 2xx is delivered; any other status is final.
+A warning that gives up writes one `alert_webhook_failed` line on `spendgate.call` (`reason`: the
+error class or `status`, and `http_status`). When `queue_size` warnings are waiting, a new one is
+dropped; warnings still queued when the server stops are dropped too. Both count as
+`spendgate_alert_webhooks_total{result="dropped"}`: alert on any increase, and on `failed`.
+
+The webhook is a notice, like the log line: at most once per warning, never the record. A lost or
+dropped post changes nothing in the ledger; `spendgate status` and the admin API still show the
+threshold and the block.
