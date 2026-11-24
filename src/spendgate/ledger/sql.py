@@ -1,8 +1,9 @@
 # ruff: noqa: S608  (statements splice module-level constants only, never input; see docstring)
 """SQL shared by the SQLite and Postgres backends, written once with named parameters.
 
-Statements use `:name` parameters and one lock token, `$LOCK`. `render` turns that into the
-driver's own dialect, so the only things that differ between backends are in `Dialect`.
+Statements use `:name` parameters and the tokens `$LOCK`, `$SKIP_LOCKED` and `$TAGS`. `render`
+turns them into the driver's own dialect, so the only things that differ between backends are in
+`Dialect`.
 Parameterised SQL only (C-11): values never get formatted into statement text; the two
 f-strings below splice module-level column names, never input.
 """
@@ -23,6 +24,7 @@ class Dialect:
     lock: str  # appended where `$LOCK` stands: row lock on Postgres, nothing on SQLite
     pyformat: bool  # psycopg `%(name)s` instead of `:name`
     tag_join: str = ""  # appended where `$TAGS` stands: joins `t(key, value)`, one row per label
+    skip_locked: str = ""  # `$SKIP_LOCKED`: lock the row, or leave it out if another session has
 
 
 # BEGIN IMMEDIATE already serialises SQLite writers. Tag joins: one row per label of the call, and
@@ -39,6 +41,7 @@ POSTGRES = Dialect(
     pyformat=True,
     tag_join="LEFT JOIN LATERAL jsonb_each_text(CAST(COALESCE(c.labels, '{}') AS JSONB)) "
     "AS t(key, value) ON TRUE",
+    skip_locked=" FOR NO KEY UPDATE SKIP LOCKED",
 )
 
 _PARAM = re.compile(r"(?<![:\w]):(\w+)")
@@ -46,7 +49,8 @@ _PARAM = re.compile(r"(?<![:\w]):(\w+)")
 
 @cache
 def render(sql: str, dialect: Dialect) -> str:
-    text = sql.replace("$LOCK", dialect.lock).replace("$TAGS", dialect.tag_join)
+    text = sql.replace("$SKIP_LOCKED", dialect.skip_locked).replace("$LOCK", dialect.lock)
+    text = text.replace("$TAGS", dialect.tag_join)
     if dialect.pyformat:
         text = _PARAM.sub(r"%(\1)s", text.replace("%", "%%"))
     return text
@@ -102,8 +106,11 @@ RES_LATE = "UPDATE reservations SET charged_nano = :charged WHERE id = :id AND s
 RES_GET = """SELECT id, state, owner_instance, lease_expires_at, key_id, scope_id, session_id,
   outcome, charged_nano, meta, created_at FROM reservations WHERE id = :id"""
 # One id at a time: the caller names the holds it still owns (a hold nobody owns must expire).
+# A locked row is skipped, not waited for (up to lock_timeout, failing the whole heartbeat): it is
+# being closed by its owner, or expired by a sweeper because its lease is already overdue.
 RES_RENEW = """UPDATE reservations SET lease_expires_at = :until
-  WHERE id = :id AND owner_instance = :owner AND state = 'pending' RETURNING id"""
+  WHERE id IN (SELECT id FROM reservations
+    WHERE id = :id AND owner_instance = :owner AND state = 'pending' $SKIP_LOCKED) RETURNING id"""
 RES_DUE = """SELECT id FROM reservations WHERE state = 'pending' AND lease_expires_at < :now
   ORDER BY lease_expires_at, id LIMIT :limit"""
 SESSION_PENDING = """SELECT COUNT(*) AS n FROM reservations

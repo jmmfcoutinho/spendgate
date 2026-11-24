@@ -288,6 +288,9 @@ def renew_flow(instance: str, ids: tuple[str, ...], until: int) -> Flow[tuple[st
     """Extend the lease of each named hold that is still pending and owned by this instance.
 
     Only the ids the caller still owns: a hold whose owner failed to settle must reach the sweeper.
+    On Postgres a locked row is skipped, not waited for (a lock wait would fail every renewal): the
+    owner is closing it, or a sweeper is expiring an overdue lease. If that sweep rolls back, the
+    hold stays pending and a later sweep expires it.
     """
     renewed: list[str] = []
     for rid in ids:

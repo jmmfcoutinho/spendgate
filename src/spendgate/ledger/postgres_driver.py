@@ -4,6 +4,9 @@ The flows take their row locks themselves (`$LOCK` becomes `FOR UPDATE`, budgets
 order), so two holds that share budgets queue instead of deadlocking. Deadlocks can still arise
 (an admin change, a future flow with another order), so the whole flow is re-created from its
 factory and run again, at most `MAX_RETRIES` times, then the ledger is reported unavailable.
+
+A lock timeout (55P03) or a cancelled statement (57014) is not retried: the session bounds exist to
+answer quickly, and a budget row held that long will most likely still be held on a retry.
 """
 
 import asyncio
@@ -33,6 +36,14 @@ _TX_SQL: Final = {
 }
 _RESERVATIONS_KEY: Final = "reservations_pkey"
 _RETRYABLE: Final = (errors.DeadlockDetected, errors.SerializationFailure)
+# A report or retention batch may take longer than the 5 s per-statement default: raise it to 60 s
+# for that one transaction. Only the default this package applied (source `session`) is raised;
+# a statement_timeout the operator set (DSN, role, database, server) is kept as it is.
+SLOW_STATEMENT_TIMEOUT: Final = "60s"
+_ALLOW_SLOW: Final = (
+    "SELECT set_config('statement_timeout', %(value)s, true) FROM pg_settings"
+    " WHERE name = 'statement_timeout' AND source = 'session'"
+)
 
 
 class RetryStats:
@@ -66,10 +77,12 @@ async def _apply(conn: Conn, step: Stmt | Tx) -> list[Row]:
     return list(await cursor.fetchall()) if cursor.description is not None else []
 
 
-async def run_flow[T](conn: Conn, flow: Flow[T]) -> T:
+async def run_flow[T](conn: Conn, flow: Flow[T], *, slow: bool = False) -> T:
     """One attempt: BEGIN, step the flow to its end, COMMIT. Rolls back on any error."""
     try:
         await conn.execute(_TX_SQL[Tx.BEGIN])
+        if slow:
+            await conn.execute(_ALLOW_SLOW, {"value": SLOW_STATEMENT_TIMEOUT})
         try:
             step = next(flow)
             while True:
@@ -88,11 +101,13 @@ async def run_flow[T](conn: Conn, flow: Flow[T]) -> T:
         flow.close()
 
 
-async def run_with_retry[T](pool: Pool, make_flow: Callable[[], Flow[T]], stats: RetryStats) -> T:
+async def run_with_retry[T](
+    pool: Pool, make_flow: Callable[[], Flow[T]], stats: RetryStats, *, slow: bool = False
+) -> T:
     for attempt in range(MAX_RETRIES + 1):
         try:
             async with pool.connection() as conn:
-                return await run_flow(conn, make_flow())
+                return await run_flow(conn, make_flow(), slow=slow)
         except psycopg.Error as exc:
             if isinstance(exc, errors.UniqueViolation) and not _retryable(exc):
                 raise ConflictError("reservation already exists") from exc

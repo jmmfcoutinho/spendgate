@@ -46,8 +46,14 @@ class LedgerEngine(AdminReadsMixin, ABC):
         self._ctx = Ctx(currency, new_id)
 
     @abstractmethod
-    async def _run[T](self, make_flow: Callable[[], Flow[T]], *, write: bool = True) -> T:
-        """Run a fresh flow in one transaction. A factory, so a backend may retry it."""
+    async def _run[T](
+        self, make_flow: Callable[[], Flow[T]], *, write: bool = True, slow: bool = False
+    ) -> T:
+        """Run a fresh flow in one transaction. A factory, so a backend may retry it.
+
+        `slow` marks a report or batch over the call tables (usage, call and audit lists,
+        retention) that may legitimately run longer than a money transition.
+        """
 
     # --- money transitions ---
 
@@ -276,14 +282,14 @@ class LedgerEngine(AdminReadsMixin, ABC):
         self, query: UsageQuery, *, now: int, retention_days: int | None = None
     ) -> UsageResult:
         flow = partial(usage_flow.usage_flow, query, self._ctx.currency, now, retention_days)
-        return await self._run(flow, write=False)
+        return await self._run(flow, write=False, slow=True)
 
     async def delete_calls_older_than(
         self, days: int, now: int, batch: int = 1_000
     ) -> RetentionResult:
         """Delete whole UTC days older than `days`, `batch` rows per transaction."""
         boundary = retention_boundary(now, days)
-        await self._run(partial(usage_flow.boundary_flow, boundary))
+        await self._run(partial(usage_flow.boundary_flow, boundary), slow=True)
         calls = await self._drain(usage_flow.calls_batch_flow, boundary, batch)
         reservations = await self._drain(usage_flow.reservations_batch_flow, boundary, batch)
         sessions = await self._drain(usage_flow.sessions_batch_flow, boundary, batch)
@@ -292,7 +298,7 @@ class LedgerEngine(AdminReadsMixin, ABC):
     async def _drain(self, flow: Callable[[int, int], Flow[int]], boundary: int, batch: int) -> int:
         """Repeat a batch transaction until it comes back short; returns the rows removed."""
         total = 0
-        while (done := await self._run(partial(flow, boundary, batch))) > 0:
+        while (done := await self._run(partial(flow, boundary, batch), slow=True)) > 0:
             total += done
             if done < batch:
                 break

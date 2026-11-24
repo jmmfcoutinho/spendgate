@@ -24,7 +24,9 @@ class AdminReadsMixin(ABC):
     _ctx: Ctx
 
     @abstractmethod
-    async def _run[T](self, make_flow: Callable[[], Flow[T]], *, write: bool = True) -> T: ...
+    async def _run[T](
+        self, make_flow: Callable[[], Flow[T]], *, write: bool = True, slow: bool = False
+    ) -> T: ...
 
     @abstractmethod
     async def db_now_ms(self) -> int: ...
@@ -75,13 +77,13 @@ class AdminReadsMixin(ABC):
         limit: int,
     ) -> tuple[AuditRow, ...]:
         flow = partial(admin_reads.list_audit_flow, since, until, actor, before, limit)
-        return await self._run(flow, write=False)
+        return await self._run(flow, write=False, slow=True)
 
     async def list_calls(
         self, filters: CallFilters, *, before: CallCursor | None, limit: int
     ) -> tuple[CallFields, ...]:
         flow = partial(admin_reads.list_calls_flow, filters, before, limit)
-        return await self._run(flow, write=False)
+        return await self._run(flow, write=False, slow=True)
 
     async def get_call(self, request_id: str) -> CallFields | None:
         return await self._run(partial(admin_reads.get_call_flow, request_id), write=False)
