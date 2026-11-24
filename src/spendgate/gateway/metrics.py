@@ -4,14 +4,16 @@ Why hand-rolled: the base install has a fixed dependency budget and we need only
 gauges and fixed-bucket histograms.
 
 Label cardinality is bounded by design: only model, deployment, scope, outcome, token kind,
-webhook result and catalog sha, and every value comes from config, the ledger or a fixed enum,
-never from the request. `model` is a routed catalog id, or `unknown` for a refusal that names
-no routed model; `deployment` is the config label `<alias>/<index>`; `scope` is an admin-made
-scope path. Never the raw body model, key secrets or prefixes, user labels, session ids, tags or
-request ids: each distinct value would mint a new time series forever (memory growth on the
-scraper) and would leak identifiers into a system with weaker access control than the ledger.
+webhook result, catalog sha, ledger operation and heartbeat step, and every value comes from
+config, the ledger or a fixed set in the code, never from the request. `model` is a routed
+catalog id, or `unknown` for a refusal that names no routed model; `deployment` is the config
+label `<alias>/<index>`; `scope` is an admin-made scope path. Never the raw body model, key
+secrets or prefixes, user labels, session ids, tags or request ids: each distinct value would
+mint a new time series forever (memory growth on the scraper) and would leak identifiers into a
+system with weaker access control than the ledger.
 """
 
+import contextlib
 import math
 from collections.abc import Callable, Mapping, Sequence
 
@@ -19,6 +21,11 @@ LATENCY_BUCKETS_MS: tuple[float, ...] = (
     10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000, 60_000, 120_000,
 )  # fmt: skip
 TTFT_BUCKETS_MS: tuple[float, ...] = (50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000, 30_000)
+# Work the gateway does itself (ledger calls, pool waits, overhead): mostly a few ms; 10 s is the
+# hold deadline.
+FAST_BUCKETS_MS: tuple[float, ...] = (
+    1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1_000, 2_500, 5_000, 10_000,
+)  # fmt: skip
 
 type LabelKey = tuple[tuple[str, str], ...]
 
@@ -176,6 +183,30 @@ _COUNTERS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "Budget-warning webhook posts by result (delivered, failed, dropped).",
         ("result",),
     ),
+    (
+        "ledger_errors",
+        "spendgate_ledger_errors_total",
+        "Ledger calls that failed (raised, or a hold past its deadline), by operation.",
+        ("op",),
+    ),
+    (
+        "ledger_unavailable",
+        "spendgate_ledger_unavailable_total",
+        "Requests refused as ledger_unavailable (key check or hold); nothing was sent.",
+        (),
+    ),
+    (
+        "sweeper_expired",
+        "spendgate_sweeper_expired_total",
+        "Expired holds the sweeper charged in full.",
+        (),
+    ),
+    (
+        "heartbeat_failures",
+        "spendgate_heartbeat_failures_total",
+        "Heartbeat steps that raised (retried at the next beat), by step.",
+        ("step",),
+    ),
 )
 _GAUGES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     (
@@ -187,19 +218,52 @@ _GAUGES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     ("holds_in_flight", "spendgate_holds_in_flight", "Pending reservations (holds) right now.", ()),
     ("catalog_age", "spendgate_catalog_age_seconds", "Seconds since the catalog was updated.", ()),
     ("catalog_info", "spendgate_catalog_info", "Always 1; the catalog sha is the label.", ("sha",)),
+    (
+        "unsettled_closes",
+        "spendgate_unsettled_closes",
+        "Closes the ledger has not taken yet: retried each heartbeat, else swept in full.",
+        (),
+    ),
+    ("pool_size", "spendgate_ledger_pool_size", "Postgres pool connections, idle or in use.", ()),
+    ("pool_in_use", "spendgate_ledger_pool_in_use", "Postgres pool connections in use.", ()),
+    ("pool_max", "spendgate_ledger_pool_max", "Most connections the Postgres pool opens.", ()),
 )
-_HISTOGRAMS: tuple[tuple[str, str, str, tuple[float, ...]], ...] = (
+_MODEL_DEPLOYMENT = ("model", "deployment")
+_HISTOGRAMS: tuple[tuple[str, str, str, tuple[float, ...], tuple[str, ...]], ...] = (
     (
         "upstream_latency",
         "spendgate_upstream_latency_ms",
         "Upstream call latency in ms.",
         LATENCY_BUCKETS_MS,
+        _MODEL_DEPLOYMENT,
     ),
     (
         "ttft",
         "spendgate_time_to_first_token_ms",
         "Streaming time to first token in ms.",
         TTFT_BUCKETS_MS,
+        _MODEL_DEPLOYMENT,
+    ),
+    (
+        "ledger_latency",
+        "spendgate_ledger_latency_ms",
+        "Ledger hold, settle, release and lease renewal latency in ms.",
+        FAST_BUCKETS_MS,
+        ("op",),
+    ),
+    (
+        "pool_wait",
+        "spendgate_ledger_pool_wait_ms",
+        "Time a ledger transaction queued for a Postgres pool connection, in ms.",
+        FAST_BUCKETS_MS,
+        (),
+    ),
+    (
+        "overhead",
+        "spendgate_gateway_overhead_ms",
+        "Time a held call spent outside the upstream call (hold, settle, routing), in ms.",
+        FAST_BUCKETS_MS,
+        (),
     ),
 )
 
@@ -215,24 +279,40 @@ class Metrics:
     overruns: Counter
     review_required: Counter
     alert_webhooks: Counter
+    ledger_errors: Counter
+    ledger_unavailable: Counter
+    sweeper_expired: Counter
+    heartbeat_failures: Counter
     budget_remaining_nano: Gauge
     holds_in_flight: Gauge
     catalog_age: Gauge
     catalog_info: Gauge
+    unsettled_closes: Gauge
+    pool_size: Gauge
+    pool_in_use: Gauge
+    pool_max: Gauge
     upstream_latency: Histogram
     ttft: Histogram
+    ledger_latency: Histogram
+    pool_wait: Histogram
+    overhead: Histogram
 
     def __init__(self) -> None:
         self._all: list[_Metric] = []
         # Called at the start of every render: keeps time-based gauges (catalog age) fresh.
         self.before_render: Callable[[], None] | None = None
+        self._readers: list[Callable[[], None]] = []
         for attr, name, text, labels in _COUNTERS:
             self._register(attr, Counter(name, text, labels))
         for attr, name, text, labels in _GAUGES:
             self._register(attr, Gauge(name, text, labels))
-        for attr, name, text, buckets in _HISTOGRAMS:
-            self._register(attr, Histogram(name, text, buckets, ("model", "deployment")))
-        self.holds_in_flight.set(0)  # a scrape before the first call should still see it
+        for attr, name, text, buckets, labels in _HISTOGRAMS:
+            self._register(attr, Histogram(name, text, buckets, labels))
+        # A scrape before the first event should still see these (an alert on "absent" is noise).
+        self.holds_in_flight.set(0)
+        self.unsettled_closes.set(0)
+        self.ledger_unavailable.inc(0)
+        self.sweeper_expired.inc(0)
 
     def _register(self, attr: str, metric: _Metric) -> None:
         self._all.append(metric)
@@ -267,10 +347,20 @@ class Metrics:
         if age_seconds is not None:
             self.catalog_age.set(age_seconds)
 
+    def on_render(self, read: Callable[[], None]) -> None:
+        """Run `read` before every scrape, to refresh gauges sampled from elsewhere (the pool).
+
+        A reader that raises is skipped for that scrape: the rest of `/metrics` still answers.
+        """
+        self._readers.append(read)
+
     def render(self) -> str:
         """Prometheus text exposition format 0.0.4."""
         if self.before_render is not None:
             self.before_render()
+        for read in self._readers:
+            with contextlib.suppress(Exception):
+                read()
         lines: list[str] = []
         for metric in self._all:
             lines += metric.lines()

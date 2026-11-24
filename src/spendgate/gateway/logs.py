@@ -38,6 +38,11 @@ LOGGER_NAME = "spendgate.call"
 INTERNAL_EVENT = "spendgate.internal"
 
 
+def secret_shaped(value: str) -> bool:
+    """Whether `value` looks like a key secret or a bearer token (also used for span attributes)."""
+    return _SECRET_SHAPE.search(value) is not None
+
+
 def redact(fields: Mapping[str, object]) -> dict[str, object]:
     """Keep allowlisted, scalar, secret-free fields; drop everything else."""
     kept: dict[str, object] = {}
@@ -46,7 +51,7 @@ def redact(fields: Mapping[str, object]) -> dict[str, object]:
             continue
         if not isinstance(value, str | int | float | bool | None):
             continue
-        if isinstance(value, str) and _SECRET_SHAPE.search(value):
+        if isinstance(value, str) and secret_shaped(value):
             continue
         kept[name] = value
     return kept
