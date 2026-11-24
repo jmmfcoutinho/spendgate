@@ -42,7 +42,10 @@ All notable changes to this project are documented here. The format follows
   default, `None` for no bound). With `config=`, the file's `defaults.limits.concurrency` sets it.
 - `spendgate migrate --bootstrap` warns when a configured key already exists with other
   `session_required` or `session_defaults` than the config. Bootstrap stays create-only; change
-  an existing key with `PATCH /admin/v1/keys/{key_id}`.
+  an existing key with `PATCH /admin/v1/keys/{key_id}`. After upgrading it warns for each existing
+  key whose config has `session_defaults` without `max_new_sessions_per_hour`, since the config
+  now means 60 there: PATCH the key to adopt the bound, or set `max_new_sessions_per_hour: null`
+  in the config to keep it unbounded and silence the warning.
 
 ### Changed
 
