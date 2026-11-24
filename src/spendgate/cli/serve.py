@@ -19,6 +19,7 @@ from spendgate.config import ConfigError, Settings, check_config, load
 from spendgate.config.schema import Server
 from spendgate.gateway.admin import combine, create_admin_app
 from spendgate.gateway.admin_http import AdminContext
+from spendgate.gateway.alert_webhook import webhook_alerts, with_alerts
 from spendgate.gateway.app import create_app
 from spendgate.gateway.bootstrap import BootstrapReport, apply_bootstrap
 from spendgate.gateway.logs import configure_json_logging
@@ -143,7 +144,10 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         print(f"warning: {line}", file=sys.stderr)
     metrics, logger = Metrics(), configure_json_logging()
     timeout = upstream_timeout(settings.config.routing.connect_timeout_seconds)
-    async with httpx.AsyncClient(timeout=timeout) as sender:
+    async with (
+        httpx.AsyncClient(timeout=timeout) as sender,
+        webhook_alerts(settings.alert_webhook, metrics, logger, rt.now) as alerts,
+    ):
         pipeline = build_pipeline(
             settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger
         )
@@ -151,7 +155,8 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         bind_catalog_metrics(metrics, settings, rt.now)
         # Metrics are served by the admin app only (see gateway.admin): not given to the data app.
         upkeep = Maintenance(rt.ledger, settings, rt.now, logger)  # sweeper + retention
-        data_app = create_app(pipeline, readiness=ready, background=upkeep.run)
+        # The webhook poster (when configured) runs beside the sweeper, stopped with it.
+        data_app = create_app(pipeline, readiness=ready, background=with_alerts(upkeep.run, alerts))
         ctx = AdminContext(
             rt.ledger, rt.keys, settings, rt.now, rt.now(), metrics, package_version(),
             readiness=ready,

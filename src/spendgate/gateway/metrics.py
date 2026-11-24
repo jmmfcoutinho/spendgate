@@ -3,11 +3,11 @@
 Why hand-rolled: the base install has a fixed dependency budget and we need only counters,
 gauges and fixed-bucket histograms.
 
-Label cardinality is bounded by design: only model, deployment, scope, outcome, token kind
-and catalog sha, and every value comes from config, the ledger or a fixed enum, never from
-the request. `model` is a routed catalog id, or `unknown` for a refusal that names no routed
-model; `deployment` is the config label `<alias>/<index>`; `scope` is an admin-made scope
-path. Never the raw body model, key secrets or prefixes, user labels, session ids, tags or
+Label cardinality is bounded by design: only model, deployment, scope, outcome, token kind,
+webhook result and catalog sha, and every value comes from config, the ledger or a fixed enum,
+never from the request. `model` is a routed catalog id, or `unknown` for a refusal that names
+no routed model; `deployment` is the config label `<alias>/<index>`; `scope` is an admin-made
+scope path. Never the raw body model, key secrets or prefixes, user labels, session ids, tags or
 request ids: each distinct value would mint a new time series forever (memory growth on the
 scraper) and would leak identifiers into a system with weaker access control than the ledger.
 """
@@ -170,6 +170,12 @@ _COUNTERS: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
         "Settlements flagged for review (absurd reported usage, booked in full).",
         ("model",),
     ),
+    (
+        "alert_webhooks",
+        "spendgate_alert_webhooks_total",
+        "Budget-warning webhook posts by result (delivered, failed, dropped).",
+        ("result",),
+    ),
 )
 _GAUGES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
     (
@@ -208,6 +214,7 @@ class Metrics:
     cooldowns: Counter
     overruns: Counter
     review_required: Counter
+    alert_webhooks: Counter
     budget_remaining_nano: Gauge
     holds_in_flight: Gauge
     catalog_age: Gauge
