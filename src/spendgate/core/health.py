@@ -14,13 +14,18 @@ half_open --probe success--> closed;  probe failure --> open again
 Breaker defaults follow LiteLLM's: 5 s cooldown, 50 % failures, at least 5 requests. A 429 without
 Retry-After cools for only 250 to 500 ms (ADR-0021): one throttled call must not take a busy
 deployment away from every other caller for seconds, and the jitter keeps the deployments of one
-model from coming back in the same instant.
+model from coming back in the same instant. A deployment that throttles again each time it comes
+back is a storm in the making, so each such 429 doubles the draw, up to ``cooldown_ms``, until a
+success resets it. A busy cooldown keeps the failure window: 429s must not hide 5xx answers from
+the breaker.
 """
 
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+
+_MAX_DOUBLINGS = 16  # far past any cooldown_ms; keeps the shift small
 
 type Draw = Callable[[int, int], int]
 """A random integer in ``[low, high]`` inclusive, like ``random.Random.randint``."""
@@ -63,6 +68,7 @@ class DeploymentHealth:
         self._open_until = 0
         self._probe_out = False
         self._busy_only = False  # open only because of 429s from closed: no probe needed after
+        self._streak = 0  # busy cooldowns in a row with no success in between
 
     @property
     def state(self) -> HealthState:
@@ -79,6 +85,11 @@ class DeploymentHealth:
             return True
         return False
 
+    @property
+    def busy(self) -> bool:
+        """Cooling only because the provider was busy (a 429 from closed): worth waiting for."""
+        return self._state is HealthState.OPEN and self._busy_only
+
     def retry_after(self, now: int) -> int:
         """Milliseconds until the next attempt may be admitted (0 when allowed or probing)."""
         if self._state is HealthState.OPEN:
@@ -91,20 +102,23 @@ class DeploymentHealth:
         A result in half-open is taken as the probe's: requests started before the trip are
         indistinguishable here, and a wrong close is corrected by the next failures.
         """
-        self._expire(now)
+        self._expire_busy(now)
         if self._state is HealthState.HALF_OPEN:
             self._state = HealthState.CLOSED
             self._results.clear()
         elif self._state is HealthState.CLOSED:
             self._add(now, ok=True)
-        return self._state is not HealthState.OPEN
+        counted = self._state is not HealthState.OPEN
+        if counted:
+            self._streak = 0
+        return counted
 
     def record_failure(self, now: int) -> bool:
         """Count a failure (5xx, timeout, connection error); may open the breaker.
 
         False: the deployment was already open, so the result was ignored.
         """
-        self._expire(now)
+        self._expire_busy(now)
         if self._state is HealthState.OPEN:
             return False
         if self._state is HealthState.HALF_OPEN:
@@ -119,16 +133,24 @@ class DeploymentHealth:
         """A 429: cool down at once; returns the cooldown it asked for, in ms (capped).
 
         Retry-After is honoured as given (up to ``max_cooldown_ms``); without one, or with a
-        shorter one, the cooldown is a random draw between the throttle bounds.
+        shorter one, the cooldown is a random draw between the throttle bounds, doubled for each
+        earlier busy cooldown with no success since (at most ``cooldown_ms``). Only a 429 that
+        starts a cooldown escalates; one that lands while cooling extends it.
         """
-        short = self._draw(self._config.throttle_min_ms, self._config.throttle_max_ms)
+        self._expire_busy(now)
+        c = self._config
+        streak = self._streak - 1 if self.busy else self._streak  # an extension adds no doubling
+        doublings = min(max(streak, 0), _MAX_DOUBLINGS)
+        short = min(self._draw(c.throttle_min_ms, c.throttle_max_ms) << doublings, c.cooldown_ms)
         wanted = self._capped(max(retry_after_ms or 0, short))
         if self._state is HealthState.OPEN:  # extend, never shorten; a breaker open stays one
             self._open_until = max(self._open_until, now + wanted)
-        else:
-            busy = self._state is HealthState.CLOSED  # a throttled probe still owes its probe
+        elif self._state is HealthState.CLOSED:  # busy: keep the failure window, no probe after
+            self._state, self._open_until = HealthState.OPEN, now + wanted
+            self._busy_only, self._probe_out = True, False
+            self._streak += 1
+        else:  # a throttled probe still owes its probe
             self._trip(now, wanted)
-            self._busy_only = busy
         return wanted
 
     def _expire(self, now: int) -> None:
@@ -136,6 +158,12 @@ class DeploymentHealth:
         if self._state is HealthState.OPEN and now >= self._open_until:
             self._state = HealthState.CLOSED if self._busy_only else HealthState.HALF_OPEN
             self._probe_out = False
+
+    def _expire_busy(self, now: int) -> None:
+        """A result may end an elapsed busy cooldown; a breaker open waits for its probe in
+        ``allow``, so a stale late success can never close it."""
+        if self._busy_only:
+            self._expire(now)
 
     def _capped(self, duration_ms: int) -> int:
         return min(duration_ms, self._config.max_cooldown_ms)
