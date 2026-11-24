@@ -15,6 +15,7 @@ out, no HTTP client.
 |---|---|
 | `name` | The provider slug; equal to the module name |
 | `validate(req)` | Pure checks of endpoint, body, headers and files against an allowlist, once, before routing. Returns a refusal or `None` |
+| `prepare(deployment)` | Async, awaited just before each `translate`. Ready the credential without blocking the event loop: a token refresh (a blocking network call) runs in a worker thread, one at a time per credential (`providers.refresh.Refreshes`). A static-key adapter does nothing. Raises on a credential fault, like `translate` |
 | `translate(req, deployment)` | Build the upstream request: URL is the configured base plus a fixed path, never anything from the client; adds the credential. Raises `Untranslatable` for a request this provider cannot carry |
 | `response(req, resp)` | A non-streamed answer in the client's shape (identity unless you convert) |
 | `relay(req, limits)` | A per-request `StreamRelay` that turns upstream bytes into client bytes and remembers usage, enforcing `SseLimits` |
@@ -54,6 +55,9 @@ Rules the pipeline relies on:
   deployments and requests must not show credentials.
 - **Hostile responses are expected.** A stream that is malformed or too large raises
   `StreamBroken` or `StreamLimitExceeded`; it is settled at the final usage seen or the full hold.
+- **Never block the event loop.** `translate` is synchronous: it reads a cached token, and any
+  refresh happens in `prepare`. A credential fault raises; the pipeline answers `internal_error`
+  and sends nothing (fail closed).
 - **Refuse, never drop.** A request field you cannot translate is `invalid_request` with `param`,
   not silently ignored.
 - **Inline media is an image or nothing.** Accept inline images only through
@@ -65,7 +69,8 @@ Rules the pipeline relies on:
 1. **Slug and module.** Pick a lowercase slug (`my_provider`) and create
    `src/spendgate/providers/my_provider.py`. Helper modules must be prefixed with the slug
    (`my_provider_stream.py`). `providers` may import only `core`, and adapters never import each
-   other (`uv run lint-imports` enforces it). The shared SSE codec is `providers/sse.py`.
+   other (`uv run lint-imports` enforces it). The shared SSE codec is `providers/sse.py`; the
+   shared off-loop credential refresh is `providers/refresh.py`.
 2. **Register it.** The slug appears in four places: the `PROVIDERS` tuple in
    `src/spendgate/core/catalog.py`, `ProviderSlug` in `src/spendgate/config/schema.py`,
    `build_providers` in `src/spendgate/pipeline/adapters.py`, and the expected sets in
