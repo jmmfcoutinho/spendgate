@@ -38,8 +38,11 @@ perimeter when something must be enforced. See [Running locally](https://github.
 
 ## Quickstart: proxy mode
 
-Install with the SDK you use (`openai`, `anthropic`), then write a config. Providers, prices and
-budgets are data; this one routes one model and gives it a 5 USD lifetime cap.
+Install from PyPI with the SDK you use (`openai`, `anthropic`), then write a config. The package
+needs Python 3.13 or newer; without it, run the proxy from the signed container image
+(`ghcr.io/jmmfcoutinho/spendgate:<version>`, which carries its own Python), as
+[Running locally](docs/deploy/local.md#container-image) shows. Providers, prices and budgets are
+data; this config routes one model and gives it a 5 USD lifetime cap.
 
 ```bash
 pip install "spendgate[openai]"
@@ -47,17 +50,27 @@ pip install "spendgate[openai]"
 
 <!-- doctest: file spendgate.yaml -->
 ```yaml
-server: {listen: "127.0.0.1:8080", key_pepper: "env:SPENDGATE_KEY_PEPPER"}
+server:
+  listen: "127.0.0.1:8080"            # data plane: what apps call
+  admin: {listen: "127.0.0.1:8081"}   # admin API and /metrics, on their own port
+  key_pepper: "env:SPENDGATE_KEY_PEPPER"
 ledger: {currency: USD, backend: {kind: sqlite, path: ./spendgate.db}}
 providers:
   openai: {base_url: "https://api.openai.com/v1", credential: "env:OPENAI_API_KEY"}
 models:
   gpt-6-luna: {catalog_id: openai/gpt-6-luna, deployments: [{provider: openai}]}
+defaults: {max_output_tokens: 4096}   # output ceiling per request
 bootstrap:
   scopes: ["org:demo"]
   budgets: [{id: demo, scope: "org:demo", period: none, cap: "5 USD"}]
   keys: [{name: quickstart, scope: "org:demo"}]
 ```
+
+The admin listener keeps key, budget and kill-switch endpoints off the port apps reach; without
+it they share the data port. `max_output_tokens` is the most output a request may ask for, and
+what is held for a request that sends no `max_tokens`; without it the catalog's limit for the
+model applies (128,000 tokens here), so one call can hold far more than it will spend. Pass
+`max_tokens` in every call: the hold, and so what a budget admits, follows it.
 
 Check it, create the virtual key, then start the proxy. The provider key stays here, in the
 proxy's environment. `migrate --bootstrap` prints each key once; `serve` never prints a secret, so
@@ -112,7 +125,9 @@ local SQLite ledger.
 import spendgate.local as sg
 
 client = sg.guard(cap="5 USD").openai()   # needs OPENAI_API_KEY; ledger in your user data dir
-client.chat.completions.create(model="gpt-6-luna", messages=[{"role": "user", "content": "hi"}])
+client.chat.completions.create(
+    model="gpt-6-luna", max_tokens=50, messages=[{"role": "user", "content": "hi"}]
+)
 ```
 
 The cap lasts for the life of the ledger file and is shared by every script that opens it.
@@ -138,6 +153,11 @@ Endpoints are the OpenAI paths (`/v1/chat/completions`, `/v1/responses`, `/v1/em
 allowlist are refused rather than forwarded; see the [wire protocol](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/protocol.md). Realtime
 and hosted tools are not supported. Backends: SQLite (one host) and Postgres (shared).
 
+The bundled catalog ships about 26 priced models across these providers. Any other model is
+refused with `model_not_priced` until it has a price: add it in an override file
+([adding a model](docs/catalog-how-to.md), or draft entries from LiteLLM's price file as in
+[section 6](docs/catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)).
+
 ## Documentation
 
 - [How money is protected](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/how-money-is-protected.md):
@@ -155,7 +175,8 @@ and hosted tools are not supported. Backends: SQLite (one host) and Postgres (sh
 
 ## Development
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.13 or newer.
+Requires [uv](https://docs.astral.sh/uv/) and Python 3.13 or newer (the package and library mode
+need 3.13+; the container image does not need Python on the host).
 
 ```bash
 uv sync --all-extras
