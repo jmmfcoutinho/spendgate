@@ -129,11 +129,13 @@ still being renewed by a live instance is left alone. A failing pass is logged a
 can reach a separate admin port, or needing an admin key with `usage:read` on a shared port.
 Probes `GET /livez` and `GET /readyz` are on the data port; `/readyz` answers with the status code
 and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days) are at
-`GET /admin/v1/readiness` with a `usage:read` admin key. Names:
+`GET /admin/v1/readiness` with a `usage:read` admin key. Label values never come from the
+request: `model` is always the routed catalog id (`unknown` on a refusal that names no routed
+model), and `scope` is the key's scope path (`unknown` if it could not be read). Names:
 
 | Metric | Meaning |
 |---|---|
-| `spendgate_requests_total{outcome,model}` | Requests by outcome; `model` is the routed catalog id, `unknown` for a refusal that names no routed model |
+| `spendgate_requests_total{outcome,model}` | Requests by outcome |
 | `spendgate_spend_nano_total{model,scope}` | Settled spend in nano-units of the ledger currency |
 | `spendgate_budget_remaining_nano{scope}` | Remaining budget |
 | `spendgate_holds_in_flight` | Pending holds right now |
