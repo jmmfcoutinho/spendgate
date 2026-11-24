@@ -1,7 +1,8 @@
 """Cross-check spendgate's price catalog against LiteLLM's community price file.
 
-A maintainer tool. It uses the standard library and PyYAML (plus `jsonschema`, from the dev
-group, for `import` and `override`). It is not product code and nothing in `spendgate` imports it.
+A maintainer tool. It uses the standard library, PyYAML and the mapping in `spendgate.core.litellm`
+(shared with `spendgate catalog import`), plus `jsonschema`, from the dev group, for `import` and
+`override`. It is not product code and nothing in `spendgate` imports it.
 
     uv run python scripts/litellm_prices.py diff                  # compare; exit 1 on disagreement
     uv run python scripts/litellm_prices.py import gpt-6-luna     # print a draft catalog entry
@@ -54,7 +55,6 @@ input error.
 import argparse
 import hashlib
 import json
-import re
 import sys
 import textwrap
 import urllib.request
@@ -68,6 +68,25 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from spendgate.core.litellm import (
+    MAX_BYTES,
+    REPO,
+    LiteLLMError,
+    LongContext,
+    Mapped,
+    Source,
+    base_entry,
+    commit_url,
+    convert_meters,
+    dec_str,
+    draft_entry,
+    header,
+    index,
+    long_contexts,
+    map_key,
+    parse_litellm,
+)
+
 if TYPE_CHECKING:
     from jsonschema import Draft202012Validator
 
@@ -75,11 +94,9 @@ ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "src" / "spendgate" / "catalog" / "prices.yaml"
 SCHEMA = ROOT / "src" / "spendgate" / "catalog" / "schema.json"
 
-REPO = "BerriAI/litellm"
 # main of BerriAI/litellm on 2026-11-18. Moving it is a reviewed change: read the diff first.
 DEFAULT_COMMIT = "ee133621323bebf27e72695c0b9822d4e8343def"  # pragma: allowlist secret
 FILE_PATH = "litellm/model_prices_and_context_window_backup.json"
-MAX_BYTES = 32 * 1024 * 1024
 TIMEOUT_SECONDS = 60
 
 PROVIDERS = (
@@ -91,15 +108,6 @@ PROVIDERS = (
     "azure_speech",
     "elevenlabs",
 )
-ZONES = frozenset({"us", "eu", "apac"})
-GLOBAL_ALIASES = frozenset({"global", "global-standard"})
-LITELLM_MODES = {
-    "chat": "chat",
-    "responses": "responses",
-    "embedding": "embedding",
-    "audio_transcription": "transcription",
-    "audio_speech": "speech",
-}
 # Meters that are compared and imported, in the order they are printed.
 METERS = (
     "input_per_mtok",
@@ -112,35 +120,13 @@ METERS = (
     "audio_input_per_minute",
     "per_1k_characters",
 )
-_MILLION = Decimal(1_000_000)
-_CTX = Context(prec=80)  # far more digits than any price: multiplication here is exact
-_SHA = re.compile(r"[0-9a-f]{40}")
-_ABOVE = re.compile(r"^input_cost_per_token_above_(\d+)k_tokens$")
+_CTX = Context(prec=80)  # far more digits than any price
 
-type Spec = Mapping[str, Any]
-
-
-class InputError(Exception):
-    """Bad arguments or bad input data (exit code 2)."""
+# Bad arguments or bad input data (exit code 2); the shared mapping raises the same class.
+InputError = LiteLLMError
 
 
 # --- numbers ---------------------------------------------------------------------------------
-
-
-def to_decimal(value: object) -> Decimal:
-    """A JSON number as an exact Decimal (parsed with `parse_float=Decimal`, never a float)."""
-    if isinstance(value, bool) or not isinstance(value, (int, Decimal)):
-        raise InputError(f"not a number: {value!r}")
-    return Decimal(value)
-
-
-def scale(value: object, factor: Decimal) -> Decimal:
-    return _CTX.multiply(to_decimal(value), factor)
-
-
-def dec_str(value: Decimal) -> str:
-    """Plain decimal string without exponent or trailing zeros ("0.08", "10", "0")."""
-    return format(value.normalize(), "f")
 
 
 def pct_diff(ours: Decimal, theirs: Decimal) -> Decimal | None:
@@ -160,27 +146,7 @@ def show_pct(pct: Decimal | None) -> str:
 
 
 def raw_url(commit: str) -> str:
-    if not _SHA.fullmatch(commit):
-        raise InputError("--commit must be a full 40-character lower-case commit SHA")
-    return f"https://raw.githubusercontent.com/{REPO}/{commit}/{FILE_PATH}"
-
-
-@dataclass(frozen=True, slots=True)
-class Source:
-    commit: str
-    url: str
-    sha256: str
-    data: Mapping[str, Spec]
-
-
-def parse_litellm(raw: bytes) -> Mapping[str, Spec]:
-    try:
-        doc = json.loads(raw, parse_float=Decimal)
-    except (ValueError, RecursionError) as exc:
-        raise InputError(f"the LiteLLM file is not valid JSON ({type(exc).__name__})") from None
-    if not isinstance(doc, dict):
-        raise InputError("the LiteLLM file is not a JSON object")
-    return {k: v for k, v in doc.items() if isinstance(v, dict) and k != "sample_spec"}
+    return commit_url(commit, FILE_PATH)
 
 
 def download(url: str) -> bytes:
@@ -207,132 +173,6 @@ def load_source(commit: str, file: Path | None) -> Source:
     else:
         raw = download(url)
     return Source(commit, url, hashlib.sha256(raw).hexdigest(), parse_litellm(raw))
-
-
-# --- mapping and conversion ------------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class Mapped:
-    key: str  # LiteLLM key
-    id: str  # our catalog id
-    variant: str  # "base", "alt" (azure global alias) or "zone" (azure Data Zone)
-    mode: str  # our mode family: chat, responses, embedding, transcription, speech
-    spec: Spec
-
-
-_SIMPLE = {  # litellm_provider -> (our slug, key prefix LiteLLM may add)
-    "openai": ("openai", ""),
-    "anthropic": ("anthropic", ""),
-    "gemini": ("google", "gemini/"),
-    "elevenlabs": ("elevenlabs", "elevenlabs/"),
-    "bedrock": ("bedrock", ""),
-    "bedrock_converse": ("bedrock", ""),
-}
-_AZURE_PLAIN = 2  # azure/<model>
-_AZURE_QUALIFIED = 3  # azure/<zone or global alias>/<model>
-
-
-def _azure_name(key: str) -> tuple[str, str] | None:
-    """(model name, variant) for an Azure key, or None for keys we do not map."""
-    parts = key.split("/")
-    if parts[0] != "azure":
-        return None
-    if len(parts) == _AZURE_PLAIN:
-        return parts[1], "base"
-    if len(parts) == _AZURE_QUALIFIED and parts[1] in GLOBAL_ALIASES:
-        return parts[2], "alt"
-    if len(parts) == _AZURE_QUALIFIED and parts[1] in ZONES:
-        return parts[2], "zone"
-    return None
-
-
-def map_key(key: str, spec: Spec) -> Mapped | None:
-    """The catalog id LiteLLM entry `key` stands for, or None when it is out of scope."""
-    mode = LITELLM_MODES.get(str(spec.get("mode")))
-    provider = spec.get("litellm_provider")
-    if mode is None or not isinstance(provider, str):
-        return None
-    slug, variant = "azure_openai", "base"
-    if provider == "azure":
-        named = _azure_name(key)
-        if named is None:
-            return None
-        name, variant = named
-    elif provider in _SIMPLE:
-        slug, prefix = _SIMPLE[provider]
-        name = key.removeprefix(prefix)
-    else:
-        return None
-    if not name or "/" in name:
-        return None
-    return Mapped(key, f"{slug}/{name}", variant, mode, spec)
-
-
-def convert_meters(slug: str, spec: Spec) -> dict[str, Decimal]:
-    """LiteLLM per-token/second/character prices as our per-MTok/minute/1k-character meters."""
-    found: dict[str, Decimal] = {}
-
-    def put(meter: str, field_name: str, factor: Decimal) -> None:
-        value = spec.get(field_name)
-        if value is not None:
-            found[meter] = scale(value, factor)
-
-    cache_write = "cache_creation_input_token_cost"
-    if slug in {"anthropic", "bedrock"} and spec.get(f"{cache_write}_above_1hr") is not None:
-        cache_write += "_above_1hr"  # we store the dearer 1-hour price
-    put("input_per_mtok", "input_cost_per_token", _MILLION)
-    put("cached_input_per_mtok", "cache_read_input_token_cost", _MILLION)
-    put("cache_write_per_mtok", cache_write, _MILLION)
-    put("output_per_mtok", "output_cost_per_token", _MILLION)
-    put("reasoning_per_mtok", "output_cost_per_reasoning_token", _MILLION)
-    put("audio_input_per_mtok", "input_cost_per_audio_token", _MILLION)
-    put("audio_output_per_mtok", "output_cost_per_audio_token", _MILLION)
-    put("audio_input_per_minute", "input_cost_per_second", Decimal(60))
-    put("per_1k_characters", "input_cost_per_character", Decimal(1000))
-    return found
-
-
-@dataclass(frozen=True, slots=True)
-class LongContext:
-    threshold: int
-    input_multiplier: Decimal
-    output_multiplier: Decimal
-
-
-def long_contexts(spec: Spec) -> list[LongContext]:
-    """Whole-request multipliers LiteLLM lists as `*_above_<N>k_tokens` input/output prices."""
-    base_in = spec.get("input_cost_per_token")
-    base_out = spec.get("output_cost_per_token")
-    found = []
-    for name in spec:
-        m = _ABOVE.match(name)
-        if m is None or base_in is None or to_decimal(base_in) == 0:
-            continue
-        in_mult = _CTX.divide(to_decimal(spec[name]), to_decimal(base_in))
-        above_out = spec.get(f"output_cost_per_token_above_{m.group(1)}k_tokens")
-        if above_out is not None and base_out is not None and to_decimal(base_out) != 0:
-            out_mult = _CTX.divide(to_decimal(above_out), to_decimal(base_out))
-        else:
-            out_mult = Decimal(1)
-        found.append(LongContext(int(m.group(1)) * 1000, in_mult, out_mult))
-    return sorted(found, key=lambda lc: lc.threshold)
-
-
-def index(data: Mapping[str, Spec]) -> dict[str, dict[str, list[Mapped]]]:
-    """Mappable LiteLLM entries by our id, then by variant (key order is kept)."""
-    found: dict[str, dict[str, list[Mapped]]] = defaultdict(lambda: defaultdict(list))
-    for key, spec in data.items():
-        if (m := map_key(key, spec)) is not None:
-            found[m.id][m.variant].append(m)
-    return found
-
-
-def base_entry(variants: Mapping[str, list[Mapped]]) -> Mapped | None:
-    for name in ("base", "alt"):
-        if variants.get(name):
-            return variants[name][0]
-    return None
 
 
 # --- our catalog -----------------------------------------------------------------------------
@@ -402,7 +242,7 @@ class Finding:
 
 @dataclass(slots=True)
 class Report:
-    commit: str
+    commit: str | None
     sha256: str
     litellm_entries: int
     mappable: int
@@ -852,74 +692,11 @@ def schema_errors(validator: "Draft202012Validator", entry: Mapping[str, Any]) -
     )
 
 
-def draft_entry(m: Mapped, source: Source, today: date) -> dict[str, Any]:
-    """A catalog entry (not yet validated) drafted from LiteLLM entry `m`, `verified: false`."""
-    slug = m.id.partition("/")[0]
-    spec = m.spec
-    mode = m.mode
-    if mode in {"chat", "responses"} and slug in {"anthropic", "bedrock"}:
-        mode = "messages"
-    elif mode == "chat" and slug == "azure_openai":
-        mode = "responses"
-    note = (
-        f"From LiteLLM {m.key} @ {source.commit[:12]} on {today}. Not checked: compare every "
-        "price with the provider's page before setting verified: true."
-    )
-    entry: dict[str, Any] = {
-        "id": m.id,
-        "mode": mode,
-        "currency": "USD",
-        "effective_from": today.isoformat(),
-        "source_url": source.url,
-        "verified": False,
-        "checked_on": today.isoformat(),
-        "note": note,
-    }
-    if slug == "azure_openai" or m.id.removeprefix("bedrock/").startswith("global."):
-        entry["deployment_type"] = "global"
-    conv = convert_meters(slug, spec)
-    if conv.get("reasoning_per_mtok") == conv.get("output_per_mtok"):
-        conv.pop("reasoning_per_mtok", None)  # priced as output already
-    entry["meters"] = {k: dec_str(v) for k, v in conv.items()}
-    listed = long_contexts(spec)
-    if len(listed) == 1:
-        lc = listed[0]
-        entry["long_context"] = {
-            "threshold_input_tokens": lc.threshold,
-            "input_multiplier": dec_str(lc.input_multiplier),
-            "output_multiplier": dec_str(lc.output_multiplier),
-        }
-    elif listed:
-        entry["note"] = entry["note"][:200] + " Several long-context tiers exist: none imported."
-    limits = {
-        name: int(to_decimal(spec[field_name]))
-        for name, field_name in (
-            ("max_output_tokens", "max_output_tokens"),
-            ("context_window", "max_input_tokens"),
-        )
-        if spec.get(field_name) is not None
-    }
-    if limits:
-        entry["limits"] = limits
-    if spec.get("deprecation_date") is not None:
-        entry["deprecation_date"] = str(spec["deprecation_date"])
-    return entry
-
-
-HEADER = """\
-# Drafted from LiteLLM's community price file ({commit}, sha256 {sha}) on {today}.
-# Every entry is verified: false. LiteLLM is a third party: its numbers can be wrong, stale or
-# changed by whoever controls that repository. spendgate prices calls with them as written, so
-# a wrong or zero price here means a wrong or missing charge in your ledger. Compare each price
-# with the provider's own page before relying on it, then set verified: true and checked_on.
-"""
-
-
-def dump_catalog(entries: Sequence[Mapping[str, Any]], header: str) -> str:
+def dump_catalog(entries: Sequence[Mapping[str, Any]], top: str) -> str:
     body = yaml.safe_dump(
         {"catalog_version": 1, "models": list(entries)}, sort_keys=False, width=100
     )
-    return header + body
+    return top + body
 
 
 def run_import(source: Source, names: Sequence[str], today: date) -> tuple[str, list[str]]:
@@ -936,8 +713,7 @@ def run_import(source: Source, names: Sequence[str], today: date) -> tuple[str, 
             problems.append(f"{name}: draft does not validate ({'; '.join(errors)})")
             continue
         entries.append(entry)
-    header = HEADER.format(commit=source.commit, sha=source.sha256, today=today)
-    return dump_catalog(entries, header), problems
+    return dump_catalog(entries, header(source, today)), problems
 
 
 def run_override(source: Source, ours: Iterable[Ours], today: date) -> tuple[str, list[str]]:
@@ -952,8 +728,7 @@ def run_override(source: Source, ours: Iterable[Ours], today: date) -> tuple[str
             skipped.append(m.key)
             continue
         entries.append(entry)
-    header = HEADER.format(commit=source.commit, sha=source.sha256, today=today)
-    return dump_catalog(entries, header), skipped
+    return dump_catalog(entries, header(source, today)), skipped
 
 
 # --- command line ----------------------------------------------------------------------------
