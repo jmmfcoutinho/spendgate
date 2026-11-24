@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import importlib.metadata
 import os
 import sys
 from collections.abc import Iterator
@@ -11,6 +10,7 @@ from dataclasses import dataclass
 import httpx
 import uvicorn
 
+from spendgate import package_version
 from spendgate.cli.client import EXIT_CONFIG, EXIT_OK
 from spendgate.cli.runtime import Runtime, open_runtime, system_ms
 from spendgate.config import ConfigError, Settings, check_config, load
@@ -30,17 +30,21 @@ def load_settings(path: str) -> Settings | int:
     try:
         return load(path, env=os.environ, now_ms=system_ms())
     except ConfigError as exc:
-        for where, message in exc.issues:
-            print(f"{path}: {where}: {message}" if where else f"{path}: {message}", file=sys.stderr)
-        return EXIT_CONFIG
+        return config_failed(path, exc)
+
+
+def config_failed(path: str, exc: ConfigError) -> int:
+    """Print each issue as `file: where: message`; the exit code for a bad configuration."""
+    for where, message in exc.issues:
+        print(f"{path}: {where}: {message}" if where else f"{path}: {message}", file=sys.stderr)
+    return EXIT_CONFIG
 
 
 def run_check_config(path: str) -> int:
     report = check_config(path, env=os.environ, now_ms=system_ms())
+    # An unpriced routed model is already one of the errors (`models.X.catalog_id`): not repeated.
     for error in report.errors:
         print(f"error: {error}", file=sys.stderr)
-    for model in report.unpriced:
-        print(f"warning: routed model {model} has no price in force", file=sys.stderr)
     if report.unverified is not None:
         print(f"warning: {report.unverified}", file=sys.stderr)
     for line in report.unmatched_filters:
@@ -127,10 +131,10 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         # Metrics are served by the admin app only (see gateway.admin): not given to the data app.
         upkeep = Maintenance(rt.ledger, settings, rt.now, logger)  # sweeper + retention
         data_app = create_app(pipeline, readiness=ready, background=upkeep.run)
-        version = importlib.metadata.version("spendgate")
         ctx = AdminContext(
-            rt.ledger, rt.keys, settings, rt.now, rt.now(), metrics, version, readiness=ready
-        )
+            rt.ledger, rt.keys, settings, rt.now, rt.now(), metrics, package_version(),
+            readiness=ready,
+        )  # fmt: skip
         separate = settings.config.server.admin
         admin_app = create_admin_app(ctx, shared_port=separate is None)
         main = parse_listen(settings.config.server.listen)

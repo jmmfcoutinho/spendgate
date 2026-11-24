@@ -11,36 +11,50 @@ import argparse
 import asyncio
 import json
 import os
+import shlex
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 import httpx
 
+from spendgate import package_version
 from spendgate.cli import serve
 from spendgate.cli.client import EXIT_AUTH, EXIT_OK, Client, CliError
 from spendgate.cli.commands import COMMANDS, Command
 from spendgate.cli.runtime import open_runtime
+from spendgate.config import ConfigError, read_config
 from spendgate.gateway.admin import create_admin_app
 from spendgate.gateway.admin_http import AdminContext
 
-DEFAULT_URL = "http://127.0.0.1:8081"
+FALLBACK_URL = "http://127.0.0.1:8080"  # no --url, $SPENDGATE_URL or config: the README's listen
 ENV_KEY, ENV_URL, ENV_CONFIG = "SPENDGATE_ADMIN_KEY", "SPENDGATE_URL", "SPENDGATE_CONFIG"
+DEFAULT_CONFIG = "spendgate.yaml"
 LOCAL_ACTOR = "cli"
+_WILDCARD = {"0.0.0.0": "127.0.0.1", "::": "::1"}  # noqa: S104 - a bind-all address, mapped away
 
 
 type Sub = "argparse._SubParsersAction[argparse.ArgumentParser]"
 
 
-def _common() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(add_help=False)
-    default_config = os.environ.get(ENV_CONFIG, "spendgate.yaml")
-    p.add_argument("--config", default=default_config, help="spendgate.yaml")
-    p.add_argument(
-        "--url", default=os.environ.get(ENV_URL, DEFAULT_URL), help=f"admin API URL (${ENV_URL})"
+def _parents() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
+    """`--config` for every command; `--url`, `--local` and `--json` for admin commands only.
+
+    Defaults are None so `main` can tell what the user typed (echoed in hints) from defaults.
+    """
+    config = argparse.ArgumentParser(add_help=False)
+    config.add_argument(
+        "--config", help=f"configuration file (${ENV_CONFIG}, else {DEFAULT_CONFIG})"
     )
-    p.add_argument("--local", action="store_true", help="use the ledger in --config, not the API")
-    p.add_argument("--json", action="store_true", help="print the API's JSON")
-    return p
+    admin = argparse.ArgumentParser(add_help=False, parents=[config])
+    admin.add_argument(
+        "--url", help=f"admin API URL (${ENV_URL}, else server.admin.listen or server.listen)"
+    )
+    admin.add_argument(
+        "--local", action="store_true", help="use the ledger in --config, not the API"
+    )
+    admin.add_argument("--json", action="store_true", help="print the API's JSON")
+    return config, admin
 
 
 def _leaf(
@@ -101,20 +115,21 @@ def _budgets(top: Sub, common: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    common = _common()
+    config, common = _parents()
     parser = argparse.ArgumentParser(
         prog="spendgate",
         description="spendgate: a hard LLM spend guard",
         epilog=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--version", action="version", version=f"spendgate {package_version()}")
     top = parser.add_subparsers(dest="command", required=True)
-    s = top.add_parser("serve", parents=[common], help="run the gateway and the admin API")
+    s = top.add_parser("serve", parents=[config], help="run the gateway and the admin API")
     s.add_argument("--no-bootstrap", action="store_true", help="skip the config bootstrap section")
     top.add_parser(
-        "check-config", parents=[common], help="validate the configuration, start nothing"
+        "check-config", parents=[config], help="validate the configuration, start nothing"
     )
-    m = top.add_parser("migrate", parents=[common], help="create or upgrade the ledger schema")
+    m = top.add_parser("migrate", parents=[config], help="create or upgrade the ledger schema")
     m.add_argument("--bootstrap", action="store_true", help="then apply the bootstrap section")
     _keys(top, common)
     _budgets(top, common)
@@ -138,6 +153,24 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def admin_url(args: argparse.Namespace) -> str | int:
+    """`--url`, else `$SPENDGATE_URL`, else the listener in `--config`; or the exit code."""
+    if args.url is not None:
+        return str(args.url)
+    if from_env := os.environ.get(ENV_URL):
+        return from_env
+    path = Path(args.config)
+    if not args.config_given and not path.exists():
+        return FALLBACK_URL  # a client host without the server's file
+    try:
+        server = read_config(path).server
+    except ConfigError as exc:
+        return serve.config_failed(args.config, exc)
+    at = serve.parse_listen(server.listen if server.admin is None else server.admin.listen)
+    host = _WILDCARD.get(at.host, at.host)  # a bind-all listener is reached on loopback
+    return f"http://{f'[{host}]' if ':' in host else host}:{at.port}"
+
+
 async def _run_admin(args: argparse.Namespace) -> int:
     command = COMMANDS[f"{args.command} {args.action}" if "action" in args else args.command]
     if args.local:
@@ -154,8 +187,11 @@ async def _run_admin(args: argparse.Namespace) -> int:
     key = os.environ.get(ENV_KEY, "")
     if not key:
         raise CliError(EXIT_AUTH, f"set {ENV_KEY} to an admin key (sga-...), or use --local")
+    url = admin_url(args)
+    if isinstance(url, int):
+        return url
     async with httpx.AsyncClient(
-        base_url=args.url.rstrip("/"), headers={"Authorization": f"Bearer {key}"}, timeout=30.0
+        base_url=url.rstrip("/"), headers={"Authorization": f"Bearer {key}"}, timeout=30.0
     ) as http:
         return await _emit(command, Client(http), args)
 
@@ -166,8 +202,20 @@ async def _emit(command: Command, client: Client, args: argparse.Namespace) -> i
     return EXIT_OK
 
 
+def resolve_defaults(args: argparse.Namespace) -> None:
+    """Fill the defaults left as None, keeping the flags the user typed for hints (`a.again`)."""
+    typed = ["--local"] if getattr(args, "local", False) else []
+    for flag in ("config", "url"):
+        if getattr(args, flag, None) is not None:
+            typed += [f"--{flag}", shlex.quote(getattr(args, flag))]
+    args.again = "".join(f" {t}" for t in typed)
+    args.config_given = args.config is not None or bool(os.environ.get(ENV_CONFIG))
+    args.config = args.config or os.environ.get(ENV_CONFIG) or DEFAULT_CONFIG
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    resolve_defaults(args)
     try:
         match args.command:
             case "serve":

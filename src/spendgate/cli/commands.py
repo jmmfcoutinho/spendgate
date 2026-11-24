@@ -52,9 +52,22 @@ def _compact(**fields: object) -> Json:
 # --- keys ------------------------------------------------------------------------------------
 
 
-def _key_rows(keys: list[Json]) -> str:
+async def _scope_path(c: Client, scope_id: object) -> object:
+    """The scope's path (`org:acme/service:api`), or its id when the lookup is refused.
+
+    A key without the read scope can still create keys: the secret must print all the same.
+    """
+    try:
+        return (await c.call("GET", f"{BASE}/scopes/{scope_id}"))["path"]
+    except CliError:
+        return scope_id
+
+
+async def _key_rows(c: Client, keys: list[Json]) -> str:
+    """The SCOPE column shows each scope's path, not its id."""
+    paths = {s: await _scope_path(c, s) for s in dict.fromkeys(k["scope_id"] for k in keys)}
     rows = [
-        (k["id"], k["name"], k["scope_id"], k["prefix"], dash(k["expires_at"]), k["revoked"])
+        (k["id"], k["name"], paths[k["scope_id"]], k["prefix"], dash(k["expires_at"]), k["revoked"])
         for k in keys
     ]
     return table(("ID", "NAME", "SCOPE", "PREFIX", "EXPIRES", "REVOKED"), rows)
@@ -69,7 +82,7 @@ async def keys_create(c: Client, a: Namespace) -> Output:
         allowed_models=a.models.split(",") if a.models else None, limits=limits or None,
     )  # fmt: skip
     made = await c.call("POST", f"{BASE}/keys", body=body)
-    text = f"{_key_rows([made])}\n\nsecret (shown once, store it now): {made['secret']}"
+    text = f"{await _key_rows(c, [made])}\n\nsecret (shown once, store it now): {made['secret']}"
     return made, text
 
 
@@ -96,7 +109,7 @@ async def keys_update(c: Client, a: Namespace) -> Output:
 async def keys_list(c: Client, a: Namespace) -> Output:
     query = _strs(scope_id=a.scope, include_revoked="true" if a.include_revoked else None)
     data = await c.call("GET", f"{BASE}/keys", query=query)
-    return data, _key_rows(items(data))
+    return data, await _key_rows(c, items(data))
 
 
 async def keys_revoke(c: Client, a: Namespace) -> Output:
@@ -168,10 +181,10 @@ async def kill_on(c: Client, a: Namespace) -> Output:
     kind = next((k for k in ("scope", "key", "provider", "model") if getattr(a, k)), "global")
     body = _compact(target_kind=kind, target_ref=getattr(a, kind, None), reason=a.reason)
     made = await c.call("POST", f"{BASE}/kill-switches", body=body)
-    return (
-        made,
-        f"kill switch {made['id']} engaged ({kind}); lift it with: spendgate kill off {made['id']}",
-    )
+    # The same --local/--config/--url the user typed, so the hint works when pasted as is.
+    again = getattr(a, "again", "")
+    lift = f"spendgate kill off {made['id']}{again}"
+    return made, f"kill switch {made['id']} engaged ({kind}); lift it with: {lift}"
 
 
 async def kill_off(c: Client, a: Namespace) -> Output:

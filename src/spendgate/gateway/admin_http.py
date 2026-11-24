@@ -11,7 +11,7 @@ import logging
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final
 
@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from spendgate import package_version
 from spendgate.config import Settings
 from spendgate.core.errors import ERROR_SPECS, DetailValue, ErrorCode, Refusal
 from spendgate.core.money import Money
@@ -55,7 +56,7 @@ class AdminContext:
     now: Clock
     started_ms: int
     metrics: Metrics | None = None
-    version: str = "0.0.0"
+    version: str = field(default_factory=package_version)
     # CLI `--local` only: requests need no admin key and are audited under this actor. The
     # caller already holds the ledger itself (file or DSN), which is a stronger credential.
     trusted_actor: str | None = None
