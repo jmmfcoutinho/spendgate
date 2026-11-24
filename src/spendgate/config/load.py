@@ -26,7 +26,6 @@ from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
 from spendgate.core.policy import model_filter_matches
 
 _MS = 1000
-_NOT_HTTPS = "must be an https:// URL (http:// only for localhost)"
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
 
@@ -293,18 +292,17 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
 
 
 def _base_url_issue(url: str) -> str | None:
-    if not url.isprintable() or any(c.isspace() for c in url):
-        return _NOT_HTTPS  # urlsplit drops tabs and newlines before it reads the host
     scheme = url.partition("://")[0]
+    plain = url.isprintable() and not any(c.isspace() for c in url)  # urlsplit drops tabs, CR, LF
     try:  # the host as the HTTP client parses it: an `@` after a `?` or `#` is not userinfo
-        host = urlsplit(url).hostname or ""
+        host = (urlsplit(url).hostname or "") if plain else ""
     except ValueError:  # e.g. an unclosed `[` in an IPv6 literal
         host = ""
     if scheme == "https" and host:
         return None
     if scheme == "http" and host in _LOOPBACK:
         return None  # plain HTTP only to this machine (tests, sidecars)
-    return _NOT_HTTPS
+    return "must be an https:// URL (http:// only for localhost)"
 
 
 def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
@@ -317,9 +315,8 @@ def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
     if url is not None and (problem := _base_url_issue(url.reveal())) is not None:
         ctx.issues.append(("alerts.webhook.url", problem))
         return None
-    # The HMAC key is the secret's UTF-8 bytes. An environment value that is not valid UTF-8
-    # arrives with surrogate escapes (the only text UTF-8 cannot encode) and would fail only
-    # when the first warning is signed, so it is refused here.
+    # The HMAC key is the secret's UTF-8 bytes. A non-UTF-8 environment value arrives as
+    # surrogate escapes (the only text UTF-8 cannot encode) and would fail only when signing.
     if key is not None and any("\ud800" <= c <= "\udfff" for c in key.reveal()):
         ctx.issues.append(("alerts.webhook.signing_secret", "must be UTF-8 text"))
         return None
