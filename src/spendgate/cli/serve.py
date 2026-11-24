@@ -50,6 +50,8 @@ def run_check_config(path: str) -> int:
         print(f"error: {error}", file=sys.stderr)
     if report.unverified is not None:
         print(f"warning: {report.unverified}", file=sys.stderr)
+    if report.superseded is not None:
+        print(f"warning: {report.superseded}", file=sys.stderr)
     for line in report.unmatched_filters:
         print(f"warning: {line}", file=sys.stderr)
     if report.ok:
