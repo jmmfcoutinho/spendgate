@@ -51,7 +51,9 @@ All notable changes to this project are documented here. The format follows
   library mode, where each `guard()` client now admits 16 calls at once unless `concurrency=`
   says otherwise (`concurrency=None` for no bound), and
   `session_defaults.max_new_sessions_per_hour` is 60 when a key's session defaults leave it out,
-  in the config and the admin API (it was unlimited). An explicit `null` keeps either unlimited.
+  in the config and the admin API (it was unlimited). An explicit `null` keeps either unlimited,
+  and a key in an admin API response shows `max_new_sessions_per_hour: null` when unbounded, so
+  sending back what a GET returned keeps it.
   Keys already stored keep the session limits they were created with. The example config has
   an agent key with `session_required` and these limits, and `how-money-is-protected.md` states
   the overrun bound at a cap crossing that the concurrency limit gives.

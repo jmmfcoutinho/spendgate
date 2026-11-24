@@ -32,7 +32,9 @@ Issue #29: the defaults left an agent more room than the session design suggests
   `session_defaults` and the admin API's `session_defaults` object). An explicit `null` keeps it
   unlimited: the schema already allowed `null`, and an operator who wants unlimited minting says
   so in writing. 60 is one new session a minute, well above a human starting runs and well below
-  an agent minting an id per call.
+  an agent minting an id per call. A key in an admin API response always carries
+  `max_new_sessions_per_hour` (`null` when unbounded), so sending back what a GET returned does
+  not turn an opt-out into the default.
 - `defaults.limits.concurrency` defaults to 16, the value the Compose reference and the example
   config already set. It applies to every key without its own `concurrency`, in the proxy and in
   library mode, where `guard(concurrency=...)` changes it (`None`: no bound). An explicit `null`

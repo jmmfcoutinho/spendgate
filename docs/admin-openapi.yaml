@@ -566,7 +566,9 @@ components:
         On keys only (column keys.session_defaults). A session header on a key without defaults is
         `invalid_request`. Clients cannot request limits. Money is integer nano-units. Absent
         limits are not enforced, except `max_new_sessions_per_hour`, which is 60 when absent from a
-        request body; send `null` to remove that bound.
+        request body; send `null` to remove that bound. A key in a response always carries
+        `max_new_sessions_per_hour` (`null` when unbounded), so sending back what a GET returned
+        keeps the stored value.
       additionalProperties: false
       properties:
         budget_nano: {type: integer, minimum: 0}

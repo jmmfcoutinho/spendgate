@@ -53,7 +53,11 @@ def key_json(rec: KeyRecord) -> Json:
     if policy.allowed_models is not None:
         out["allowed_models"] = list(policy.allowed_models)
     if policy.session_defaults is not None:
-        out["session_defaults"] = _present(policy.session_defaults, _SESSION_FIELDS)
+        sessions = _present(policy.session_defaults, _SESSION_FIELDS)
+        # Absent in a request means 60, so an unbounded key shows `null`: a GET-then-PATCH round
+        # trip must not turn an explicit opt-out into the default.
+        sessions.setdefault("max_new_sessions_per_hour", None)
+        out["session_defaults"] = sessions
     return out
 
 

@@ -58,10 +58,14 @@ async def test_key_update_keeps_session_required_unless_it_is_sent(tmp_path: Pat
             "POST", f"{BASE}/keys", 201,
             json={"scope_id": PATH, "session_defaults": {"max_new_sessions_per_hour": None}},
         )  # fmt: skip
-        assert made["session_defaults"] == {}  # null opts out of the new-session bound
+        unbounded = {"max_new_sessions_per_hour": None}  # null opts out, and is shown as null
+        assert made["session_defaults"] == unbounded
         url = f"{BASE}/keys/{made['id']}"
         on = await a.ok("PATCH", url, json={"session_required": True})
-        assert on["session_required"] is True and on["session_defaults"] == {}
+        assert on["session_required"] is True and on["session_defaults"] == unbounded
+        got = await a.ok("GET", url)  # sending back what a GET returned keeps the opt-out
+        again = await a.ok("PATCH", url, json={"session_defaults": got["session_defaults"]})
+        assert again["session_defaults"] == unbounded
         limits = await a.ok("PATCH", url, json={"session_defaults": {"max_steps": 3}})
         assert limits["session_required"] is True  # new limits keep the flag
         assert limits["session_defaults"] == {"max_steps": 3, "max_new_sessions_per_hour": 60}
