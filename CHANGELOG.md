@@ -156,6 +156,11 @@ All notable changes to this project are documented here. The format follows
 - `spendgate_requests_total` on refused calls no longer takes its `model` label from the request
   body. It is the routed model's catalog id, as on settled calls, or `unknown` when the request
   names no routed model, so clients cannot create a new series per model string they send.
+- A settle that arrives after the sweeper expired its hold now also updates the reservation's
+  `charged_nano` (as the ledger's `get_reservation` reads it) to the hold plus the late overrun,
+  in the same transaction. Before, the reservation kept showing only the swept hold
+  while the budget and the call row already carried the overrun. Reporting only: the money
+  booked to the budgets was already correct.
 
 ## [0.1.1] - 2026-11-20
 

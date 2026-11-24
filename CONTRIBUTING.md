@@ -117,7 +117,7 @@ Feeds `docs/how-money-is-protected.md`. Each rule gets an id, one sentence, the 
 | M-01 | One reservation per client request, pending across attempts; hold = max over candidate deployments | | ledger-state-machine.md, scenario 4 (T-MON-02) |
 | M-02 | A hold on an existing request id raises `conflict`; `release` is final and only when `not_processed` holds for every attempt | | scenarios 11 (T-MON-01) |
 | M-03 | Reported usage is always booked, never clamped; the sanity cap only flags | | scenario 8, threat-model C-22 |
-| M-04 | A late settle after `expired` books `max(0, charge - held)` as overrun and updates the sweeper's row | | scenario 13 (T-MON-03) |
+| M-04 | A late settle after `expired` books `max(0, charge - held)` as overrun and updates the sweeper's row and the reservation's `charged_nano` | | scenario 13 (T-MON-03) |
 | M-05 | Owner and sweeper race on one hold: exactly one money transition | | scenario 12 (T-MON-10) |
 | M-06 | Effective cap = cap + active grants; expiry records `excess` lazily; `spent + held <= effective_cap + overrun + excess` | | scenario 10 (T-MON-04) |
 | M-07 | An overrun inside the cap never blocks; a breach with `strict_overrun` blocks until `ack-overrun` | | scenarios 8, 15 (T-MON-05) |
