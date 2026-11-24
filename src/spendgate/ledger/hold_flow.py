@@ -7,8 +7,11 @@ from spendgate.core.budgets import (
     AlertKind,
     Budget,
     BudgetAlert,
+    Period,
+    PeriodState,
     ScopeKind,
     check_admission,
+    effective_cap,
     period_start,
 )
 from spendgate.core.errors import ErrorCode, LimitName, Refusal
@@ -24,14 +27,15 @@ from spendgate.ledger.common import (
     HOUR_MS,
     Ctx,
     budget_alert,
-    ensure_period,
+    budget_from,
     i,
-    lock_budget,
     normalise_budgets,
     oi,
+    period_state,
     s,
 )
 from spendgate.ledger.port import (
+    BudgetRoom,
     ConflictError,
     Held,
     HeldItem,
@@ -57,24 +61,31 @@ class _Session:
     existed: bool  # False = created in this transaction, so a rollback removes it
 
 
-type _Check = tuple[Budget, int, Admission]  # budget, period start, verdict
+type _Check = tuple[Budget, int, PeriodState, Admission]  # budget, period start, state, verdict
 
 
 def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
     """Check kill switches, the session and every budget, then insert the hold, atomically.
 
     Locks are taken in the documented order: session scope row, then budget rows ascending.
-    Any refusal rolls back the whole hold (no step, no session row, no partial hold).
+    Any refusal rolls back the whole hold (no step, no session row, no partial hold). The reads
+    that need no lock go in one batch, the budget locks in a second, the writes with the COMMIT.
     """
     if req.worst_nano < 0:
         raise ValueError("worst_nano must not be negative")
-    if (yield q(sql.RES_EXISTS, id=req.request_id)):
+    exists, chain_rows, kill_rows, budget_rows = yield from sql.batch(
+        q(sql.RES_EXISTS, id=req.request_id),
+        q(sql.CHAIN, leaf=req.key.scope_id),
+        q(sql.KILL_ACTIVE),
+        q(sql.CHAIN_BUDGETS, leaf=req.key.scope_id),
+    )
+    if exists:
         raise ConflictError(f"reservation {req.request_id} already exists")
-    chain = yield from _chain(req.key.scope_id)
+    chain = _chain(req.key.scope_id, chain_rows)
     for scope in chain:
         if scope.disabled_at is not None and scope.disabled_at <= req.now:
             return _forbidden("scope_disabled", f"Scope {scope.path} is disabled.", scope.path)
-    if (killed := (yield from _kill_switch(req, chain))) is not None:
+    if (killed := _kill_switch(req, chain, kill_rows)) is not None:
         return killed
     session: _Session | None = None
     if req.session is not None:
@@ -82,26 +93,51 @@ def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
         if isinstance(admitted, Refused):
             return admitted
         session = admitted
+        budget_rows = yield q(sql.CHAIN_BUDGETS, leaf=session.scope.id)  # adds its own budget
     leaf = session.scope if session else chain[0]
     scopes = {c.id: c for c in [leaf, *chain]}
-    owners = yield from _budget_owners(req, leaf.id)
+    owners = _budget_owners(req, budget_rows)
     checks: list[_Check] = []
-    for budget_id, scope_id in owners.items():  # ascending id: the lock order
-        owner = scopes.get(scope_id)
-        hint = (owner.kind, owner.path) if owner else None
-        budget = yield from lock_budget(budget_id, hint, skip_disabled=True)
-        if budget is None:
-            continue
-        start = period_start(budget.period, req.now)
-        state = yield from ensure_period(budget_id, start)
+    for budget, start, state in (yield from _lock_budgets(req.now, owners, scopes)):
         verdict = check_admission(budget, state, req.worst_nano, req.now, ctx.currency)
         if verdict.refusal is not None:
             return (yield from _refuse(req, verdict.refusal, list(owners), session))
-        checks.append((budget, start, verdict))
+        checks.append((budget, start, state, verdict))
     if not checks:  # no active budget would mean no limit at all: fail closed (ADR-0003)
         yield Tx.ROLLBACK  # drop a session row created above
         return _forbidden("no_budget", "No active budget applies to this key.", leaf.path)
     return (yield from _admit(req, leaf, session, checks))
+
+
+def _lock_budgets(
+    now: int, owners: dict[str, tuple[str, Period]], scopes: dict[str, _Scope]
+) -> Flow[list[tuple[Budget, int, PeriodState]]]:
+    """Lock each enabled budget (ascending id), read its grants and current period, one batch.
+
+    The period start comes from the budget's period, which never changes once it is created.
+    """
+    stmts: list[sql.Stmt] = []
+    for budget_id, (_, period) in owners.items():
+        start = period_start(period, now)
+        stmts += [
+            q(sql.BUDGET_LOCK, id=budget_id),
+            q(sql.GRANTS_OF, id=budget_id),
+            q(sql.PERIOD_ENSURE_LIVE, budget_id=budget_id, period_start=start),
+            q(sql.PERIOD_GET, budget_id=budget_id, period_start=start),
+        ]
+    results = yield from sql.batch(*stmts)
+    out: list[tuple[Budget, int, PeriodState]] = []
+    for n, (scope_id, _) in enumerate(owners.values()):
+        rows, grants, _, found = results[4 * n : 4 * n + 4]
+        if not rows or rows[0]["disabled_at"] is not None:
+            continue  # deleted or disabled since the chain was read: not a limit any more
+        owner = scopes.get(scope_id)
+        budget = budget_from(rows[0], grants, (owner.kind, owner.path) if owner else None)
+        start = period_start(budget.period, now)
+        if not found or i(found[0], "period_start") != start:  # unreachable; never guess
+            raise LedgerError(f"budget {budget.id}: no period row for {start}")
+        out.append((budget, start, period_state(found[0])))
+    return out
 
 
 def _forbidden(reason: str, message: str, scope: str) -> Refused:
@@ -109,8 +145,7 @@ def _forbidden(reason: str, message: str, scope: str) -> Refused:
     return Refused(Refusal(ErrorCode.FORBIDDEN, message, None, details))
 
 
-def _chain(leaf_id: str) -> Flow[list[_Scope]]:
-    rows = yield q(sql.CHAIN, leaf=leaf_id)
+def _chain(leaf_id: str, rows: list[Row]) -> list[_Scope]:
     if not rows:
         raise NotFoundError(f"scope {leaf_id} does not exist")
     return [
@@ -119,8 +154,7 @@ def _chain(leaf_id: str) -> Flow[list[_Scope]]:
     ]
 
 
-def _kill_switch(req: HoldRequest, chain: list[_Scope]) -> Flow[Refused | None]:
-    rows = yield q(sql.KILL_ACTIVE)
+def _kill_switch(req: HoldRequest, chain: list[_Scope], rows: list[Row]) -> Refused | None:
     switches = [KillSwitch(KillTarget(s(r, "target_kind")), s(r, "target_ref")) for r in rows]
     hit = matching_kill_switch(switches, req.key, [c.id for c in chain], req.model, req.providers)
     if hit is None:
@@ -130,19 +164,20 @@ def _kill_switch(req: HoldRequest, chain: list[_Scope]) -> Flow[Refused | None]:
     )
 
 
-def _budget_owners(req: HoldRequest, leaf_id: str) -> Flow[dict[str, str]]:
-    """Budget id -> owning scope id, ascending by id: the chain plus any budget the plan names."""
-    rows = yield q(sql.CHAIN_BUDGETS, leaf=leaf_id)
-    wanted: dict[str, str] = {}
+def _budget_owners(req: HoldRequest, rows: list[Row]) -> dict[str, tuple[str, Period]]:
+    """Budget id -> (owning scope id, period), ascending by id: the chain plus any budget the plan
+    names."""
+    wanted: dict[str, tuple[str, Period]] = {}
     for row in rows:
         pattern = row["model_filter"]
         if pattern is None or (
             isinstance(pattern, str) and model_filter_matches(pattern, req.model)
         ):
-            wanted[s(row, "id")] = s(row, "scope_id")
+            wanted[s(row, "id")] = (s(row, "scope_id"), Period(s(row, "period")))
     if req.plan is not None:
         for planned in req.plan.budgets:  # a stale plan may add a budget, never remove one
-            wanted.setdefault(planned.budget.id, planned.budget.scope_id)
+            budget = planned.budget
+            wanted.setdefault(budget.id, (budget.scope_id, budget.period))
     return dict(sorted(wanted.items()))
 
 
@@ -273,45 +308,63 @@ def _refuse(
 def _admit(
     req: HoldRequest, leaf: _Scope, session: _Session | None, checks: list[_Check]
 ) -> Flow[Held]:
-    items: list[HeldItem] = []
+    """Book the hold on every budget and insert the reservation, sent with the COMMIT."""
+    items = tuple(HeldItem(b.id, start, req.worst_nano) for b, start, _, _ in checks)
     alerts: list[BudgetAlert] = []
-    for budget, start, verdict in checks:
-        warning = verdict.warning
-        yield q(
+    for budget, start, _, verdict in checks:  # read first: nothing may follow the last writes
+        if (warning := verdict.warning) is not None:  # soft_alerted_at keeps it once per period
+            used, cap = warning.used_nano, warning.effective_cap_nano
+            alerts.append(
+                (yield from budget_alert(AlertKind.SOFT_THRESHOLD, budget, start, used, cap))
+            )
+    lease_until = req.now + req.lease_ms
+    session_id = session.scope.id if session else None
+    yield from sql.finish(*_hold_writes(req, leaf.id, session_id, checks, lease_until))
+    warnings = tuple(v.warning for _, _, _, v in checks if v.warning is not None)
+    rooms = tuple(
+        BudgetRoom(
+            b.id,
+            b.scope_id,
+            effective_cap(b, req.now) - p.spent_nano - p.held_nano - req.worst_nano,
+        )
+        for b, _, p, _ in checks
+    )
+    return Held(req.request_id, lease_until, items, session_id, warnings, tuple(alerts), rooms)
+
+
+def _hold_writes(
+    req: HoldRequest, leaf_id: str, session_id: str | None, checks: list[_Check], lease: int
+) -> list[sql.Stmt]:
+    """`H += worst` on every budget, the reservation, its items and the session step."""
+    writes = [
+        q(
             sql.PERIOD_HOLD,
             budget_id=budget.id,
             period_start=start,
             worst=req.worst_nano,
             excess=verdict.excess_nano,
-            soft=req.now if warning is not None else None,
+            soft=req.now if verdict.warning is not None else None,
         )
-        items.append(HeldItem(budget.id, start, req.worst_nano))
-        if warning is not None:  # soft_alerted_at, written above, keeps it once per period
-            kind = AlertKind.SOFT_THRESHOLD
-            used, cap = warning.used_nano, warning.effective_cap_nano
-            alerts.append((yield from budget_alert(kind, budget, start, used, cap)))
-    lease_until = req.now + req.lease_ms
-    yield q(
-        sql.RES_INSERT,
-        id=req.request_id,
-        owner=req.instance,
-        lease=lease_until,
-        key_id=req.key.id,
-        scope_id=leaf.id,
-        session_id=session.scope.id if session else None,
-        meta=req.meta.to_json(),
-        now=req.now,
-    )
-    for item in items:
-        yield q(
-            sql.ITEM_INSERT,
+        for budget, start, _, verdict in checks
+    ]
+    writes.append(
+        q(
+            sql.RES_INSERT,
             id=req.request_id,
-            budget_id=item.budget_id,
-            period_start=item.period_start,
-            held=item.held_nano,
+            owner=req.instance,
+            lease=lease,
+            key_id=req.key.id,
+            scope_id=leaf_id,
+            session_id=session_id,
+            meta=req.meta.to_json(),
+            now=req.now,
         )
-    if session is not None:
-        yield q(sql.SESSION_TOUCH, id=session.scope.id, now=req.now)
-    warnings = tuple(v.warning for _, _, v in checks if v.warning is not None)
-    session_id = session.scope.id if session else None
-    return Held(req.request_id, lease_until, tuple(items), session_id, warnings, tuple(alerts))
+    )
+    writes += [
+        q(sql.ITEM_INSERT, id=req.request_id, budget_id=b.id, period_start=start,
+          held=req.worst_nano)
+        for b, start, _, _ in checks
+    ]  # fmt: skip
+    if session_id is not None:
+        writes.append(q(sql.SESSION_TOUCH, id=session_id, now=req.now))
+    return writes

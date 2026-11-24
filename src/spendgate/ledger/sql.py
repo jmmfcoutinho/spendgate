@@ -1,16 +1,16 @@
 # ruff: noqa: S608  (statements splice module-level constants only, never input; see docstring)
 """SQL shared by the SQLite and Postgres backends, written once with named parameters.
 
-Statements use `:name` parameters and the tokens `$LOCK`, `$SKIP_LOCKED` and `$TAGS`. `render`
-turns them into the driver's own dialect, so the only things that differ between backends are in
-`Dialect`.
+Statements use `:name` parameters and the tokens `$LOCK`, `$SKIP_LOCKED`, `$TAGS` and `$JSON_IDS`.
+`render` turns them into the driver's own dialect, so the only things that differ between backends
+are in `Dialect`.
 Parameterised SQL only (C-11): values never get formatted into statement text; the two
 f-strings below splice module-level column names, never input.
 """
 
 import re
 from collections.abc import Generator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from functools import cache
 
@@ -25,6 +25,7 @@ class Dialect:
     pyformat: bool  # psycopg `%(name)s` instead of `:name`
     tag_join: str = ""  # appended where `$TAGS` stands: joins `t(key, value)`, one row per label
     skip_locked: str = ""  # `$SKIP_LOCKED`: lock the row, or leave it out if another session has
+    json_ids: str = ""  # `$JSON_IDS`: the text values of the JSON array parameter `:ids`, as rows
 
 
 # BEGIN IMMEDIATE already serialises SQLite writers. Tag joins: one row per label of the call, and
@@ -34,6 +35,7 @@ SQLITE = Dialect(
     "",
     pyformat=False,
     tag_join="LEFT JOIN json_each(COALESCE(c.labels, '{}')) AS t ON 1",
+    json_ids="SELECT value FROM json_each(:ids)",
 )
 POSTGRES = Dialect(
     "postgres",
@@ -42,6 +44,7 @@ POSTGRES = Dialect(
     tag_join="LEFT JOIN LATERAL jsonb_each_text(CAST(COALESCE(c.labels, '{}') AS JSONB)) "
     "AS t(key, value) ON TRUE",
     skip_locked=" FOR NO KEY UPDATE SKIP LOCKED",
+    json_ids="SELECT jsonb_array_elements_text(CAST(:ids AS JSONB))",
 )
 
 _PARAM = re.compile(r"(?<![:\w]):(\w+)")
@@ -50,7 +53,7 @@ _PARAM = re.compile(r"(?<![:\w]):(\w+)")
 @cache
 def render(sql: str, dialect: Dialect) -> str:
     text = sql.replace("$SKIP_LOCKED", dialect.skip_locked).replace("$LOCK", dialect.lock)
-    text = text.replace("$TAGS", dialect.tag_join)
+    text = text.replace("$TAGS", dialect.tag_join).replace("$JSON_IDS", dialect.json_ids)
     if dialect.pyformat:
         text = _PARAM.sub(r"%(\1)s", text.replace("%", "%%"))
     return text
@@ -70,13 +73,56 @@ class Tx(Enum):
     ROLLBACK = "rollback"
 
 
-# A flow is a transaction written without I/O: it yields statements (or transaction control)
-# and is sent the rows each one returned. Both backends run the same flows.
-type Flow[T] = Generator[Stmt | Tx, list[Row], T]
+@dataclass(frozen=True, slots=True)
+class Batch:
+    """Statements that do not depend on each other's rows: Postgres sends them in one round trip.
+
+    They still run one after the other, in order, so locks are taken in the order listed. The
+    driver puts one row list per statement into `results` (the flow is sent no rows). `last` marks
+    a flow's final writes: the driver resumes the flow first, which must then finish, and sends
+    the statements together with the COMMIT, so their results are never seen (see `finish`).
+    """
+
+    stmts: tuple[Stmt, ...]
+    last: bool = False
+    results: list[list[Row]] = field(default_factory=list, compare=False)
+
+
+# A flow is a transaction written without I/O: it yields statements, batches of them (or
+# transaction control) and is sent the rows each one returned. Both backends run the same flows.
+type Flow[T] = Generator[Stmt | Batch | Tx, list[Row], T]
 
 
 def q(sql: str, **params: Value) -> Stmt:
     return Stmt(sql, params)
+
+
+def batch(*stmts: Stmt) -> Generator[Batch, list[Row], list[list[Row]]]:
+    """Run independent statements together; their rows, one list per statement, in order."""
+    sent = Batch(stmts)
+    yield sent
+    if len(sent.results) != len(stmts):
+        raise RuntimeError("the driver did not return one row list per batched statement")
+    return sent.results
+
+
+def end_of[T](flow: Flow[T]) -> T:
+    """The driver's half of `finish`: resume the flow after its last batch; it must return."""
+    try:
+        flow.send([])
+    except StopIteration as done:
+        result: T = done.value
+        return result
+    raise RuntimeError("a flow yielded a statement after its last batch")
+
+
+def finish(*stmts: Stmt) -> Generator[Batch, list[Row]]:
+    """A flow's last statements (writes whose rows it does not need), sent with the COMMIT.
+
+    Nothing may be yielded after this: the flow returns, and only then are these sent.
+    """
+    if stmts:
+        yield Batch(stmts, last=True)
 
 
 # --- reservations ----------------------------------------------------------------------------
@@ -105,12 +151,14 @@ RES_EXPIRE = f"""UPDATE reservations SET state = 'expired', outcome = 'expired',
 RES_LATE = "UPDATE reservations SET charged_nano = :charged WHERE id = :id AND state = 'expired'"
 RES_GET = """SELECT id, state, owner_instance, lease_expires_at, key_id, scope_id, session_id,
   outcome, charged_nano, meta, created_at FROM reservations WHERE id = :id"""
-# One id at a time: the caller names the holds it still owns (a hold nobody owns must expire).
-# A locked row is skipped, not waited for (up to lock_timeout, failing the whole heartbeat): it is
-# being closed by its owner, or expired by a sweeper because its lease is already overdue.
+# One statement for every hold the caller names (a JSON array in `:ids`): only those it still
+# owns, as a hold nobody owns must expire. A locked row is skipped, not waited for (up to
+# lock_timeout, failing the whole heartbeat): it is being closed by its owner, or expired by a
+# sweeper because its lease is already overdue.
 RES_RENEW = """UPDATE reservations SET lease_expires_at = :until
   WHERE id IN (SELECT id FROM reservations
-    WHERE id = :id AND owner_instance = :owner AND state = 'pending' $SKIP_LOCKED) RETURNING id"""
+    WHERE id IN ($JSON_IDS) AND owner_instance = :owner AND state = 'pending'
+    ORDER BY id $SKIP_LOCKED) RETURNING id"""
 RES_DUE = """SELECT id FROM reservations WHERE state = 'pending' AND lease_expires_at < :now
   ORDER BY lease_expires_at, id LIMIT :limit"""
 SESSION_PENDING = """SELECT COUNT(*) AS n FROM reservations
@@ -156,6 +204,19 @@ SESSION_NEW_COUNT = """SELECT COUNT(*) AS n FROM scopes
 _BUDGET_COLS = """id, scope_id, period, cap_nano, soft_pct, model_filter, strict_overrun,
   review_required_at, disabled_at"""
 BUDGET_LOCK = f"SELECT {_BUDGET_COLS} FROM budgets WHERE id = :id $LOCK"
+BUDGET_GET = f"SELECT {_BUDGET_COLS} FROM budgets WHERE id = :id"  # reports only: no lock
+# Settle and release lock every budget of a reservation in one statement, ascending by id (the
+# lock order), then read their grants and current periods under those locks.
+_ITEM_BUDGETS = "SELECT budget_id FROM reservation_items WHERE reservation_id = :id"
+ITEM_BUDGETS_LOCK = (
+    f"SELECT {_BUDGET_COLS} FROM budgets WHERE id IN ({_ITEM_BUDGETS}) ORDER BY id $LOCK"
+)
+ITEM_GRANTS = f"""SELECT budget_id, amount_nano, valid_from, valid_until FROM budget_grants
+  WHERE budget_id IN ({_ITEM_BUDGETS})"""
+ITEM_PERIODS = """SELECT p.budget_id, p.spent_nano, p.held_nano, p.overrun_nano, p.excess_nano,
+  p.soft_alerted_at FROM budget_periods p JOIN reservation_items it
+  ON it.budget_id = p.budget_id AND it.period_start = p.period_start
+  WHERE it.reservation_id = :id"""
 BUDGET_INSERT = """INSERT INTO budgets (id, scope_id, period, cap_nano, soft_pct, model_filter,
   strict_overrun, note, created_at)
   VALUES (:id, :scope_id, :period, :cap, :soft_pct, :model_filter, :strict, :note, :now)"""
@@ -174,7 +235,7 @@ CHAIN_BUDGETS = """WITH RECURSIVE chain(id, parent_id, depth) AS (
   UNION ALL
   SELECT s.id, s.parent_id, c.depth + 1 FROM scopes s JOIN chain c ON s.id = c.parent_id
   WHERE c.depth < 5
-) SELECT b.id, b.scope_id, b.model_filter FROM budgets b
+) SELECT b.id, b.scope_id, b.model_filter, b.period FROM budgets b
   WHERE b.disabled_at IS NULL AND b.scope_id IN (SELECT id FROM chain) ORDER BY b.id"""
 GRANTS_OF = "SELECT amount_nano, valid_from, valid_until FROM budget_grants WHERE budget_id = :id"
 GRANT_INSERT = """INSERT INTO budget_grants (id, budget_id, amount_nano, valid_from, valid_until,
@@ -184,6 +245,10 @@ GRANT_EXPIRED = """SELECT DISTINCT budget_id FROM budget_grants WHERE valid_unti
   ORDER BY budget_id"""
 PERIOD_ENSURE = """INSERT INTO budget_periods (budget_id, period_start)
   VALUES (:budget_id, :period_start) ON CONFLICT DO NOTHING"""
+# The same, sent before the budget's row is seen: only for a budget that exists and is enabled.
+PERIOD_ENSURE_LIVE = """INSERT INTO budget_periods (budget_id, period_start)
+  SELECT id, :period_start FROM budgets WHERE id = :budget_id AND disabled_at IS NULL
+  ON CONFLICT DO NOTHING"""
 _PERIOD_COLS = "period_start, spent_nano, held_nano, overrun_nano, excess_nano, calls_count"
 PERIOD_GET = f"""SELECT {_PERIOD_COLS}, soft_alerted_at FROM budget_periods
   WHERE budget_id = :budget_id AND period_start = :period_start"""

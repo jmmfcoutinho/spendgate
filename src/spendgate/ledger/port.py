@@ -133,6 +133,19 @@ class HoldRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class BudgetRoom:
+    """Room in one budget as the transition that returned it left it: cap minus spent minus held.
+
+    Read under that transition's lock, so headers need no read of their own. Negative after an
+    overrun; whoever shows it clamps at zero.
+    """
+
+    budget_id: str
+    scope_id: str
+    room_nano: int
+
+
+@dataclass(frozen=True, slots=True)
 class Held:
     request_id: str
     lease_expires_at: int
@@ -140,6 +153,7 @@ class Held:
     session_scope_id: str | None
     warnings: tuple[SoftWarning, ...] = ()
     alerts: tuple[BudgetAlert, ...] = ()  # soft-threshold crossings this hold made, once per period
+    rooms: tuple[BudgetRoom, ...] = ()  # each held budget after this hold
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +217,7 @@ class Settlement:
     late: bool = False
     review_flagged: tuple[str, ...] = ()  # budgets that a breach overrun just flagged
     alerts: tuple[BudgetAlert, ...] = ()  # cap crossings and blocks this settlement made
+    rooms: tuple[BudgetRoom, ...] = ()  # each enabled budget it booked; empty when not applied
 
 
 @dataclass(frozen=True, slots=True)
