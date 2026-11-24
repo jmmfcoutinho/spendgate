@@ -24,21 +24,28 @@ class Runtime:
 
 
 @asynccontextmanager
-async def open_runtime(settings: Settings) -> AsyncIterator[Runtime]:
-    """Migrates on open (both backends do), closes the ledger on exit."""
+async def open_runtime(
+    settings: Settings, *, migrate: bool | None = None
+) -> AsyncIterator[Runtime]:
+    """Opens the ledger, closes it on exit. `migrate` None follows `ledger.auto_migrate`; when
+    not migrating, a schema that is behind is refused (`SchemaBehind`, ADR-0018)."""
+    if migrate is None:
+        migrate = settings.config.ledger.migrates_on_start
     backend = settings.config.ledger.backend
     currency = settings.ledger_currency
     ledger: AdminLedger
     if backend.kind == "sqlite" and settings.ledger_path is not None:
         from spendgate.ledger.sqlite import SqliteLedger  # noqa: PLC0415 - only the chosen backend
 
-        sqlite = SqliteLedger.open(settings.ledger_path, currency=currency)
+        sqlite = SqliteLedger.open(settings.ledger_path, currency=currency, migrate=migrate)
         ledger = sqlite
         closer: Callable[[], Awaitable[None] | None] = sqlite.close
     elif settings.ledger_dsn is not None:
         from spendgate.ledger.postgres import PostgresLedger  # noqa: PLC0415 - optional extra
 
-        pg = await PostgresLedger.open(settings.ledger_dsn.reveal(), currency=currency)
+        pg = await PostgresLedger.open(
+            settings.ledger_dsn.reveal(), currency=currency, migrate=migrate
+        )
         ledger = pg
         closer = pg.aclose
     else:

@@ -74,7 +74,7 @@ def print_bootstrap(report: BootstrapReport) -> None:
 
 
 async def _migrate(settings: Settings, *, bootstrap: bool) -> None:
-    async with open_runtime(settings) as rt:  # opening applies the migrations
+    async with open_runtime(settings, migrate=True) as rt:  # opening applies the migrations
         print(f"ledger ready ({settings.config.ledger.backend.kind}, {settings.ledger_currency})")
         if bootstrap:
             print_bootstrap(await apply_bootstrap(settings, rt.ledger, rt.keys, rt.now()))
@@ -205,13 +205,14 @@ async def _run(
         await task
 
 
-def run_serve(path: str, *, bootstrap: bool) -> int:
+def run_serve(path: str, *, bootstrap: bool, migrate: bool = False) -> int:
+    """`migrate` is `--migrate`; without it the config's `ledger.auto_migrate` decides."""
     settings = load_settings(path)
     if isinstance(settings, int):
         return settings
 
     async def main() -> None:
-        async with open_runtime(settings) as rt:
+        async with open_runtime(settings, migrate=True if migrate else None) as rt:
             await _serve(rt, bootstrap=bootstrap)
 
     asyncio.run(main())

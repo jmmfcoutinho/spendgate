@@ -52,6 +52,7 @@ Used at `ledger`.
 | `heartbeat_seconds` | positive integer (optional) | unset | How often a running call renews its hold. Default is `lease_seconds / 3`; it must be shorter than `lease_seconds`. |
 | `sweep_seconds` | positive integer | `30` | How often the server charges and releases expired holds. |
 | `retention_days` | positive integer | `90` | Calls older than this many whole UTC days are deleted once a day. Usage reports cover only this window. |
+| `auto_migrate` | boolean (optional) | unset | Whether `serve` applies pending migrations at start. Unset means `true` for SQLite (one file on one host) and `false` for Postgres. When false, `serve` refuses a schema that is behind and says to run `spendgate migrate` (or `serve --migrate`): see [upgrades](operations.md#upgrades-and-rollbacks). |
 
 ## Fx
 

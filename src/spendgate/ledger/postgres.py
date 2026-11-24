@@ -2,8 +2,9 @@
 
 An `AsyncConnectionPool` runs each flow in one READ COMMITTED transaction (see
 `postgres_driver`). The pool is bound to an event loop, so it is created on first use inside
-the running loop; `open` only migrates and checks the currency, on a throwaway connection, and
-may therefore be called from any loop (or none: `asyncio.run(PostgresLedger.open(...))`).
+the running loop; `open` only migrates (or checks the schema version) and checks the currency, on
+a throwaway connection, and may therefore be called from any loop (or none:
+`asyncio.run(PostgresLedger.open(...))`).
 
 The sweeper may run on every instance: each expiry is a state-guarded UPDATE (`WHERE state =
 'pending'`), so a second sweeper finds nothing to do. No advisory lock is needed for
@@ -62,33 +63,58 @@ _SET_DEFAULTS = (
 _MIGRATE_LOCK = "SELECT pg_advisory_xact_lock(hashtext('spendgate-migrate:' || current_schema()))"
 
 
-async def _migrate(conn: Conn, clock: Callable[[], int]) -> None:
+_BOOKKEEPING = (
+    "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, "
+    "name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL, "
+    "compatible BOOLEAN NOT NULL DEFAULT false)",
+    # A table created before ADR-0018 lacks the flag; its rows are all contract steps.
+    "ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS compatible BOOLEAN NOT NULL "
+    "DEFAULT false",
+)
+
+
+async def _applied(conn: Conn) -> dict[int, migrations.Applied]:
+    """The recorded migrations; none when the table does not exist yet (a new database)."""
+    cursor = await conn.execute("SELECT to_regclass('schema_migrations') IS NOT NULL AS found")
+    row = await cursor.fetchone()
+    if row is None or not row["found"]:
+        return {}
+    cursor = await conn.execute("SELECT * FROM schema_migrations")
+    return {
+        int(r["version"]): migrations.Applied(str(r["checksum"]), bool(r.get("compatible")))
+        for r in await cursor.fetchall()
+    }
+
+
+async def _migrate(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
+    """Apply pending migrations, each in its own transaction, or (`apply` False) only check.
+
+    One commit per migration, so a constraint added `NOT VALID` by one migration is validated by
+    a later one without the strong lock of the first held across the scan (ADR-0018). Each step
+    takes the migration lock and re-reads what is applied, so concurrent openers apply each
+    version once; a failure leaves the schema at the last version that committed.
+    """
     packaged = migrations.load("postgres")
-    async with conn.transaction():
-        await conn.execute(_MIGRATE_LOCK)
-        await conn.execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, "
-            "name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL)"
-        )
-        cursor = await conn.execute("SELECT version, checksum FROM schema_migrations")
-        applied = {int(r["version"]): str(r["checksum"]) for r in await cursor.fetchall()}
-        if set(applied) - {m.version for m in packaged}:
-            raise LedgerUnavailable(
-                "the ledger was migrated by a newer spendgate; refusing to start"
-            )
-        for migration in packaged:
-            if migration.version in applied:
-                if applied[migration.version] != migration.checksum:
-                    raise LedgerUnavailable(
-                        f"migration {migration.version} changed after it was applied"
-                    )
-                continue
+    while True:
+        async with conn.transaction():
+            await conn.execute(_MIGRATE_LOCK)  # also waits out a migrator that is running now
+            applied = await _applied(conn)
+            todo = migrations.pending(packaged, applied)
+            if not apply:
+                migrations.require_current(todo, applied)
+                return
+            for statement in _BOOKKEEPING:
+                await conn.execute(statement)
+            if not todo:
+                return
+            migration = todo[0]
             await conn.execute(migration.sql.encode())  # no parameters: several statements allowed
             await conn.execute(
-                "INSERT INTO schema_migrations (version, name, checksum, applied_at) "
-                "VALUES (%s, %s, %s, %s)",
-                (migration.version, migration.name, migration.checksum, clock()),
-            )
+                "INSERT INTO schema_migrations (version, name, checksum, applied_at, compatible) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (migration.version, migration.name, migration.checksum, clock(),
+                 migration.compatible),
+            )  # fmt: skip
 
 
 def tcp_options_for(dsn: str) -> dict[str, str]:
@@ -138,8 +164,10 @@ class PostgresLedger(LedgerEngine):
         min_size: int = 1,
         max_size: int = 10,
         pool_timeout: float = 10.0,
+        migrate: bool = True,
     ) -> Self:
-        """Migrate and check the ledger currency. Never touches a reservation."""
+        """Migrate (or with `migrate` False refuse a schema that is behind, `SchemaBehind`) and
+        check the ledger currency. Never touches a reservation."""
         try:
             # TCP options only: a migration may wait for a peer's lock or run long.
             async with await AsyncConnection.connect(
@@ -148,7 +176,7 @@ class PostgresLedger(LedgerEngine):
                 row_factory=dict_row,
                 connect_timeout=_CONNECT_TIMEOUT_S,
             ) as conn:
-                await _migrate(conn, clock)
+                await _migrate(conn, clock, apply=migrate)
                 await run_flow(conn, currency_flow(currency))
         except psycopg.Error as exc:
             raise LedgerUnavailable(f"cannot open ledger: {exc}") from exc
