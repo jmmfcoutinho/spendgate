@@ -9,6 +9,8 @@ import asyncio
 import hashlib
 import secrets
 import sqlite3
+import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -207,3 +209,57 @@ def test_a_migrating_open_with_nothing_to_do_needs_no_table_ownership(
     finally:
         execute("postgres", location, f'DROP OWNED BY "{role}"')
         execute("postgres", location, f'DROP ROLE "{role}"')
+
+
+def wait_for_a_lock_waiter(location: str, deadline_s: float = 30.0) -> None:
+    """Return once some session in this database waits on an advisory lock (no sleeping: each
+    probe is a round trip)."""
+    query = (
+        "SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND NOT granted "
+        "AND database = (SELECT oid FROM pg_database WHERE datname = current_database())"
+    )
+    deadline = time.monotonic() + deadline_s
+    with psycopg.connect(location, autocommit=True) as pg:
+        while time.monotonic() < deadline:
+            row = pg.execute(query).fetchone()
+            if row is not None and row[0]:
+                return
+    raise AssertionError("the replica never waited for the migration lock")
+
+
+@pytest.mark.postgres
+def test_a_replica_that_starts_during_a_postgres_migrate_waits_for_the_last_step(
+    postgres_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A two-step `migrate`; a new-release `serve` (no migrate) starts while the first step runs.
+    It must wait for the whole run, not take the lock after the first commit and refuse a
+    half-migrated schema with exit code 5."""
+    location = workdir_location("postgres", tmp_path)
+    packaging(monkeypatch, lambda ms: ms[:-2])  # two versions behind
+    open_and_close("postgres", location, migrate=True)
+    monkeypatch.setattr(migrations, "load", REAL_LOAD)
+    replica_error: list[BaseException] = []
+
+    def replica() -> None:
+        try:
+            open_and_close("postgres", location, migrate=False)
+        except BaseException as exc:  # reported by the main thread
+            replica_error.append(exc)
+
+    started = threading.Thread(target=replica)
+    paused = False
+
+    def clock() -> int:  # called inside each step, with the migration lock held
+        nonlocal paused
+        if not paused:  # first step: start the replica and let it queue behind the lock
+            paused = True
+            started.start()
+            wait_for_a_lock_waiter(location)
+        return 0
+
+    asyncio.run(PostgresLedger.open(location, currency=CURRENCY, migrate=True, clock=clock))
+    started.join(timeout=60)
+    assert not started.is_alive()
+    assert replica_error == []
+    latest = len(REAL_LOAD("postgres"))
+    assert [v for v, _ in recorded("postgres", location)] == list(range(1, latest + 1))

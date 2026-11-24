@@ -15,6 +15,7 @@ silent server ends in `LedgerUnavailable` instead of holding a call; what the op
 """
 
 import asyncio
+import contextlib
 import time
 from collections.abc import Callable
 from typing import Final, Self
@@ -59,8 +60,13 @@ _SET_DEFAULTS = (
     " JOIN unnest(%s::text[], %s::text[]) AS d(name, value) ON d.name = s.name"
     " WHERE s.source = 'default'"
 )
-# One migrator at a time per schema; the key is stable across processes (hashtext is).
-_MIGRATE_LOCK = "SELECT pg_advisory_xact_lock(hashtext('spendgate-migrate:' || current_schema()))"
+# One migrator at a time per schema; the key is stable across processes (hashtext is). Each
+# step takes it for its transaction; a migrator also holds it for its whole run (session level),
+# so an opener that only checks waits for the last step, not just the next commit.
+_MIGRATE_KEY = "hashtext('spendgate-migrate:' || current_schema())"
+_MIGRATE_LOCK = f"SELECT pg_advisory_xact_lock({_MIGRATE_KEY})"
+_RUN_LOCK = f"SELECT pg_advisory_lock({_MIGRATE_KEY})"
+_RUN_UNLOCK = f"SELECT pg_advisory_unlock({_MIGRATE_KEY})"
 
 
 _CREATE_BOOKKEEPING = (
@@ -108,8 +114,22 @@ async def _migrate(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None
     One commit per migration, so a constraint added `NOT VALID` by one migration is validated by
     a later one without the strong lock of the first held across the scan (ADR-0018). Each step
     takes the migration lock and re-reads what is applied, so concurrent openers apply each
-    version once; a failure leaves the schema at the last version that committed.
+    version once; a failure leaves the schema at the last version that committed. While a run
+    applies, it also holds the lock between steps: a replica that starts meanwhile would
+    otherwise get it after the first commit and refuse a half-migrated schema.
     """
+    if not apply:
+        await _steps(conn, clock, apply=False)
+        return
+    await conn.execute(_RUN_LOCK)  # autocommit: held until the unlock or the connection closes
+    try:
+        await _steps(conn, clock, apply=True)
+    finally:
+        with contextlib.suppress(psycopg.Error):  # a broken connection has released it already
+            await conn.execute(_RUN_UNLOCK)
+
+
+async def _steps(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
     packaged = migrations.load("postgres")
     while True:
         async with conn.transaction():

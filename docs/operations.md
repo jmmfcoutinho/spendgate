@@ -76,7 +76,8 @@ are compatible.
    Compose: `docker compose --profile postgres run --rm spendgate migrate`). Migrators on several
    hosts are serialised by an advisory lock, and each migration commits on its own: if one fails,
    the schema stays at the last one that committed; fix the cause and run `migrate` again.
-   Instances that start meanwhile wait for the lock, then check the result.
+   Instances that start meanwhile wait for the lock, which a migrator holds until its last step,
+   then check the result.
 4. If every new migration is compatible, the old instances keep working: replace them one at a
    time (see [Draining on restart](#draining-on-restart)). If one is not (a contract step), stop the
    old instances before step 3 and start the new release after it.

@@ -36,7 +36,9 @@ migration only added a nullable column.
   migration can then be validated (`VALIDATE CONSTRAINT`, which takes a weaker lock) by a later
   one, instead of scanning the table under the strong lock that adding the constraint holds until
   commit. A failure leaves the schema at the last version that committed; running `migrate` again
-  continues from there. SQLite keeps one `BEGIN IMMEDIATE` transaction for all of them (one writer
+  continues from there. The migrator also holds that lock (at session level) from its first step
+  to its last, so an instance that starts meanwhile and only checks the schema waits for the whole
+  run instead of seeing it half-migrated after the first commit. SQLite keeps one `BEGIN IMMEDIATE` transaction for all of them (one writer
   anyway, no `NOT VALID`).
 - Tightening is a contract step. A new constraint (`CHECK`, even `NOT VALID`, `UNIQUE`, a foreign
   key) or a unique index applies to every later write, so the previous release, which does not
