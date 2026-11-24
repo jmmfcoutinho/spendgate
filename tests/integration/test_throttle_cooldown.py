@@ -218,3 +218,41 @@ async def test_a_valid_retry_after_ms_on_an_openai_429_is_honoured(tmp_path: Pat
         assert [a.cooldown_ms for a in s.observer.attempts] == [1_000]
         assert r.status_code == 429 and r.headers["retry-after"] == "1"
 
+
+class GatedSleep:
+    """A sleep that holds the waiting call until the test releases it (or cancels the call)."""
+
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def __call__(self, seconds: float) -> None:
+        self.entered.set()
+        await self.release.wait()
+
+
+async def _cancel_mid_wait(tmp_path: Path, *, stream: bool) -> None:
+    sleeps = GatedSleep()
+    async with open_stack(tmp_path, pipeline_kwargs={"sleep": sleeps}) as s:
+        s.fake.enqueue(Script(status=429))
+        assert (await s.chat("alpha-one")).status_code == 429
+        extra: dict[str, object] = {"stream": True} if stream else {}
+        call = asyncio.ensure_future(s.chat("alpha-one", **extra))
+        await asyncio.wait_for(sleeps.entered.wait(), 5)  # held, now waiting for the cooldown
+        call.cancel()
+        await asyncio.gather(call, return_exceptions=True)
+        await s.pipeline.drain()  # the release runs in a task a cancel cannot interrupt
+        assert s.fake.calls == 1  # nothing was sent while it waited
+        row = await s.ledger.get_reservation(s.observer.held[-1].request_id)
+        assert row is not None and row.state is ReservationState.RELEASED
+        assert row.charged_nano == 0 and await s.totals() == (0, 0)
+
+
+@async_test
+async def test_m13_a_call_cancelled_while_waiting_is_released_at_zero(tmp_path: Path) -> None:
+    await _cancel_mid_wait(tmp_path, stream=False)
+
+
+@async_test
+async def test_m13_a_stream_cancelled_while_waiting_is_released_at_zero(tmp_path: Path) -> None:
+    await _cancel_mid_wait(tmp_path, stream=True)
