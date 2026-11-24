@@ -288,6 +288,22 @@ def test_a_warning_after_the_loop_closed_is_counted_not_raised() -> None:
     assert rig.count("dropped") == 1
 
 
+def test_a_warning_after_the_poster_stopped_is_counted_as_dropped() -> None:
+    """At shutdown the poster stops before the pipeline drains; a settle's warning then is lost."""
+    rig = Rig(Receiver())
+
+    async def go() -> None:
+        poster = asyncio.ensure_future(rig.alerts.run())
+        await asyncio.sleep(0)
+        poster.cancel()
+        await asyncio.gather(poster, return_exceptions=True)
+        rig.emit(ALERT)  # the loop still runs: the queue would take it, but nothing reads it
+        await rig.client.aclose()
+
+    asyncio.run(go())
+    assert rig.alerts.pending() == 0 and rig.count("dropped") == 1
+
+
 def test_a_delivery_that_raises_counts_as_failed_and_the_poster_goes_on() -> None:
     """A key that cannot be signed fails each warning, by class only, and never stops `run`."""
     receiver = Receiver()

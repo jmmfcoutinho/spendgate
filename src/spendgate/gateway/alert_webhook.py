@@ -68,6 +68,7 @@ class WebhookAlerts(logging.Handler):
         self._now, self._sleep, self._new_id = now, sleep, new_event_id
         self._queue: asyncio.Queue[bytes] = asyncio.Queue(target.queue_size)
         self._loop: asyncio.AbstractEventLoop | None = None  # set when `run` starts
+        self._closed = False  # set when `run` stops: nothing will take from the queue again
         for result in RESULTS:  # every series exists from the start, so a rate alert can see 0
             metrics.alert_webhooks.inc(0, result=result)
 
@@ -97,6 +98,9 @@ class WebhookAlerts(logging.Handler):
         return json.dumps(fields, sort_keys=True, separators=(",", ":")).encode()
 
     def _offer(self, body: bytes) -> None:
+        if self._closed:  # e.g. a settle drained at shutdown, after the poster stopped
+            self._metrics.alert_webhooks.inc(result="dropped")
+            return
         try:
             self._queue.put_nowait(body)
         except asyncio.QueueFull:
@@ -127,6 +131,7 @@ class WebhookAlerts(logging.Handler):
                     )  # fmt: skip
                 body = None
         finally:
+            self._closed = True  # later warnings are counted as dropped, not left in a dead queue
             unsent = self._queue.qsize() + (body is not None)
             if unsent:
                 self._metrics.alert_webhooks.inc(unsent, result="dropped")
