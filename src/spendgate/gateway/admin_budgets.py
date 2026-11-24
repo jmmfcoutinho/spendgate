@@ -7,7 +7,7 @@ from starlette.responses import Response
 from spendgate.config.schema import ProviderSlug
 from spendgate.core.budgets import Grant, Period
 from spendgate.core.errors import ErrorCode
-from spendgate.core.policy import KillSwitch, KillTarget
+from spendgate.core.policy import KillSwitch, KillTarget, model_filter_matches
 from spendgate.gateway.admin_codec import budget_json, kill_json
 from spendgate.gateway.admin_http import (
     ApiError,
@@ -47,9 +47,28 @@ async def list_budgets(call: Call) -> Response:
     return respond({"data": [budget_json(v, call.ctx.currency) for v in views]})
 
 
+def _check_model_filter(call: Call, pattern: str | None) -> None:
+    """Refuse a filter that matches no routed catalog id: such a budget would never apply.
+
+    The usual cause is a filter written against an alias; the budget then guards nothing
+    while looking configured, so it is refused here rather than stored.
+    """
+    if pattern is None:
+        return
+    routed = {r.catalog_id for r in call.ctx.settings.routes.values()}
+    if not any(model_filter_matches(pattern, m) for m in routed):
+        raise ApiError(
+            ErrorCode.INVALID_REQUEST,
+            "model_filter matches no routed catalog id; it is a glob over catalog ids such as "
+            "openai/gpt-*, not over aliases.",
+            "model_filter",
+        )
+
+
 async def create_budget(call: Call) -> Response:
     scope = await need_scope(call, call.path("scope_id"))
     body = await call.body(BudgetCreateIn)
+    _check_model_filter(call, body.model_filter)
     strict = body.strict_overrun
     if strict is None:
         strict = call.ctx.settings.config.defaults.strict_overrun

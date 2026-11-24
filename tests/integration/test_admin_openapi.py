@@ -154,8 +154,8 @@ async def test_responses_validate_against_the_openapi_schemas(tmp_path: Path) ->
         sp = {"scope_id": "org:acme/project:app"}
         budget = await run.hit(
             "POST", f"{p}/scopes/{{scope_id}}/budgets", 201, sp,
-            json={"period": "month", "cap": usd("9.5"), "soft_pct": 60, "model_filter": "alpha*",
-                  "strict_overrun": False, "note": "n"},
+            json={"period": "month", "cap": usd("9.5"), "soft_pct": 60,
+                  "model_filter": "openai/gpt-6-*", "strict_overrun": False, "note": "n"},
         )  # fmt: skip
         bp = {"budget_id": budget["id"]}
         await run.hit("GET", f"{p}/scopes/{{scope_id}}/budgets", 200, sp)

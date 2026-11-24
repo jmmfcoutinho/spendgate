@@ -678,7 +678,7 @@ components:
         period: {$ref: '#/components/schemas/Period'}
         cap: {$ref: '#/components/schemas/Money'}
         soft_pct: {type: integer, minimum: 1, maximum: 99, default: 80, description: Warning threshold in percent, never blocks}
-        model_filter: {type: [string, 'null'], description: 'Model id or glob; null means all models'}
+        model_filter: {type: [string, 'null'], description: 'Case-sensitive glob over the catalog id (provider/model, such as openai/gpt-6-*), never over aliases; null means all models. A filter that matches no routed catalog id is refused with invalid_request (param model_filter).'}
         strict_overrun:
           type: boolean
           default: true

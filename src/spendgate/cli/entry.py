@@ -87,7 +87,7 @@ def _budgets(top: Sub, common: argparse.ArgumentParser) -> None:
     s.add_argument("--cap", required=True, help="e.g. '50 EUR'")
     s.add_argument("--period", choices=("none", "day", "month"), default="none")
     s.add_argument("--soft-pct", type=int)
-    s.add_argument("--model-filter")
+    s.add_argument("--model-filter", help="glob over catalog ids, e.g. 'openai/gpt-6-*'")
     s.add_argument("--note")
     _leaf(sub, "list", common, "budgets of a scope with spent and remaining").add_argument("scope")
     g = _leaf(sub, "grant", common, "add temporary extra room")

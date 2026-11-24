@@ -73,7 +73,7 @@ BEGIN                                  -- SQLite: BEGIN IMMEDIATE
     (closed_at = now), rename to name#<started_at>, and create a fresh row with the defaults (step_count 0,
     started_at = now) after checking max_new_sessions_per_hour. A new session also creates
     its session budget (budget_nano) if set. Session scopes are per key: the path includes the key id.
- 3. chain = budgets of the leaf scope and all ancestors, active, model_filter matches, sorted by id ascending
+ 3. chain = budgets of the leaf scope and all ancestors, active, model_filter matches (a case-sensitive glob over the catalog id, such as `openai/gpt-6-*`, never the alias), sorted by id ascending
  4. for each budget: lock row; INSERT budget_periods(period_start(now)) ON CONFLICT DO NOTHING;
     eff = cap + active grants; normalise (may record excess);
     refuse if review_required_at IS NOT NULL            -> budget_exhausted (details.reason overrun_review)

@@ -256,6 +256,22 @@ async def test_budget_validation_errors(tmp_path: Path) -> None:
 
 
 @async_test
+async def test_a_model_filter_that_matches_no_routed_catalog_id_is_refused(tmp_path: Path) -> None:
+    """The filter is a glob over catalog ids: one written against an alias would never apply."""
+    async with open_admin(tmp_path) as a:
+        url = f"{BASE}/scopes/{enc('org:acme')}/budgets"
+        for pattern in ("alpha", "alpha*", "OPENAI/*", "openai/gpt-7-*", ""):
+            body = {"cap": money("1"), "model_filter": pattern}
+            err = await a.error("POST", url, 400, json=body)
+            assert (err["code"], err["param"]) == ("invalid_request", "model_filter")
+            assert "catalog id" in str(err["message"])
+        assert (await a.ok("GET", url))["data"] == []  # nothing was stored
+        for pattern in ("openai/gpt-6-luna", "openai/*", "*haiku*"):
+            made = await a.ok("POST", url, 201, json={"cap": money("1"), "model_filter": pattern})
+            assert made["model_filter"] == pattern
+
+
+@async_test
 async def test_ack_overrun_clears_the_review_flag(tmp_path: Path) -> None:
     fake = FakeUpstream()
     fake.enqueue(Script(usage=ABSURD_USAGE))  # costs far more than the hold: a breach overrun
