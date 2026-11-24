@@ -30,21 +30,6 @@ ROOT = Path(__file__).resolve().parents[2]
 PEPPER = "load-test-pepper-0123456789abcdef"
 MODEL = "alpha"
 GATEWAY_LAUNCH = "import sys; from spendgate.cli import main; sys.exit(main())"
-# Every `serve` process names itself "gateway" (a product bug, see test_instance_identity.py), so a
-# live peer's heartbeat keeps a killed gateway's holds alive for ever. The crash run gives each
-# process its own name this way; the other runs use the command as shipped.
-UNIQUE_INSTANCE_LAUNCH = """
-import os, sys
-from spendgate.pipeline import pipeline as p
-_init = p.Pipeline.__init__
-def _named(self, *a, **k):
-    k["instance"] = "gw-%d" % os.getpid()
-    _init(self, *a, **k)
-p.Pipeline.__init__ = _named
-from spendgate.cli import main
-sys.exit(main())
-"""
-
 CONFIG = """\
 server: {{listen: "127.0.0.1:{port}", key_pepper: "env:LOAD_PEPPER", max_concurrent_requests: 2048}}
 ledger:
@@ -92,7 +77,6 @@ class Rig:
     procs: list[subprocess.Popen[bytes]] = field(default_factory=list)
     configs: list[Path] = field(default_factory=list)
     gateways: list[subprocess.Popen[bytes]] = field(default_factory=list)
-    unique_instance: bool = False  # crash run only: see UNIQUE_INSTANCE_LAUNCH
     lease_s: int = 60  # crash runs shorten it so an expired hold shows up within the run
 
     @property
@@ -142,8 +126,15 @@ class Rig:
             cfg = self.write_config(port, f"gw{n}")
             self.ports.append(port)
             self.configs.append(cfg)
-            launch = UNIQUE_INSTANCE_LAUNCH if self.unique_instance else GATEWAY_LAUNCH
-            argv = [sys.executable, "-c", launch, "serve", "--config", str(cfg), "--no-bootstrap"]
+            argv = [
+                sys.executable,
+                "-c",
+                GATEWAY_LAUNCH,
+                "serve",
+                "--config",
+                str(cfg),
+                "--no-bootstrap",
+            ]
             self.gateways.append(self._spawn(argv, f"gw{n}"))
         for port in self.ports:
             await self._wait(f"http://127.0.0.1:{port}/readyz")

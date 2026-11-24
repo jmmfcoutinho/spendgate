@@ -23,7 +23,7 @@ from spendgate.core.budgets import Period, ScopeKind
 from spendgate.ledger.key_types import KeySpec
 from tests.load import checks
 from tests.load.client import PROMPT
-from tests.load.facts import read_facts
+from tests.load.facts import pending_by_owner, read_facts
 from tests.load.plan import Plan
 from tests.load.rig import (
     MODEL,
@@ -215,19 +215,49 @@ def read_logs(rig: Rig) -> dict[str, Any]:
     return found
 
 
-async def kill_gateway_later(rig: Rig, seconds: float) -> None:
-    """kill -9 the first gateway mid-run: its in-flight holds can only be ended by the sweeper."""
+VICTIM_HOLDS = 5  # pending holds of its own the killed gateway must have: what the sweeper ends
+
+
+def owner_of(owners: dict[str, list[str]], pid: int) -> str | None:
+    """The lease-owner name of the gateway process `pid` (`pipeline.instance_id`: host-pid-tail),
+    or None while it owns no pending hold. A name of another form fails the run at once: matching
+    by pid would silently find nothing, and the crash check would blame the sweeper."""
+    for owner in owners:
+        fields = owner.rsplit("-", 2)
+        if len(fields) != 3 or not fields[1].isdigit():
+            raise RuntimeError(f"owner_instance {owner!r} is not host-pid-tail (see instance_id)")
+        if fields[1] == str(pid):
+            return owner
+    return None
+
+
+async def kill_gateway_later(rig: Rig, seconds: float) -> dict[str, Any]:
+    """kill -9 the first gateway mid-run: its in-flight holds can only be ended by the sweeper.
+
+    It waits for pending holds of the victim itself: a count over all gateways can be reached
+    while the victim owns none, and then the run exercises no sweep at all. What the victim left
+    pending is read once it is dead, so nothing it did can change the list afterwards.
+    """
     await asyncio.sleep(seconds)
-    for _ in range(600):  # wait for enough holds in flight that the dead one surely owns some
-        if read_facts(rig.backend, location_of(rig))["pending"] >= 20:
+    victim = rig.gateways[0]
+    owner = None
+    for _ in range(600):
+        owners = pending_by_owner(rig.backend, location_of(rig))
+        owner = owner_of(owners, victim.pid) or owner
+        if owner and len(owners.get(owner, [])) >= VICTIM_HOLDS:
             break
         await asyncio.sleep(0.05)
-    rig.gateways[0].kill()
+    victim.kill()
+    victim.wait()
+    owners = pending_by_owner(rig.backend, location_of(rig))
+    owner = owner_of(owners, victim.pid) or owner
+    if owner is None:
+        raise RuntimeError(f"no pending hold carries the killed gateway's pid {victim.pid}")
+    return {"owner": owner, "pending": owners.get(owner, [])}
 
 
 async def run_load(rig: Rig, cfg: dict[str, Any]) -> dict[str, Any]:
     rig.lease_s = cfg.get("lease_seconds", 60)
-    rig.unique_instance = bool(cfg.get("unique_instance"))
     await rig.start_fake()
     async with open_runtime_for(rig):  # migrates before several gateways open the ledger at once
         pass
@@ -252,8 +282,7 @@ async def run_load(rig: Rig, cfg: dict[str, Any]) -> dict[str, Any]:
     audit: dict[str, Any] = {"snapshots": 0, "violations": [], "peak_overshoot_nano": 0}
     ended = await watch_exhaustion(rig, leaves, procs, stop, cfg["max_seconds"], audit)
     records = [r for chunk in collect(procs) for r in chunk]
-    if killer:
-        await killer
+    victim = await killer if killer else None
     seconds = time.monotonic() - t0
     pending_after_run = await wait_pending_zero(rig)
     mid = read_facts(rig.backend, location_of(rig))
@@ -287,6 +316,7 @@ async def run_load(rig: Rig, cfg: dict[str, Any]) -> dict[str, Any]:
         "stats_before": before, "stats_mid": stats_mid, "stats_end": stats_end,
         "facts_mid": mid, "facts": final, "swept": swept, "pending_after_run": pending_after_run,
         "pending_final": pending_final, "limiter": limiter, "crashed": killer is not None,
+        "victim": victim,
     }  # fmt: skip
 
 
