@@ -7,8 +7,11 @@ botocore is imported only inside the two functions that need it, so the base ins
 
 Resolving the chain and refreshing a role's credentials are blocking network calls (instance
 metadata, STS), so the async `prepare` fetches a snapshot in a worker thread and `translate` signs
-with it while it is fresh. A snapshot is reused for at most `SNAPSHOT_SECONDS`: botocore refreshes
-role credentials 15 minutes before they expire, so a reused one is always still valid.
+with it. `prepare` takes a new snapshot once the last is `SNAPSHOT_SECONDS` old. botocore hands out
+role credentials with at least its mandatory refresh window (10 minutes; it starts refreshing at
+15) left, so a snapshot is valid for far longer than it is used. The assumption that remains: the
+chain's credentials are not revoked early. A 401 or 403 from Bedrock drops the snapshot, so the
+next call asks the chain again instead of reusing it.
 """
 
 import json
@@ -55,7 +58,9 @@ SERVICE: Final = "bedrock"
 CHAT: Final = "/v1/chat/completions"
 _JSON_TYPE: Final = {"content-type": "application/json"}
 _CONFIG_FAULTS = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
-SNAPSHOT_SECONDS: Final = 60  # far inside botocore's 15-minute advisory refresh window
+SNAPSHOT_SECONDS: Final = 30  # well inside botocore's 10-minute mandatory refresh window
+_SIGN_AT_MOST_SECONDS: Final = 300  # older means no `prepare` ran lately: `translate` asks inline
+_REVOKED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
 _CHAIN: Final = "aws"  # one credential source per adapter: one lock key
 
 
@@ -169,12 +174,15 @@ class Bedrock:
     async def prepare(self, deployment: Deployment) -> None:
         """Fetch a credentials snapshot in a worker thread unless a fresh one is cached."""
         if deployment.auth is AuthMode.SIGV4:
-            await self._refreshes.ensure(_CHAIN, lambda: self._fresh() is None, self._take)
+            stale = lambda: self._within(SNAPSHOT_SECONDS) is None  # noqa: E731 - one-line check
+            await self._refreshes.ensure(_CHAIN, stale, self._take)
 
-    def _fresh(self) -> AwsCredentials | None:
-        if self._snapshot is None or self._clock() - self._snapshot[1] >= SNAPSHOT_SECONDS:
+    def _within(self, seconds: float) -> AwsCredentials | None:
+        """The snapshot if it is younger than `seconds`; a lookup that never blocks."""
+        snapshot = self._snapshot
+        if snapshot is None or self._clock() - snapshot[1] >= seconds:
             return None
-        return self._snapshot[0]
+        return snapshot[0]
 
     def _fetch(self) -> AwsCredentials:
         """Credentials from the provider (blocking: the chain may call the network)."""
@@ -195,7 +203,9 @@ class Bedrock:
         verb = "converse-stream" if req.stream else "converse"
         url = f"{deployment.base_url.rstrip('/')}/model/{quote(deployment.model, safe='')}/{verb}"
         unsigned = UpstreamRequest("POST", url, _JSON_TYPE, body, stream=req.stream)
-        return sign(unsigned, self._fresh() or self._fetch(), deployment.region)
+        # What `prepare` readied (it renewed it if old); a direct caller without it fetches inline.
+        creds = self._within(_SIGN_AT_MOST_SECONDS) or self._fetch()
+        return sign(unsigned, creds, deployment.region)
 
     @never_raises_response
     def response(self, req: CleanRequest, resp: UpstreamResponse) -> UpstreamResponse:
@@ -241,6 +251,8 @@ class Bedrock:
     def error(self, response: UpstreamResponse) -> UpstreamError:
         kind = _error_type(response)
         status = response.status
+        if status in _REVOKED:
+            self._snapshot = None  # perhaps revoked or rotated: the next call asks the chain again
         if status == HTTPStatus.TOO_MANY_REQUESTS or kind in (
             "ThrottlingException",
             "ModelNotReadyException",
