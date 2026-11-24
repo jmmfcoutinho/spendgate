@@ -28,6 +28,21 @@ All notable changes to this project are documented here. The format follows
   `VALIDATE`; a compatible migration may not be destructive or add a constraint). Upgrade and rollback runbook in
   [operations](docs/operations.md#upgrades-and-rollbacks); see
   [ADR-0018](docs/adr/0018-migration-policy.md).
+- Cloud identity (#33). `credential: adc` for Vertex AI (`google` with `auth: bearer_token`)
+  uses Google application default credentials (workload identity, the metadata server) instead
+  of a service-account key. `ledger.backend.auth: {kind: rds_iam | entra | cloudsql_iam}` logs
+  every new Postgres connection in with a short-lived RDS IAM, Entra ID or Cloud SQL IAM token
+  instead of a password; the DSN then names the user and carries no password. Each kind uses the
+  extra of its cloud (`bedrock`, `azure`, `google`): no new dependency or extra. See
+  [cloud identity](docs/operations.md#cloud-identity) and
+  [ADR-0017](docs/adr/0017-cloud-identity.md).
+- `SIGHUP` re-reads `file:` secrets in a running `serve`: provider credentials take effect for the
+  next call, and a new database password for the next pooled connection (a DSN that changes
+  anything but its password is refused and the old one kept). One `secrets_reloaded` log event
+  names the config paths read and changed, never a value. See
+  [rotating secrets](docs/operations.md#rotating-secrets).
+- `ledger.pool_min`, `ledger.pool_max` and `ledger.pool_timeout_seconds` size the Postgres pool
+  (defaults 1, 10 and 10 s, as before).
 - `server.keep_alive_seconds` (default 75) and `server.graceful_shutdown_seconds` (default 30),
   passed to uvicorn on the data and admin listeners. Keep-alive was uvicorn's 5 s, below common
   load balancer idle timeouts. The drain after `SIGTERM` now ends at the deadline: calls still
@@ -98,6 +113,8 @@ All notable changes to this project are documented here. The format follows
   `ledger.auto_migrate: true`). SQLite still migrates at start by default. The `--local` admin
   commands follow the same setting, and a ledger error at start is printed as one `error:` line
   instead of a traceback. The Compose and local guides run `migrate` before `up`.
+- The `postgres` extra requires `psycopg-pool>=3.3.0` (already installed through
+  `psycopg[pool]`): it reads the DSN and the login password per connection.
 - Postgres ledger: a call makes 5 round trips to the database instead of about 46 (60 for a
   stream), so a hot budget row stays locked for less time. Statements that do not depend on each
   other go out together (psycopg pipeline mode), `BEGIN` and `COMMIT` ride on the first and last

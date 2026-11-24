@@ -278,7 +278,8 @@ migrations, `psql` and backups. SQLite ignores these keys.
 Where the host has a cloud identity (an AWS role, an Azure managed or workload identity, a Google
 service account attached to the workload), spendgate can use it instead of a stored key for Vertex
 AI and instead of a stored password for the Postgres ledger. No new dependency: each kind uses the
-library of an extra you already install for that cloud, and the `full` image has them all.
+library of an extra you already install for that cloud, and the `full` image has them all. The
+reasoning is in [ADR-0017](adr/0017-cloud-identity.md).
 
 ### Vertex AI with application default credentials
 
