@@ -109,12 +109,22 @@ def lock_budget(
 def budget_alert(
     kind: AlertKind, budget: Budget, start: int, spent: int, cap: int
 ) -> Flow[BudgetAlert]:
-    """An alert for one budget period; reads the scope path when the lock was given none."""
-    path = budget.scope_path
-    if not path:  # settle locks budgets without their scope; alerts are rare, so read it here
-        rows = yield q(sql.SCOPE_REF, ref=budget.scope_id)
-        path = s(rows[0], "path") if rows else budget.scope_id
-    return BudgetAlert(kind, budget.id, path, budget.period, start, spent, cap)
+    """An alert for one budget period, named by its owning scope, or a session's parent scope.
+
+    Settle locks budgets without their scope and a session path names the key and the caller's
+    session id, so the scope is read here; alerts are rare, so the extra reads are cheap.
+    """
+    rows = yield q(sql.SCOPE_GET, id=budget.scope_id)
+    owner = rows[0] if rows else None
+    session = owner is not None and s(owner, "kind") == ScopeKind.SESSION.value
+    if owner is None:  # a budget's scope is never deleted; fall back to its id, never a guess
+        path = budget.scope_id
+    elif session:  # a session always has a parent: the key's scope; never its own path
+        parent = yield q(sql.SCOPE_GET, id=s(owner, "parent_id"))
+        path = s(parent[0], "path") if parent else ""
+    else:
+        path = s(owner, "path")
+    return BudgetAlert(kind, budget.id, path, budget.period, start, spent, cap, session)
 
 
 def period_state(row: Row) -> PeriodState:

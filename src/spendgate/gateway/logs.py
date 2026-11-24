@@ -24,7 +24,7 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "ttft_ms", "status", "http_status", "reason", "level", "ts", "logger",
         "where", "error_class", "frames", "charged",
         # Budget warnings (pipeline.alerts): budget facts only, never request or key data.
-        "budget_id", "period", "period_start", "spent", "cap",
+        "budget_id", "period", "period_start", "spent", "cap", "scope_kind",
     }
 )  # fmt: skip
 

@@ -1,8 +1,8 @@
 """Ledger contract: budget alerts come back from `hold` and `settle` once per transition.
 
-The pipeline logs exactly what these return (operations.md, "Budget warnings"), so "once per
-budget per period" is a ledger property: soft_alerted_at for the soft threshold, the crossing
-itself for a cap breach, `review_required_at` for a block.
+The pipeline logs exactly what these return (operations.md, "Budget warnings"), so how often each
+appears is a ledger property: once per period for the soft threshold (soft_alerted_at), once per
+crossing for a cap breach, once per review flag (`review_required_at`) for a block.
 """
 
 from spendgate.core.budgets import AlertKind, BudgetAlert, Period
@@ -120,3 +120,31 @@ def test_an_ancestor_budget_alert_carries_its_own_scope_path(rig: Rig) -> None:
     breached = rig.settle("A", "10.50").alerts  # 10.50 > the org cap, far inside the user one
     assert kinds(breached) == [AlertKind.CAP_BREACHED, AlertKind.BLOCKED]
     assert {(a.budget_id, a.scope_path) for a in breached} == {(org_budget.id, w.parent.path)}
+
+
+def test_cap_breached_is_reported_once_per_crossing_after_a_dip_below_the_cap(rig: Rig) -> None:
+    w = rig.world("10", strict_overrun=False)
+    spend(rig, w, "7", "seed")
+    for rid in "ABC":
+        rig.hold_ok(w, rid, "1")  # spent 7 + held 3 = 10, at the cap
+    assert kinds(rig.settle("A", "2").alerts) == [AlertKind.CAP_BREACHED]  # 9 + 2 = 11: crosses
+    assert rig.settle("B", "0").alerts == ()  # 9 + 1 = 10: back within the cap, no overrun
+    again = rig.settle("C", "2")  # 11 + 0 = 11: a second crossing in the same period
+    assert kinds(again.alerts) == [AlertKind.CAP_BREACHED]
+    assert again.alerts[0].spent_nano == E("11")
+
+
+def test_a_session_budget_alert_names_the_key_scope_never_the_session_or_key_id(
+    rig: Rig,
+) -> None:
+    from spendgate.core.sessions import SessionDefaults  # noqa: PLC0415
+
+    w = rig.world("100", session_defaults=SessionDefaults(budget_nano=E("5")))
+    session = "caller-chosen-session-zz9"
+    soft = rig.hold_ok(w, "A", "4.5", session=session).alerts  # 90 % of the session budget
+    breach = rig.settle("A", "6").alerts  # 6 > 5: crosses the session cap, and blocks it
+    assert kinds(soft) == [AlertKind.SOFT_THRESHOLD]
+    assert kinds(breach) == [AlertKind.CAP_BREACHED, AlertKind.BLOCKED]
+    for alert in (*soft, *breach):
+        assert alert.session and alert.scope_path == w.scope.path
+        assert session not in alert.scope_path and w.key.id not in alert.scope_path

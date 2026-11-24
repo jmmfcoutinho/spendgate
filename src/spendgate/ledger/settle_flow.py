@@ -114,7 +114,8 @@ def _breach(budget: Budget, start: int, added: int, now: int) -> Flow[list[Budge
     """An overrun that leaves `S + H` above the effective cap: alert, and flag a strict budget.
 
     `cap_breached` is reported only by the booking that crossed the cap (`S + H` was within it
-    before `added`), so later overruns in the same period do not repeat it. `blocked` follows
+    before `added`): once per crossing. Overruns while above the cap do not repeat it; a period
+    that dips back within the cap and crosses again reports a new crossing. `blocked` follows
     `BUDGET_FLAG`, which sets `review_required_at` only once until `ack-overrun`.
     """
     rows = yield q(sql.PERIOD_GET, budget_id=budget.id, period_start=start)

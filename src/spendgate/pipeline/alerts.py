@@ -1,7 +1,8 @@
 """Budget warnings: one WARNING record on `spendgate.budget` per transition the ledger reports.
 
-The ledger reports a soft-threshold crossing, a cap breach or a block once, in the transaction
-that made it, so logging what `hold` and `settle` return needs no deduplication here. The record
+The ledger reports a soft-threshold crossing (once per period), a cap breach (once per crossing)
+or a block (once per review flag) in the transaction that made it, so logging what `hold` and
+`settle` return needs no deduplication here. The record
 carries only budget facts (ids, path, period, amounts): nothing from the request, the key or the
 user. The gateway formats `spendgate_fields` as JSON through its allowlist; library mode gets the
 same facts in the plain message.
@@ -35,6 +36,8 @@ def alert_fields(alert: BudgetAlert, currency: str) -> dict[str, object]:
         "cap": _amount(alert.cap_nano, currency),
         "currency": currency,
     }
+    if alert.session:  # the path is the session's parent: never the key or session id
+        fields["scope_kind"] = "session"
     if alert.period is not Period.NONE:  # a lifetime budget has a single period, no start
         start = datetime.fromtimestamp(alert.period_start / 1000, UTC)
         fields["period_start"] = start.strftime("%Y-%m-%dT%H:%M:%SZ")

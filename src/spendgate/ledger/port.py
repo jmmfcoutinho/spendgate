@@ -202,7 +202,7 @@ class Settlement:
     overrun_nano: int = 0
     late: bool = False
     review_flagged: tuple[str, ...] = ()  # budgets that a breach overrun just flagged
-    alerts: tuple[BudgetAlert, ...] = ()  # cap breaches and blocks this settlement made
+    alerts: tuple[BudgetAlert, ...] = ()  # cap crossings and blocks this settlement made
 
 
 @dataclass(frozen=True, slots=True)
