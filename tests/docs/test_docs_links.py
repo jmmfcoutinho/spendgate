@@ -55,3 +55,35 @@ def test_relative_links_resolve(page: Path) -> None:
         if missing or bad_anchor:
             broken.append(link)
     assert not broken, f"{page.name}: broken links {broken}"
+
+
+# PyPI renders README.md as the project page with no repository to resolve relative paths against,
+# so the README links into the repository by absolute URL; these are then checked like local links.
+REPO_URL = "https://github.com/jmmfcoutinho/spendgate"
+REPO_FILE = re.compile(re.escape(REPO_URL) + r"/blob/main/([^#?]+)(?:#(.*))?$")
+MARKDOWN_TARGET = re.compile(r"\]\(([^)\s]+)\)")  # links and images, badges included
+HTML_TARGET = re.compile(r"""(?:href|src)\s*=\s*["']([^"']+)["']""")
+
+
+def readme_targets() -> list[str]:
+    text = FENCE.sub("", (REPO / "README.md").read_text())
+    return MARKDOWN_TARGET.findall(text) + HTML_TARGET.findall(text)
+
+
+def test_readme_has_no_relative_links_so_it_renders_on_pypi() -> None:
+    relative = [t for t in readme_targets() if not t.startswith("https://")]
+    assert not relative, f"README.md: use absolute https links, not {relative}"
+
+
+def test_readme_links_into_the_repository_resolve() -> None:
+    broken = []
+    for target in readme_targets():
+        found = REPO_FILE.match(target)
+        if not found:
+            continue
+        path, fragment = REPO / found.group(1), found.group(2)
+        bad_anchor = bool(fragment) and path.suffix == ".md" and fragment not in anchors(path)
+        if not path.is_file() or bad_anchor:
+            broken.append(target)
+    assert not broken, f"README.md: links to missing repository files {broken}"
+    assert any(REPO_FILE.match(t) for t in readme_targets()), "README.md has no repository links"
