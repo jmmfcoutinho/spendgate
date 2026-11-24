@@ -1,6 +1,7 @@
 """Cloud identity settings: `credential: adc`, `ledger.backend.auth`, pool sizes, file re-reads."""
 
 import asyncio
+import re
 from pathlib import Path
 
 import pytest
@@ -35,14 +36,17 @@ def test_adc_is_accepted_for_vertex_and_resolves_to_no_stored_secret(tmp_path: P
 
 
 @pytest.mark.parametrize(
-    ("deployment", "path"),
+    ("base", "deployment", "path"),
     [
-        ("provider: openai, auth: bearer_token, credential: adc", "models.m.deployments.0"),
-        ("provider: openai, credential: adc", "models.m.deployments.0"),  # api_key auth
+        (BASE, "provider: openai, auth: bearer_token, credential: adc", "models.m.deployments.0"),
+        (BASE, "provider: openai, credential: adc", "models.m.deployments.0"),  # api_key auth
+        (GOOGLE, "provider: google, auth: api_key, credential: adc", "models.g.deployments.0"),
     ],
 )
-def test_adc_is_refused_outside_google_vertex(tmp_path: Path, deployment: str, path: str) -> None:
-    text = BASE.replace("{provider: openai}", "{" + deployment + "}")
+def test_adc_is_refused_outside_google_vertex(
+    tmp_path: Path, base: str, deployment: str, path: str
+) -> None:
+    text = re.sub(r"\{provider: (openai|google)\}", "{" + deployment + "}", base)
     message = failure(write(tmp_path, text))
     assert f"{path}.credential: adc is for Google Vertex AI only" in message
 
