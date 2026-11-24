@@ -19,13 +19,17 @@ from pydantic import ValidationError
 
 from spendgate.config.schema import Config, DeploymentSpec, Provider
 from spendgate.config.secrets import ADC, Secret, check_ref, resolve
+from spendgate.config.settings import (
+    CheckReport,
+    ResolvedDeployment,
+    Route,
+    Settings,
+    WebhookTarget,
+)
 from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.catalog import Catalog, CatalogError, ModelNotPriced, parse
-from spendgate.core.health import HealthConfig
 from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
-from spendgate.core.policy import model_filter_matches
 
-_MS = 1000
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
 
@@ -39,158 +43,6 @@ class ConfigError(Exception):
         super().__init__(
             "; ".join(f"{file}: {p}: {m}" if p else f"{file}: {m}" for p, m in self.issues)
         )
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedDeployment:
-    """A routable target with its credential resolved (hidden from reprs)."""
-
-    provider: str
-    base_url: str
-    model: str
-    auth: str
-    region: str | None
-    api_version: str | None
-    credential: Secret | None
-    ambient: bool = False  # `credential: adc`: the host's own cloud identity, no stored secret
-
-
-@dataclass(frozen=True, slots=True)
-class Route:
-    alias: str
-    catalog_id: str
-    deployments: tuple[ResolvedDeployment, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class WebhookTarget:
-    """`alerts.webhook` with its URL and signing secret resolved (both hidden from reprs)."""
-
-    url: Secret  # a webhook URL often carries a token: it is never logged
-    signing_secret: Secret
-    timeout_seconds: int
-    max_attempts: int
-    queue_size: int
-
-
-@dataclass(frozen=True, slots=True)
-class Settings:
-    """Everything the gateway needs, validated. Secrets are `Secret` holders."""
-
-    source: Path
-    config: Config
-    catalog: Catalog
-    catalog_documents: tuple[Mapping[str, object], ...]
-    catalog_sha256: str  # combined hash of every catalog file, recorded on calls (T-CAT-05)
-    fx: tuple[FxSnapshot, ...]
-    key_pepper: Secret
-    ledger_dsn: Secret | None  # postgres only
-    ledger_path: Path | None  # sqlite only, resolved against the config file's directory
-    routes: Mapping[str, Route]
-    alert_webhook: WebhookTarget | None = None  # `spendgate serve` posts budget warnings here
-
-    @property
-    def ledger_currency(self) -> str:
-        return self.config.ledger.currency
-
-    @property
-    def lease_ms(self) -> int:
-        return self.config.ledger.lease_seconds * _MS
-
-    @property
-    def sweep_ms(self) -> int:
-        return self.config.ledger.sweep_seconds * _MS
-
-    @property
-    def heartbeat_ms(self) -> int:
-        beat = self.config.ledger.heartbeat_seconds
-        return beat * _MS if beat is not None else self.lease_ms // 3
-
-    @property
-    def health(self) -> HealthConfig:
-        r = self.config.routing
-        return HealthConfig(
-            cooldown_ms=r.cooldown_seconds * _MS,
-            failure_threshold_pct=r.failure_threshold_pct,
-            min_requests=r.min_requests,
-            window_ms=r.window_seconds * _MS,
-            max_cooldown_ms=r.max_cooldown_seconds * _MS,
-        )
-
-    def fail_open_summary(self) -> list[str]:
-        """Lines the gateway logs (as warnings) at start: every enabled opt-out, or none."""
-        lines = []
-        if self.config.fail_open.allow_remote_media:
-            lines.append(
-                "fail_open.allow_remote_media is ON: URLs in request bodies are accepted and "
-                "fetched by the provider (SSRF exposure)"
-            )
-        return lines or ["fail_open: no opt-outs enabled"]
-
-    def unverified_summary(self) -> str | None:
-        """One warning line naming the catalog entries with `verified: false`, or None."""
-        return unverified_summary(self.catalog)
-
-    def superseded_summary(self) -> str | None:
-        """One warning line when an unverified entry supersedes a verified one, or None."""
-        ids = self.catalog.unverified_over_verified()
-        if not ids:
-            return None
-        more = f" and {len(ids) - _IDS_SHOWN} more" if len(ids) > _IDS_SHOWN else ""
-        verb = "entry supersedes" if len(ids) == 1 else "entries supersede"
-        return (
-            f"{len(ids)} unverified catalog {verb} a verified price of the same id: "
-            f"{', '.join(ids[:_IDS_SHOWN])}{more}"
-        )
-
-    def unmatched_filters(self) -> list[str]:
-        """A warning per bootstrap budget whose `model_filter` matches no routed catalog id.
-
-        Not an error: the routes may grow into the filter later. Until then the budget takes
-        part in no hold; the usual cause is a filter written against an alias.
-        """
-        routed = sorted({r.catalog_id for r in self.routes.values()})
-        shown = ", ".join(routed[:_IDS_SHOWN])
-        return [
-            f"bootstrap.budgets.{i}.model_filter {b.model_filter!r} matches no routed catalog "
-            f"id, so the budget never applies (filters match catalog ids such as {shown}, "
-            "not aliases)"
-            for i, b in enumerate(self.config.bootstrap.budgets)
-            if b.model_filter is not None
-            and not any(model_filter_matches(b.model_filter, m) for m in routed)
-        ]
-
-
-_IDS_SHOWN = 5
-
-
-def unverified_summary(catalog: Catalog) -> str | None:
-    """A warning naming how many effective entries have `verified: false` and the first few ids."""
-    ids = sorted({e.price_id for e in catalog.entries() if not e.verified})
-    if not ids:
-        return None
-    shown = ", ".join(ids[:_IDS_SHOWN])
-    more = f" and {len(ids) - _IDS_SHOWN} more" if len(ids) > _IDS_SHOWN else ""
-    noun = "entry has" if len(ids) == 1 else "entries have"
-    return (
-        f"{len(ids)} catalog {noun} unverified prices (verified: false; not compared with the "
-        f"provider's page): {shown}{more}"
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class CheckReport:
-    """Result of `check_config`: nothing is started."""
-
-    errors: tuple[str, ...]
-    unpriced: tuple[str, ...]  # routed catalog ids without a price
-    unverified: str | None = None  # warning line when the catalog has unverified prices
-    unmatched_filters: tuple[str, ...] = ()  # bootstrap budgets whose filter matches no route
-    superseded: str | None = None  # warning line when unverified entries replace verified ones
-
-    @property
-    def ok(self) -> bool:
-        return not self.errors
 
 
 Issues = list[tuple[str, str]]

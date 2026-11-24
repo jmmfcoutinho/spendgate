@@ -9,9 +9,10 @@ rotation caught half-written does not take a working deployment down.
 
 from dataclasses import dataclass, field, replace
 
-from spendgate.config.load import ResolvedDeployment, Route, Settings, credential_path
+from spendgate.config.load import credential_path
 from spendgate.config.schema import Provider
 from spendgate.config.secrets import Secret, resolve
+from spendgate.config.settings import ResolvedDeployment, Route, Settings
 
 _FILE = "file:"
 
