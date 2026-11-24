@@ -78,7 +78,7 @@ async def test_a_failed_fetch_is_ledger_unavailable_naming_only_the_class() -> N
     with pytest.raises(LedgerUnavailable) as info:
         await DbTokens("rds_iam", broken).password()
     assert "RuntimeError" in str(info.value) and "Signature" not in str(info.value)
-    assert info.value.__cause__ is None and info.value.__suppress_context__
+    assert info.value.__cause__ is None and info.value.__context__ is None
     with pytest.raises(LedgerUnavailable, match="empty token"):
         await DbTokens("entra", lambda: ("", NOW + 3600), clock=Clock()).password()
 
@@ -260,16 +260,42 @@ async def test_a_failed_connect_forgets_the_token(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(psycopg.OperationalError):
         await connection_class(login).connect("host=db.example.test")
     assert login.invalidated == 1
-    assert connection_class(None) is psycopg.AsyncConnection
+
+
+# libpq quotes the host it could not resolve; with an unencoded `@` in the password, that host
+# holds the rest of the password.
+UNENCODED = (
+    "postgresql://spendgate:pw@fragment-0000@127.0.0.1:5432/spend"  # pragma: allowlist secret
+)
+
+
+async def _libpq_refuses(*args: object, **kwargs: object) -> NoReturn:
+    raise psycopg.OperationalError('failed to resolve host "fragment-0000@127.0.0.1"')
+
+
+async def test_a_failed_connect_never_quotes_the_connection_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", classmethod(_libpq_refuses))
+    with pytest.raises(psycopg.OperationalError) as info:
+        await connection_class(None).connect(UNENCODED)
+    text = str(info.value)
+    assert text.startswith("cannot connect to the ledger database (OperationalError)")
+    assert "percent-encode '@' in the password as %40" in text and "fragment" not in text
+    assert info.value.__cause__ is None and info.value.__context__ is None
+    with pytest.raises(LedgerUnavailable) as opened:
+        await PostgresLedger.open(UNENCODED, currency="USD")
+    assert "fragment" not in str(opened.value) and "%40" in str(opened.value)
+    assert opened.value.__cause__ is None and opened.value.__context__ is None
 
 
 def test_a_malformed_dsn_is_refused_without_quoting_it() -> None:
     with pytest.raises(ValueError, match="not a valid connection string") as info:
         rds_fetch(MALFORMED, None, client=FakeRds())
-    assert "pw-fragment" not in str(info.value) and info.value.__cause__ is None
+    assert "pw-fragment" not in str(info.value) and info.value.__context__ is None
     with pytest.raises(ValueError, match="not a valid connection string") as info:
         same_but_password("postgresql://u:old@db/spend", MALFORMED)  # pragma: allowlist secret
-    assert "pw-fragment" not in str(info.value)
+    assert "pw-fragment" not in str(info.value) and info.value.__context__ is None
     with pytest.raises(ValueError, match="not a valid connection string"):
         entra_fetch("postgresql://spendgate@db:notaport/spend", "s")
 
@@ -278,4 +304,4 @@ async def test_open_with_a_malformed_dsn_never_quotes_it() -> None:
     with pytest.raises(LedgerUnavailable) as info:
         await PostgresLedger.open(MALFORMED, currency="USD")
     assert "not a valid connection string" in str(info.value)
-    assert "pw-fragment" not in str(info.value) and info.value.__cause__ is None
+    assert "pw-fragment" not in str(info.value) and info.value.__context__ is None

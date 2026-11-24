@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
+from spendgate.ledger.port import LedgerUnavailable
 from spendgate.ledger.postgres import PostgresLedger
 from tests.contract.rig import workdir_location
 
@@ -18,6 +19,7 @@ pytestmark = pytest.mark.postgres
 
 TOKEN = "fake-iam-token-0000"  # noqa: S105  # pragma: allowlist secret
 OLD_PW, NEW_PW = "fake-old-pw", "fake-new-pw"  # pragma: allowlist secret
+BAD_PW = "fake-bad-pw-0000"  # pragma: allowlist secret
 
 
 class CountingLogin:
@@ -91,3 +93,14 @@ def test_a_rotated_dsn_reaches_the_next_connection_and_open_ones_keep_theirs(
     before, after = asyncio.run(run())
     assert before == [OLD_PW] and after == [NEW_PW]
     assert "password" not in conninfo_to_dict(location)
+
+
+def test_a_refused_connection_names_no_option_or_password_value(location: str) -> None:
+    dsn = make_conninfo(location, password=BAD_PW, sslmode="bogus-mode-0000")
+
+    with pytest.raises(LedgerUnavailable) as info:
+        asyncio.run(PostgresLedger.open(dsn))
+    text = str(info.value)
+    assert "cannot connect to the ledger database" in text
+    assert "bogus-mode" not in text and BAD_PW not in text
+    assert info.value.__cause__ is None and info.value.__context__ is None

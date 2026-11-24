@@ -171,10 +171,36 @@ def same_but_password(old: str, new: str) -> bool:
     try:
         a, b = conninfo_to_dict(old), conninfo_to_dict(new)
     except psycopg.Error:  # its message may quote the DSN, password included
-        raise ValueError("not a valid connection string") from None
+        a = b = {}
+    if not a or not b:  # raised outside the handler: no context that quotes the DSN
+        raise ValueError("not a valid connection string")
     a.pop("password", None)
     b.pop("password", None)
     return a == b
+
+
+async def _connect_once(dsn: str, login: Login | None) -> Conn:
+    """The migration connection, TCP options only: a migration may wait for a peer's lock.
+
+    Every refusal is fixed text raised outside its handler: psycopg's and libpq's messages quote
+    parts of the connection string, so neither they nor a chained exception may reach a log.
+    """
+    failed = ""
+    try:
+        tcp = tcp_options_for(dsn)
+    except psycopg.Error as exc:
+        failed = f"ledger.backend.dsn is not a valid connection string ({type(exc).__name__})"
+    if failed:
+        raise LedgerUnavailable(f"cannot open ledger: {failed}")
+    token = {"password": await login.password()} if login is not None else {}
+    try:
+        return await connection_class(login).connect(
+            make_conninfo(dsn, **tcp, **token),
+            autocommit=True, row_factory=dict_row, connect_timeout=_CONNECT_TIMEOUT_S,
+        )  # fmt: skip
+    except psycopg.Error as exc:  # already `connect_failure` text from the connection class
+        failed = str(exc)
+    raise LedgerUnavailable(f"cannot open ledger: {failed}")
 
 
 def tcp_options_for(dsn: str) -> dict[str, str]:
@@ -234,25 +260,12 @@ class PostgresLedger(LedgerEngine):
     ) -> Self:
         """Migrate (or with `migrate` False refuse a schema that is behind, `SchemaBehind`) and
         check the ledger currency. Never touches a reservation."""
+        conn = await _connect_once(dsn, login)
         try:
-            tcp = tcp_options_for(dsn)
-        except psycopg.Error as exc:  # its message may quote the DSN, password included
-            raise LedgerUnavailable(
-                f"cannot open ledger: ledger.backend.dsn is not a valid connection string "
-                f"({type(exc).__name__})"
-            ) from None
-        try:
-            token = {"password": await login.password()} if login is not None else {}
-            # TCP options only: a migration may wait for a peer's lock or run long.
-            async with await connection_class(login).connect(
-                make_conninfo(dsn, **tcp, **token),
-                autocommit=True,
-                row_factory=dict_row,
-                connect_timeout=_CONNECT_TIMEOUT_S,
-            ) as conn:
+            async with conn:
                 await _migrate(conn, clock, apply=migrate)
                 await run_flow(conn, currency_flow(currency))
-        except (psycopg.Error, ConnectionDropped) as exc:
+        except (psycopg.Error, ConnectionDropped) as exc:  # server messages: no connection string
             raise LedgerUnavailable(f"cannot open ledger: {exc}") from exc
         return cls(
             dsn,

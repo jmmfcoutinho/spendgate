@@ -73,13 +73,14 @@ class DbTokens:
         return await asyncio.shield(task)
 
     async def _fetch_one(self) -> str:
+        failed = ""
         try:
             token, expires = await asyncio.to_thread(self._fetch)
-        except Exception as exc:  # the message may quote a signed URL: the class only,
-            # and no chained cause, which a traceback at start would print in full
-            raise LedgerUnavailable(
-                f"cannot get a {self._kind} database token ({type(exc).__name__})"
-            ) from None
+        except Exception as exc:  # any identity library error is the same refusal
+            failed = type(exc).__name__
+        if failed:  # raised here, not in the handler: the message keeps only the class name, and
+            # no cause or context is kept for a traceback to print
+            raise LedgerUnavailable(f"cannot get a {self._kind} database token ({failed})")
         if not token:
             raise LedgerUnavailable(f"the {self._kind} identity returned an empty token")
         self._token = (token, expires)
@@ -99,26 +100,45 @@ def _retrieve(task: "asyncio.Task[str]") -> None:
         task.exception()
 
 
-def connection_class(login: Login | None) -> type[Conn]:
-    """The connection class for `login`: a failed connect forgets its cached token.
+def connect_failure(conninfo: str, exc: psycopg.Error) -> str:
+    """Fixed text for a failed connect: libpq's own message quotes host, port and option values.
 
-    libpq reports a rejected login (SQLSTATE 28P01 or 28000) as an `OperationalError` that often
-    carries no SQLSTATE, so any failed connect drops the token; the next login fetches a new one.
+    An unencoded `@` in a URL password puts part of the password into the host name, and libpq
+    then quotes that host; hence the class name only, plus a hint when the host has an `@`.
     """
-    if login is None:
-        return AsyncConnection
-    forget = login.invalidate
+    try:
+        host = str(conninfo_to_dict(conninfo).get("host") or "")
+    except psycopg.Error:
+        host = ""
+    text = f"cannot connect to the ledger database ({type(exc).__name__}"
+    text += f", SQLSTATE {exc.sqlstate})" if exc.sqlstate else ")"
+    if "@" in host:
+        text += "; the host name contains '@': percent-encode '@' in the password as %40"
+    return text
 
-    class TokenConnection(AsyncConnection[DictRow]):
+
+def connection_class(login: Login | None) -> type[Conn]:
+    """The connection class for the pool and `open`: fixed error text, and a bad token forgotten.
+
+    A failed connect raises `OperationalError` with `connect_failure` text and no cause or context
+    (psycopg_pool logs it as it retries). libpq reports a rejected login (SQLSTATE 28P01 or 28000)
+    as an error that often carries no SQLSTATE, so any failed connect drops `login`'s cached
+    token; the next login fetches a new one.
+    """
+
+    class LedgerConnection(AsyncConnection[DictRow]):
         @classmethod
         async def connect(cls, conninfo: str = "", **kwargs: Any) -> Self:  # noqa: ANN401
+            failed = ""
             try:
                 return await super().connect(conninfo, **kwargs)
-            except psycopg.OperationalError:
-                forget()
-                raise
+            except psycopg.Error as exc:
+                failed = connect_failure(conninfo, exc)
+            if login is not None:
+                login.invalidate()
+            raise psycopg.OperationalError(failed)  # outside the handler: no context kept
 
-    return TokenConnection
+    return LedgerConnection
 
 
 class RdsClient(Protocol):
@@ -148,7 +168,9 @@ def _login(dsn: str) -> tuple[str, int, str]:
         params = conninfo_to_dict(dsn)
         port = int(str(params.get("port") or 5432))
     except (psycopg.Error, ValueError):  # psycopg's message may quote the DSN, password included
-        raise ValueError("ledger.backend.dsn is not a valid connection string") from None
+        params = {}
+    if not params:  # raised outside the handler: no context that quotes the DSN
+        raise ValueError("ledger.backend.dsn is not a valid connection string")
     if params.get("password"):
         raise ValueError(
             "ledger.backend.dsn must not carry a password when ledger.backend.auth is set"
