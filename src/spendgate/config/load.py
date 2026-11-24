@@ -22,6 +22,7 @@ from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.catalog import Catalog, CatalogError, ModelNotPriced, parse
 from spendgate.core.health import HealthConfig
 from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
+from spendgate.core.policy import model_filter_matches
 
 _MS = 1000
 _LOOPBACK = ("localhost", "127.0.0.1", "[::1]")
@@ -111,8 +112,25 @@ class Settings:
         """One warning line naming the catalog entries with `verified: false`, or None."""
         return unverified_summary(self.catalog)
 
+    def unmatched_filters(self) -> list[str]:
+        """A warning per bootstrap budget whose `model_filter` matches no routed catalog id.
 
-_UNVERIFIED_SHOWN = 5
+        Not an error: the routes may grow into the filter later. Until then the budget takes
+        part in no hold; the usual cause is a filter written against an alias.
+        """
+        routed = sorted({r.catalog_id for r in self.routes.values()})
+        shown = ", ".join(routed[:_IDS_SHOWN])
+        return [
+            f"bootstrap.budgets.{i}.model_filter {b.model_filter!r} matches no routed catalog "
+            f"id, so the budget never applies (filters match catalog ids such as {shown}, "
+            "not aliases)"
+            for i, b in enumerate(self.config.bootstrap.budgets)
+            if b.model_filter is not None
+            and not any(model_filter_matches(b.model_filter, m) for m in routed)
+        ]
+
+
+_IDS_SHOWN = 5
 
 
 def unverified_summary(catalog: Catalog) -> str | None:
@@ -120,8 +138,8 @@ def unverified_summary(catalog: Catalog) -> str | None:
     ids = sorted({e.price_id for e in catalog.entries() if not e.verified})
     if not ids:
         return None
-    shown = ", ".join(ids[:_UNVERIFIED_SHOWN])
-    more = f" and {len(ids) - _UNVERIFIED_SHOWN} more" if len(ids) > _UNVERIFIED_SHOWN else ""
+    shown = ", ".join(ids[:_IDS_SHOWN])
+    more = f" and {len(ids) - _IDS_SHOWN} more" if len(ids) > _IDS_SHOWN else ""
     noun = "entry has" if len(ids) == 1 else "entries have"
     return (
         f"{len(ids)} catalog {noun} unverified prices (verified: false; not compared with the "
@@ -136,6 +154,7 @@ class CheckReport:
     errors: tuple[str, ...]
     unpriced: tuple[str, ...]  # routed catalog ids without a price
     unverified: str | None = None  # warning line when the catalog has unverified prices
+    unmatched_filters: tuple[str, ...] = ()  # bootstrap budgets whose filter matches no route
 
     @property
     def ok(self) -> bool:
@@ -404,4 +423,4 @@ def check_config(
     except ConfigError as exc:
         errors = tuple(f"{p}: {m}" if p else m for p, m in exc.issues)
         return CheckReport(errors, tuple(sorted(set(unpriced))))
-    return CheckReport((), (), settings.unverified_summary())
+    return CheckReport((), (), settings.unverified_summary(), tuple(settings.unmatched_filters()))

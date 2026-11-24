@@ -128,6 +128,13 @@ All notable changes to this project are documented here. The format follows
   body instead of sleeping 10 ms, and the settlement tests await `drain()` instead of polling.
 - `BudgetExhausted.hold` in the Python SDK: the refused call's worst-case hold from
   `details.hold`, parsed like `remaining`.
+- The admin API refuses to create a budget whose `model_filter` matches no routed catalog id
+  (`invalid_request`, `param: model_filter`): such a budget would never apply. The filter is a
+  case-sensitive glob over the catalog id (such as `openai/gpt-6-*`), never the alias; the
+  configuration reference, the OpenAPI document and the operations guide now say so.
+- `spendgate check-config` and `spendgate serve` warn about each `bootstrap.budgets` entry whose
+  `model_filter` matches no routed catalog id. A warning, not an error: the configuration still
+  loads.
 
 ### Fixed
 

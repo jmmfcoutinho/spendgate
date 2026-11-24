@@ -202,7 +202,7 @@ Used at `bootstrap.budgets[]`.
 | `period` | `none` or `day` or `month` | required | `none` is a lifetime cap; `day` and `month` reset at UTC. |
 | `cap` | money string such as `"50 USD"` | required | Quoted amount in the ledger currency, such as `"50 EUR"`. |
 | `soft_pct` | integer 1 to 99 | `80` | Percentage of the cap that raises a warning, never a refusal. |
-| `model_filter` | string (optional) | unset | Apply the budget only to calls of matching models. |
+| `model_filter` | string (optional) | unset | Apply the budget only to calls whose catalog id (`provider/model`, not the alias) matches this case-sensitive glob, such as `openai/gpt-6-*`. `check-config` and `serve` warn when it matches no routed catalog id. |
 | `strict_overrun` | boolean (optional) | unset | Overrides `defaults.strict_overrun` for this budget. |
 
 ## BootstrapKey

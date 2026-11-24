@@ -43,6 +43,8 @@ def run_check_config(path: str) -> int:
         print(f"warning: routed model {model} has no price in force", file=sys.stderr)
     if report.unverified is not None:
         print(f"warning: {report.unverified}", file=sys.stderr)
+    for line in report.unmatched_filters:
+        print(f"warning: {line}", file=sys.stderr)
     if report.ok:
         print("configuration ok")
     return EXIT_OK if report.ok else EXIT_CONFIG
@@ -112,6 +114,8 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         print(f"fail_open: {line}", file=sys.stderr)
     if (unverified := settings.unverified_summary()) is not None:
         print(f"warning: {unverified}", file=sys.stderr)
+    for line in settings.unmatched_filters():
+        print(f"warning: {line}", file=sys.stderr)
     metrics, logger = Metrics(), configure_json_logging()
     timeout = upstream_timeout(settings.config.routing.connect_timeout_seconds)
     async with httpx.AsyncClient(timeout=timeout) as sender:
