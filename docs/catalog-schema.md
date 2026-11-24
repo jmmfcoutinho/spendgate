@@ -3,12 +3,12 @@
 Prices and model metadata are validated data, never code. Files: `catalog/prices.yaml` (bundled),
 `catalog/schema.json` (here: [catalog-schema.json](../src/spendgate/catalog/schema.json), JSON Schema 2020-12), an
 optional local override file. [catalog-example.yaml](catalog-example.yaml) is the example and holds every
-price of the earlier in-house guard except Realtime (on the roadmap). Consumers: `core/catalog.py`, `core/cost.py`.
+price of a private tool that predates spendgate, except Realtime (on the roadmap). Consumers: `core/catalog.py`, `core/cost.py`.
 `spendgate.config` reads the YAML files and computes their sha256; `core.catalog.parse(dicts, sha)` validates and
 resolves them (core never reads files). No remote fetch in v0.1.
 
 ```
-uvx check-jsonschema --schemafile design/catalog-schema.json design/catalog-example.yaml
+uvx check-jsonschema --schemafile src/spendgate/catalog/schema.json docs/catalog-example.yaml   # from the repository root
 ```
 
 ## 1. Conventions
@@ -18,7 +18,7 @@ uvx check-jsonschema --schemafile design/catalog-schema.json design/catalog-exam
 - **Units in field names.** `_per_mtok` = per 1,000,000 tokens; `_per_minute` = per audio minute;
   `per_1k_characters`; `per_image`. All prices are in the entry's `currency`.
 - **Money out.** Cost is computed exactly in the native currency, then converted once to integer
-  nano-units of the ledger currency (EUR default) with ceiling rounding (section 5).
+  nano-units of the ledger currency (`ledger.currency`) with ceiling rounding (section 5).
 - **Provider part of `id`** is the slug = adapter module name (`openai`, `azure_openai`, `anthropic`, `bedrock`,
   `google`, `azure_speech`, `elevenlabs`); the model part is what the caller sends. There is no `vertex` slug:
   Vertex is an auth mode of `google`. Hyphenated slugs fail the schema.

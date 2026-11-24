@@ -1,7 +1,8 @@
-# spendgate price catalog, example and seed shape (schema: catalog-schema.json).
+# spendgate price catalog, example and seed shape (schema: src/spendgate/catalog/schema.json).
 # Prices are quoted decimal STRINGS in the entry's own currency; units are in the field names.
-# Every number below comes from an earlier in-house guard or, for the three "illustrative" entries,
-# from LiteLLM's public map; those are verified: false until they are re-checked.
+# Every number below comes from the price table of a private tool that predates spendgate or, for
+# the three "illustrative" entries, from LiteLLM's public map; those are verified: false until they
+# are re-checked.
 # Provider slug = adapter module name (azure_openai, azure_speech); Vertex is an auth mode of google.
 # Every chat/responses/messages entry carries limits.max_output_tokens (output ceiling, protocol 2.1).
 catalog_version: 1

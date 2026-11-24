@@ -9,9 +9,9 @@ A block is executable when the line before its fence is an HTML comment `<!-- do
 - `python`: run in a fresh interpreter against the running proxy.
 - `library`: run in this process with the local guard pointed at the fake provider.
 
-Only two things are substituted: the provider address (the fake's) and the loopback port, and the
-`sg-...` placeholder becomes the key the proxy printed. Everything else is the README's text, so
-a renamed command, flag, config key or import breaks this test.
+Only these are substituted: the provider address (the fake's), the data and admin loopback
+ports, and the `sg-...` placeholder, which becomes the key the proxy printed. Everything else is
+the README's text, so a renamed command, flag, config key or import breaks this test.
 
 The proxy and the fake provider run as subprocesses on 127.0.0.1: the suite's socket guard only
 covers this process, and the guard exists so tests cannot reach the internet, which these never
@@ -43,6 +43,7 @@ MARKER = re.compile(r"^<!-- doctest: (\w+)(?: (\S+))? -->$")
 KEY_LINE = re.compile(r"created api key quickstart \(org:demo\): (sg-\S+)")
 REAL_UPSTREAM = "https://api.openai.com/v1"
 README_PORT = "127.0.0.1:8080"
+README_ADMIN_PORT = "127.0.0.1:8081"
 PLACEHOLDER_KEY = "sg-..."
 
 FAKE_SERVER = (
@@ -130,7 +131,7 @@ class Stack:
             "NO_PROXY": "127.0.0.1",
             "HOME": str(tmp),
         }
-        self.fake_port, self.port = free_port(), free_port()
+        self.fake_port, self.port, self.admin_port = free_port(), free_port(), free_port()
         self.procs: list[subprocess.Popen[str]] = []
         self.secret = ""
 
@@ -159,8 +160,10 @@ class Stack:
         assert done.returncode == 0, f"{url} never answered"
 
     def adapt(self, text: str) -> str:
-        return text.replace(REAL_UPSTREAM, f"http://127.0.0.1:{self.fake_port}/v1").replace(
-            README_PORT, f"127.0.0.1:{self.port}"
+        return (
+            text.replace(REAL_UPSTREAM, f"http://127.0.0.1:{self.fake_port}/v1")
+            .replace(README_PORT, f"127.0.0.1:{self.port}")
+            .replace(README_ADMIN_PORT, f"127.0.0.1:{self.admin_port}")
         )
 
     def shell(self, script: str) -> str:
@@ -195,6 +198,7 @@ class Stack:
         reader = threading.Thread(target=pump, daemon=True)
         reader.start()
         self.wait(f"http://127.0.0.1:{self.port}/livez")
+        self.wait(f"http://127.0.0.1:{self.admin_port}/metrics")  # the README's admin listener
         self.reader = reader
 
     def python(self, code: str) -> str:

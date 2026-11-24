@@ -20,8 +20,14 @@ import spendgate.local as sg
 
 guard = sg.guard(cap="5 USD")      # create or open the ledger, scope and budget
 client = guard.openai()            # OpenAI SDK; guard.anthropic() for Anthropic
-client.chat.completions.create(model="gpt-6-luna", messages=[{"role": "user", "content": "hi"}])
+client.chat.completions.create(
+    model="gpt-6-luna", max_tokens=50, messages=[{"role": "user", "content": "hi"}]
+)
 ```
+
+Pass `max_tokens` (`max_output_tokens` for Responses) in every call. The guard holds the worst case
+before sending, and without it that is the catalog's output limit for the model (128,000 tokens
+for `gpt-6-luna`), so a small cap can refuse calls that would have cost a fraction of a cent.
 
 `guard.openai(async_=True)` and `guard.anthropic(async_=True)` return the async SDK clients. Both
 SDKs are optional extras (`openai`, `anthropic`). Use `with guard:` or `guard.close()` to release

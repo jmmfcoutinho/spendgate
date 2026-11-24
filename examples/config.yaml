@@ -1,6 +1,9 @@
 # spendgate.yaml: single-host deployment, SQLite ledger, EUR budgets over a USD catalog.
 # No secret lives here: credentials and the key pepper are `env:NAME` or `file:/absolute/path`.
 # Check it without starting:  spendgate check-config --config examples/config.yaml
+# check-config reads every secret, so before it runs these must exist: the environment variables
+# SPENDGATE_KEY_PEPPER and OPENAI_API_KEY, and the file /run/secrets/anthropic_api_key (readable by
+# the user running spendgate). Change a reference to `env:` or another path to suit your host.
 server:
   listen: 0.0.0.0:8080
   admin: { listen: 127.0.0.1:8081 }     # optional; without it /admin/v1 shares the data port
