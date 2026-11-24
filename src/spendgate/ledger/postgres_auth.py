@@ -111,17 +111,18 @@ def _retrieve(task: "asyncio.Task[str]") -> None:
 def connect_failure(conninfo: str, exc: psycopg.Error) -> str:
     """Fixed text for a failed connect: libpq's own message quotes host, port and option values.
 
-    An unencoded `@` in a URL password puts part of the password into the host name, and libpq
-    then quotes that host; hence the class name only, plus a hint when the host has an `@`.
+    An unencoded `@` in a URL password puts part of the password into the host, port or database
+    name, and libpq then quotes it; hence the class name only, plus a hint when one has an `@`.
     """
     try:
-        host = str(conninfo_to_dict(conninfo).get("host") or "")
+        params = conninfo_to_dict(conninfo)
     except psycopg.Error:
-        host = ""
+        params = {}
     text = f"cannot connect to the ledger database ({type(exc).__name__}"
     text += f", SQLSTATE {exc.sqlstate})" if exc.sqlstate else ")"
-    if "@" in host:
-        text += "; the host name contains '@': percent-encode '@' in the password as %40"
+    if any("@" in str(params.get(k) or "") for k in ("host", "port", "dbname")):
+        text += "; the host, port or database name contains '@': percent-encode '@' in the "
+        text += "password as %40"
     return text
 
 

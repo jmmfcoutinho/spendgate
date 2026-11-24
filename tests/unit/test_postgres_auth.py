@@ -19,6 +19,7 @@ from spendgate.ledger.postgres_auth import (
     UNKNOWN_EXPIRY_SECONDS,
     DbTokens,
     cloudsql_fetch,
+    connect_failure,
     connection_class,
     db_tokens,
     entra_fetch,
@@ -282,12 +283,26 @@ async def test_a_failed_connect_never_quotes_the_connection_string(
         await connection_class(None).connect(UNENCODED)
     text = str(info.value)
     assert text.startswith("cannot connect to the ledger database (OperationalError)")
-    assert "percent-encode '@' in the password as %40" in text and "fragment" not in text
+    assert "percent-encode '@' in the" in text and "%40" in text and "fragment" not in text
     assert info.value.__cause__ is None and info.value.__context__ is None
     with pytest.raises(LedgerUnavailable) as opened:
         await PostgresLedger.open(UNENCODED, currency="USD")
     assert "fragment" not in str(opened.value) and "%40" in str(opened.value)
     assert opened.value.__cause__ is None and opened.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        # the rest lands in the port, then in the database name
+        "postgresql://u:pw@frag-one:frag-two@db:5432/spend",  # pragma: allowlist secret
+        "postgresql://u:pw@frag-one/frag-two@db:5432/spend",  # pragma: allowlist secret
+    ],
+)
+def test_the_percent_encoding_hint_covers_port_and_database_name(dsn: str) -> None:
+    text = connect_failure(dsn, psycopg.OperationalError("refused"))
+    assert "%40" in text and "frag-" not in text
+    assert "%40" not in connect_failure(DSN, psycopg.OperationalError("refused"))
 
 
 @pytest.mark.parametrize(

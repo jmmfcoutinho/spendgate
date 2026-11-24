@@ -272,8 +272,8 @@ never in `spendgate.yaml`.
 **Connection errors.** A connection that fails is reported as `cannot connect to the ledger
 database (<error class>)`, with the SQLSTATE when there is one, at start and in the pool's retry
 warnings. libpq's own message is left out because it quotes host, port and option values from the
-URL. The usual cause of a host name with an `@` in it is an `@` in the password: percent-encode it
-as `%40` (the message says so when it sees one).
+URL. The usual cause of an `@` in the host, port or database name is an `@` in the password:
+percent-encode it as `%40` (the message says so when it sees one).
 
 **Pool size.** Each instance keeps `ledger.pool_min` connections open (default 1) and opens at
 most `ledger.pool_max` (default 10); a call that finds none free waits

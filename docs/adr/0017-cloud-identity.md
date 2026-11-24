@@ -41,8 +41,9 @@ Issue #33 asks for deployments that hold no long-lived cloud secret. Three gaps 
 - **Connection errors are fixed text.** A DSN that is not a valid connection string is refused
   without quoting it, and a failed connect, at start or in the pool, is reported as `cannot
   connect to the ledger database (<class>)` plus the SQLSTATE when there is one, with no chained
-  exception: libpq's message quotes host, port and option values from the URL. When the host
-  contains `@` (an unencoded `@` in the password), a fixed hint says to percent-encode it.
+  exception: libpq's message quotes host, port and option values from the URL. When the host,
+  port or database name contains `@` (an unencoded `@` in the password), a fixed hint says to
+  percent-encode it.
 - **The token libraries are imported by the ledger.** `ledger.postgres_auth` imports botocore,
   azure-identity and google-auth, each lazily and only for its kind. This is an exception to the
   rule that provider SDKs are imported only inside their own adapter (architecture.md section
@@ -52,7 +53,7 @@ Issue #33 asks for deployments that hold no long-lived cloud secret. Three gaps 
   async callable `kwargs`, so the DSN is read from the ledger and the token source is awaited each
   time a connection opens. The migration connection asks the token source too.
 - **SIGHUP** in `serve` re-reads every `file:` secret in a daemon thread of its own, so a slow mount
-  never blocks the event loop, and shutdown removes the handler and abandons a read still under way
+  never blocks the event loop, and shutdown stops reloads and abandons a read still under way
   instead of waiting for it; signals during a reload coalesce into one more read after it. The
   results are applied on the loop: provider credentials (the new router targets are built first,
   then swapped in with one assignment, so a call in flight keeps the credential it started with) and
