@@ -11,8 +11,6 @@ would change public behaviour gets an ADR first (see [CONTRIBUTING.md](CONTRIBUT
 - More dedicated providers where the OpenAI shape does not fit, such as Mistral.
 - OpenAI Realtime speech adapter, with its catalog entries.
 - Batch APIs and image-generation pricing.
-- Per-`detail` image ceilings: every input image is held at one high-detail ceiling today, so a
-  low-detail image holds far more than it can cost and refuses calls a budget could afford.
 - Cross-model fallback (hold on the union of budgets at the dearest price). v0.1 fails over only
   between deployments of the same catalog id.
 - Image ceilings per `detail` level (low, high, original), so a low-detail image is not held at
