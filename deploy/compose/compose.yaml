@@ -28,6 +28,9 @@ services:
     image: spendgate:${SPENDGATE_VARIANT:-core}
     user: "10001:10001"
     mem_limit: 512m
+    # Above server.graceful_shutdown_seconds (30) plus time to settle: Docker's 10 s default would
+    # kill a drain halfway. See docs/operations.md, "Draining on restart".
+    stop_grace_period: 50s
     environment:
       SPENDGATE_CONFIG: /etc/spendgate/spendgate.yaml   # so `docker compose exec spendgate spendgate ...` finds it
     tmpfs:

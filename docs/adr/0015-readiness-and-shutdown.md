@@ -22,8 +22,9 @@ Issue #32 found three gaps in how `serve` behaves behind a load balancer or an o
 
 - Readiness reflects only what makes one replica unable to serve: the ledger answers and the
   catalog is loaded. A kill switch of any kind never fails it. An engaged global switch is
-  reported as the warning `kill_switch_engaged: ...` on `GET /admin/v1/readiness`; the data-port
-  `/readyz` still answers with the status alone (SR-06). Refusals stay in the pipeline:
+  reported as the warning `kill_switch_engaged: ...` on `GET /admin/v1/readiness`, and a failed
+  read of the switch as the warning `kill_switch_probe_failed`; the data-port `/readyz` still
+  answers with the status alone (SR-06). Refusals stay in the pipeline:
   `kill_switch` (503) with the JSON error body, and running streams end within one heartbeat.
 - Two new `server` keys, passed to uvicorn for the data listener and the admin listener:
   - `keep_alive_seconds` (default 75): uvicorn's `timeout_keep_alive`. 75 s is above the common
@@ -34,7 +35,12 @@ Issue #32 found three gaps in how `serve` behaves behind a load balancer or an o
     lifespan shutdown drains the settles. The deadline is meant to end before the orchestrator's
     grace period (minus any `preStop` wait), so the process settles its own calls instead of the
     sweeper charging them in full after a kill. Set it to at least `max_request_seconds` to let
-    every call finish.
+    every call finish. The client of a stopped call gets uvicorn's plain 500 (or, for a stream
+    under way, a cut connection), and uvicorn logs one error per stopped call.
+  - With a separate admin listener, the data server passes each signal on to the admin server,
+    so both drain in parallel under the same deadline.
+- `deploy/compose/compose.yaml` sets `stop_grace_period: 50s`: Docker's 10 s default would kill
+  the process in the middle of a 30 s drain.
 - The operations guide states the observable behaviour of a ledger outage or failover per
   backend: calls are refused with `ledger_unavailable` until the ledger answers again, then
   recover with no restart. It gives no recovery number: that is the database's.
@@ -47,8 +53,9 @@ Issue #32 found three gaps in how `serve` behaves behind a load balancer or an o
   `spendgate status` instead.
 - Before this change a drain had no deadline of its own. With the default of 30 s, a call or
   stream still running 30 s after `SIGTERM` is now stopped and charged as cancelled (the full
-  hold once sent, unless usage was seen). Before, it ran on until the orchestrator killed the
-  process, and was then charged in full by the sweeper. Operators who let long streams finish
+  hold once sent, unless usage was seen), and its client gets a plain 500 or a cut stream instead
+  of the answer. Before, it ran on until the orchestrator killed the process, and was then
+  charged in full by the sweeper. Operators who let long streams finish
   raise `graceful_shutdown_seconds` and the grace period together.
 - Idle connections stay open 75 s instead of 5 s: a few more idle sockets per instance.
 - No schema change, no new error code, no new dependency.

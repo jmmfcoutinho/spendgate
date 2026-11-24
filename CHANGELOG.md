@@ -12,8 +12,11 @@ All notable changes to this project are documented here. The format follows
   passed to uvicorn on the data and admin listeners. Keep-alive was uvicorn's 5 s, below common
   load balancer idle timeouts. The drain after `SIGTERM` now ends at the deadline: calls still
   running are stopped and settled as cancelled (the full hold once sent, unless usage was seen)
-  instead of waiting for the orchestrator's kill and the sweeper
+  instead of waiting for the orchestrator's kill and the sweeper; their clients get uvicorn's
+  plain 500 or a cut stream. A separate admin listener drains in parallel under the same deadline
   ([ADR-0015](docs/adr/0015-readiness-and-shutdown.md)).
+- `deploy/compose/compose.yaml` sets `stop_grace_period: 50s` on the `spendgate` service, so
+  Docker's 10 s default no longer kills the process in the middle of the 30 s drain.
 - The operations guide states what a ledger outage or failover looks like per backend (calls are
   refused with `ledger_unavailable` until the ledger is back, no restart needed) and sizes the
   drain with the new settings.
@@ -23,7 +26,8 @@ All notable changes to this project are documented here. The format follows
 - `/readyz` no longer answers 503 while a global kill switch is engaged. The switch is shared, so
   every replica turned unready at once and load balancers dropped them all. Calls are still
   refused with `kill_switch` (503); the admin readiness detail lists the switch as a warning
-  instead of a reason (ADR-0015).
+  instead of a reason, and a failed read of it as the warning `kill_switch_probe_failed`
+  (ADR-0015).
 
 ## [0.1.3] - 2026-11-24
 

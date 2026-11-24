@@ -218,7 +218,13 @@ On `SIGTERM`, `serve` closes its listener at once and waits for every call in fl
 included, for up to `server.graceful_shutdown_seconds` (default 30). The lease heartbeat keeps
 running while it waits, so calls that finish in time are settled normally. At the deadline it stops
 the calls still running and settles each one as a client cancel (M-13): the full hold once the
-request was sent, unless usage was seen (for a stream, the usage so far). Then it shuts down. Once
+request was sent, unless usage was seen (for a stream, the usage so far). The client of a stopped
+call gets uvicorn's plain `500 Internal Server Error` (not a spendgate JSON error), or, for a
+stream already under way, a connection closed mid-stream. uvicorn logs one `Cancel N running
+task(s)` line and one `Exception in ASGI application` error per stopped call; these are expected
+during a drain, not bugs. Then it shuts down. A separate admin listener (`server.admin`) gets the
+signal at the same moment and drains in parallel with the same deadline, so the stop takes one
+deadline, not two. Once
 shutdown has started, a `SIGINT` forces an exit and a second `SIGTERM` does nothing (uvicorn 0.54).
 A forced exit, or a kill before the deadline has passed, skips that settle: those holds expire after
 `ledger.lease_seconds` and the next sweep (any instance, or this one after restart) charges them
@@ -234,7 +240,8 @@ A forced exit, or a kill before the deadline has passed, skips that settle: thos
   `server.graceful_shutdown_seconds` plus about 15 s for the settles and the shutdown. In
   Kubernetes the `preStop` wait counts against the grace period. With the defaults that is 55 s
   for a 10 s `preStop`: the Kubernetes default of 30 s is too short, so raise it or lower the
-  deadline.
+  deadline. The bundled `deploy/compose/compose.yaml` sets `stop_grace_period: 50s` (no
+  `preStop` in Compose).
 - **Drain deadline against the longest call.** One call or stream runs at most
   `server.max_request_seconds` (default 900). A drain deadline below it is a choice to stop the
   longest calls on every restart and charge them as cancelled; to let every call finish, set
@@ -258,9 +265,9 @@ answers again.
 
 - Every new call is refused with `ledger_unavailable` (503, `Retry-After: 5`) before any provider
   contact (M-12). A refusal can take up to 10 s, the wait for a ledger connection.
-- `/readyz` answers 503 on every replica (`ledger_unreachable` in the admin detail), or not within
-  a short probe timeout. Once the load balancer marks them all unready, clients get the balancer's
-  own error instead.
+- `/readyz` answers 503 on every replica (`ledger_unreachable` in the admin detail), or does not
+  answer within the load balancer's probe timeout (the ledger wait can last up to 10 s). Once the
+  load balancer marks them all unready, clients get the balancer's own error instead.
 - A stream whose lease renewal fails is stopped and settled from its final (end-of-stream) usage if
   that already arrived, else at the full hold (M-13). A settle the ledger refuses is retried by the
   heartbeat; if the hold's lease runs out first, the sweeper charges it in full and a later settle
@@ -284,11 +291,11 @@ Spend after the backup point is lost.
 **Metrics** are Prometheus text at `GET /metrics`, served by the admin app only: open to whoever
 can reach a separate admin port, or needing an admin key with `usage:read` on a shared port.
 Probes `GET /livez` and `GET /readyz` are on the data port; `/readyz` answers with the status code
-and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days, an engaged global kill
-switch) are at
-`GET /admin/v1/readiness` with a `usage:read` admin key. Label values never come from the
-request: `model` is always the routed catalog id (`unknown` on a refusal that names no routed
-model), and `scope` is the key's scope path (`unknown` if it could not be read). Names:
+and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days, an
+engaged global kill switch or a failed read of it) are at `GET /admin/v1/readiness` with a
+`usage:read` admin key. Label values never come from the request: `model` is always the routed
+catalog id (`unknown` on a refusal that names no routed model), and `scope` is the key's scope
+path (`unknown` if it could not be read). Names:
 
 | Metric | Meaning |
 |---|---|
