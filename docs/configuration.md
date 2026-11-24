@@ -97,7 +97,7 @@ Used at `defaults`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `limits` | [Limits](#limits) | all unset | Applied to a key for each limit the key does not set itself. |
+| `limits` | [DefaultLimits](#defaultlimits) | see below | Applied to a key for each limit the key does not set itself. |
 | `max_output_tokens` | positive integer (optional) | unset | Output ceiling for keys with none of their own. If a request, the key and this all leave it open, the catalog entry's `limits.max_output_tokens` applies. |
 | `max_embedding_items` | positive integer | `256` | Most inputs accepted in one embeddings request. |
 | `strict_overrun` | boolean | `true` | When a settlement exceeds the hold and breaches the cap, block the budget until an operator runs `budgets ack-overrun`. A budget can override this. |
@@ -183,15 +183,15 @@ Used at `models.<name>.deployments[]`.
 | `region` | string (optional) | unset | Overrides `providers.<slug>.region` for this deployment. |
 | `api_version` | string (optional) | unset | Overrides `providers.<slug>.api_version` for this deployment. |
 
-## Limits
+## DefaultLimits
 
-Used at `defaults.limits`, `bootstrap.keys[].limits`.
+Used at `defaults.limits`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `rpm` | positive integer (optional) | unset | Requests per minute. Unset means no limit. |
-| `tpm` | positive integer (optional) | unset | Estimated tokens per minute. Unset means no limit. The estimate is the worst case: each image counts at the model's image ceiling, up to 61,000 tokens on a model without a documented one. |
-| `concurrency` | positive integer (optional) | unset | Calls in flight at once. Unset means no limit. |
+| `rpm` | positive integer (optional) | unset | Requests per minute for keys with none of their own. Unset: no limit. |
+| `tpm` | positive integer (optional) | unset | Estimated tokens per minute for keys with none of their own. Unset: no limit. The estimate is the worst case, as for a key's own `tpm`. |
+| `concurrency` | positive integer (optional) | `16` | Calls in flight at once, per key, for keys with none of their own. It also bounds the overrun at a cap crossing (see how-money-is-protected.md). `null` removes the bound. |
 
 ## BootstrapBudget
 
@@ -220,6 +220,17 @@ Used at `bootstrap.keys[]`.
 | `limits` | [Limits](#limits) | all unset | Rate and concurrency limits of this key. |
 | `max_output_tokens` | positive integer (optional) | unset | Output ceiling of this key. |
 | `session_defaults` | [SessionDefaultsSpec](#sessiondefaultsspec) (optional) | unset | Limits for sessions on this key. A request that names a session needs them. |
+| `session_required` | boolean | `false` | Refuse every call on this key that does not send `X-Spendgate-Session` (`invalid_request`), so an agent cannot leave its session limits behind. Needs `session_defaults`. |
+
+## Limits
+
+Used at `bootstrap.keys[].limits`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `rpm` | positive integer (optional) | unset | Requests per minute. Unset means the `defaults.limits.rpm` value applies. |
+| `tpm` | positive integer (optional) | unset | Estimated tokens per minute. Unset means the `defaults.limits.tpm` value applies. The estimate is the worst case: each image counts at the model's image ceiling, up to 61,000 tokens on a model without a documented one. |
+| `concurrency` | positive integer (optional) | unset | Calls in flight at once. Unset means the `defaults.limits.concurrency` value applies. |
 
 ## SessionDefaultsSpec
 
@@ -231,4 +242,4 @@ Used at `bootstrap.keys[].session_defaults`.
 | `max_steps` | positive integer (optional) | unset | Most requests in one session. |
 | `max_seconds` | positive integer (optional) | unset | Wall-clock limit from the first call of a session. |
 | `idle_seconds` | positive integer (optional) | unset | A session idle this long is closed and the same id starts a fresh one. |
-| `max_new_sessions_per_hour` | positive integer (optional) | unset | Bounds how fast a key can start sessions. |
+| `max_new_sessions_per_hour` | positive integer (optional) | `60` | Most new sessions this key may start in an hour, idle restarts included, so minting session ids cannot dodge the limits. `null` removes the bound. |

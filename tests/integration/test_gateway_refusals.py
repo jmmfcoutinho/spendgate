@@ -117,6 +117,29 @@ def test_session_header_needs_a_session_key(tmp_path: Path) -> None:
     run(case, tmp_path)
 
 
+# T-SESS-08
+def test_m11_a_session_required_key_refuses_a_call_without_the_header_before_the_hold(
+    tmp_path: Path,
+) -> None:
+    async def case(path: Path) -> None:
+        defaults = SessionDefaults(max_steps=5, required=True)
+        async with open_stack(path, session_defaults=defaults) as s:
+            r = await s.chat()
+            await refused(s, r, 400, "invalid_request")
+            assert error_of(r)["param"] == "X-Spendgate-Session"
+            assert s.observer.held == []  # refused before any hold
+            body = {
+                "model": "alpha",
+                "max_tokens": 10,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            hdr = {"X-Spendgate-Session": "run-1"}
+            ok = await s.post("/v1/chat/completions", body, headers=hdr)
+            assert ok.status_code == 200, ok.text
+
+    run(case, tmp_path)
+
+
 def test_kill_switch_is_refused(tmp_path: Path) -> None:
     async def case(path: Path) -> None:
         async with open_stack(path) as s:

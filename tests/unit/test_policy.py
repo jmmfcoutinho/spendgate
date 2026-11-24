@@ -206,6 +206,15 @@ def test_m11_a_session_header_on_a_key_without_defaults_is_invalid_request() -> 
     assert r.code is ErrorCode.INVALID_REQUEST and r.param == SESSION_HEADER
 
 
+def test_m11_a_session_required_key_refuses_a_call_without_the_header() -> None:
+    required = key(session_defaults=replace(DEFAULTS, required=True))
+    r = refusal(run(required))
+    assert r.code is ErrorCode.INVALID_REQUEST and r.param == SESSION_HEADER
+    assert SESSION_HEADER in r.message
+    d = plan(run(required, SESS)).session  # with the header the call goes on as a session
+    assert d is not None and d.action is SessionAction.CREATE
+
+
 def test_no_session_header_means_no_session_and_no_session_limit() -> None:
     assert plan(run(SESS_KEY)).session is None
 

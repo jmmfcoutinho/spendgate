@@ -193,7 +193,7 @@ def test_set_policy_round_trips_every_field_and_takes_effect(rig: Rig) -> None:
     scope = make_scope(rig)
     made = api_key(rig, svc, scope)
     principal(rig.run(svc.verify_api(made.secret, T0)))  # cached with the old policy
-    sessions = SessionDefaults(E("1"), 20, 600, 60, 3)
+    sessions = SessionDefaults(E("1"), 20, 600, 60, 3, required=True)
     wanted = KeyPolicy(
         made.record.id, scope, ("gpt-*", "claude-*"), 4096, E("2"), 60, 90_000, 4, sessions
     )

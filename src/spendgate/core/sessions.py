@@ -7,20 +7,29 @@ from spendgate.core.errors import ErrorCode, LimitName, Refusal
 
 _MS_PER_S = 1000
 _CLOSE_REASONS = frozenset({LimitName.STEPS, LimitName.TIME, LimitName.BUDGET})
+# The integer limits of `SessionDefaults`, in field order (stored and shown as one JSON object).
+LIMIT_FIELDS = (
+    "budget_nano", "max_steps", "max_seconds", "idle_seconds", "max_new_sessions_per_hour",
+)  # fmt: skip
 
 
 @dataclass(frozen=True, slots=True)
 class SessionDefaults:
-    """Per-key session limits. None = that limit is not enforced."""
+    """Per-key session limits. None = that limit is not enforced.
+
+    `required`: every call on the key must name a session, so an agent cannot leave the session
+    limits behind by omitting the header (the key option `session_required`).
+    """
 
     budget_nano: int | None = None
     max_steps: int | None = None
     max_seconds: int | None = None
     idle_seconds: int | None = None
     max_new_sessions_per_hour: int | None = None
+    required: bool = False
 
     def __post_init__(self) -> None:
-        for name in self.__slots__:
+        for name in LIMIT_FIELDS:
             value = getattr(self, name)
             if value is not None and value <= 0:
                 raise ValueError(f"session default {name} must be positive")

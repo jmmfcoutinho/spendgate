@@ -9,6 +9,7 @@ from spendgate.cli import serve
 from spendgate.cli.runtime import open_runtime
 from spendgate.config import Settings, load
 from spendgate.core.errors import Refusal
+from spendgate.core.sessions import SessionDefaults
 from spendgate.gateway.bootstrap import apply_bootstrap
 from spendgate.ledger.key_types import AdminScope, Principal
 from spendgate.ledger.keys import KeyService
@@ -126,5 +127,26 @@ async def test_t_key_01_a_bootstrap_key_with_empty_models_is_refused(tmp_path: P
         with pytest.raises(ValueError, match="models must not be empty"):
             await apply_bootstrap(settings, ledger, KeyService(ledger, PEPPER), NOW_MS)
         assert await ledger.list_keys(None) == ()
+    finally:
+        ledger.close()
+
+
+# T-SESS-09
+@async_test
+async def test_m11_a_bootstrap_agent_key_stores_session_required_and_the_new_session_bound(
+    tmp_path: Path,
+) -> None:
+    agent = BOOTSTRAP.replace(
+        "limits: {rpm: 10}",
+        "limits: {rpm: 10}, session_required: true, session_defaults: {max_steps: 5}",
+    )
+    settings = await _settings(tmp_path, agent)
+    ledger = SqliteLedger.open(settings.ledger_path, currency="USD")  # type: ignore[arg-type]
+    try:
+        await apply_bootstrap(settings, ledger, KeyService(ledger, PEPPER), NOW_MS)
+        (key,) = await ledger.list_keys(None)
+        assert key.policy.session_defaults == SessionDefaults(
+            max_steps=5, max_new_sessions_per_hour=60, required=True
+        )
     finally:
         ledger.close()

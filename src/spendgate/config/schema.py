@@ -141,14 +141,28 @@ class ModelRoute(_Strict):
     deployments: Annotated[list[DeploymentSpec], Field(min_length=1)]
 
 
+# Calls in flight per key when neither the key nor `defaults.limits` says otherwise: it bounds
+# the overrun at a cap crossing (how-money-is-protected.md) and matches the Compose reference.
+DEFAULT_CONCURRENCY = 16
+# New sessions per key and hour once a key has `session_defaults`, so minting ids cannot dodge
+# the session limits at an unbounded rate (TH-09). `null` is the explicit opt-out.
+DEFAULT_NEW_SESSIONS_PER_HOUR = 60
+
+
 class Limits(_Strict):
     rpm: PosInt | None = None
     tpm: PosInt | None = None
     concurrency: PosInt | None = None
 
 
+class DefaultLimits(Limits):
+    """`defaults.limits`: like a key's limits, but concurrency is bounded unless set to null."""
+
+    concurrency: PosInt | None = DEFAULT_CONCURRENCY
+
+
 class Defaults(_Strict):
-    limits: Limits = Field(default_factory=Limits)
+    limits: DefaultLimits = Field(default_factory=DefaultLimits)
     max_output_tokens: PosInt | None = None
     max_embedding_items: PosInt = 256
     strict_overrun: bool = True
@@ -196,7 +210,7 @@ class SessionDefaultsSpec(_Strict):
     max_steps: PosInt | None = None
     max_seconds: PosInt | None = None
     idle_seconds: PosInt | None = None
-    max_new_sessions_per_hour: PosInt | None = None
+    max_new_sessions_per_hour: PosInt | None = DEFAULT_NEW_SESSIONS_PER_HOUR
 
 
 class BootstrapKey(_Strict):
@@ -207,11 +221,14 @@ class BootstrapKey(_Strict):
     limits: Limits = Field(default_factory=Limits)
     max_output_tokens: PosInt | None = None
     session_defaults: SessionDefaultsSpec | None = None
+    session_required: bool = False  # every call must send X-Spendgate-Session
 
     @model_validator(mode="after")
     def _data_xor_admin(self) -> Self:
         if (self.scope is None) == (self.admin_scopes is None):
             raise ValueError("give exactly one of scope (data key) or admin_scopes (admin key)")
+        if self.session_required and self.session_defaults is None:
+            raise ValueError("session_required needs session_defaults")
         return self
 
 

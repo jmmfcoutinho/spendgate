@@ -84,8 +84,9 @@ def _session_defaults(k: BootstrapKey) -> SessionDefaults | None:
         return None
     budget = None if s.budget is None else s.budget.nano
     return SessionDefaults(
-        budget, s.max_steps, s.max_seconds, s.idle_seconds, s.max_new_sessions_per_hour
-    )
+        budget, s.max_steps, s.max_seconds, s.idle_seconds, s.max_new_sessions_per_hour,
+        required=k.session_required,
+    )  # fmt: skip
 
 
 def _spec(k: BootstrapKey, scope: ScopeRow) -> KeySpec:

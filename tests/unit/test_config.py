@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from spendgate.config import ConfigError, Secret, check_config, load
+from spendgate.config.schema import SessionDefaultsSpec
 from spendgate.config.yamlio import StrictLoader
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
@@ -56,6 +57,8 @@ def test_examples_load_and_check(tmp_path: Path) -> None:
     assert sqlite.routes["claude-haiku"].deployments[0].credential == Secret("file-secret")
     assert sqlite.heartbeat_ms == 20_000 and sqlite.lease_ms == 60_000
     assert sqlite.config.bootstrap.budgets[0].cap.nano == 200 * 10**9
+    agent = next(k for k in sqlite.config.bootstrap.keys if k.name == "agent-key")
+    assert agent.session_required and agent.limits.concurrency  # the agent example is bounded
     postgres = load(example(tmp_path, "config.postgres.yaml"), env=ENV)
     assert postgres.ledger_dsn is not None and postgres.routes["gpt-6-luna"].deployments[1].region
     assert postgres.routes["gpt-6-luna"].deployments[0].model == "alpha-prod"
@@ -88,6 +91,39 @@ def test_defaults_come_from_the_docs(tmp_path: Path) -> None:
     assert c.anthropic.allowed_betas == []
     assert s.health.cooldown_ms == 5_000
     assert s.fail_open_summary() == ["fail_open: no opt-outs enabled"]
+
+
+def test_concurrency_has_a_finite_default_and_null_is_the_explicit_opt_out(
+    tmp_path: Path,
+) -> None:
+    assert load(write(tmp_path), env=ENV).config.defaults.limits.concurrency == 16
+    rpm_only = load(write(tmp_path, BASE + "defaults: {limits: {rpm: 5}}\n"), env=ENV)
+    assert rpm_only.config.defaults.limits.concurrency == 16  # setting one limit keeps the rest
+    opted_out = BASE + "defaults: {limits: {concurrency: null}}\n"
+    assert load(write(tmp_path, opted_out), env=ENV).config.defaults.limits.concurrency is None
+
+
+AGENT_KEY = "bootstrap:\n  scopes: ['org:a']\n  keys: [{name: k, scope: 'org:a', %s}]\n"
+
+
+def test_m11_session_defaults_bound_new_sessions_per_hour_unless_null(tmp_path: Path) -> None:
+    def sessions_of(fields: str) -> SessionDefaultsSpec:
+        key = load(write(tmp_path, BASE + AGENT_KEY % fields), env=ENV).config.bootstrap.keys[0]
+        assert key.session_defaults is not None and key.session_required is False
+        return key.session_defaults
+
+    assert sessions_of("session_defaults: {max_steps: 5}").max_new_sessions_per_hour == 60
+    unbounded = sessions_of("session_defaults: {max_new_sessions_per_hour: null}")
+    assert unbounded.max_new_sessions_per_hour is None
+
+
+def test_session_required_needs_session_defaults(tmp_path: Path) -> None:
+    assert "session_required needs session_defaults" in failure(
+        write(tmp_path, BASE + AGENT_KEY % "session_required: true")
+    )
+    fields = "session_required: true, session_defaults: {max_steps: 5}"
+    key = load(write(tmp_path, BASE + AGENT_KEY % fields), env=ENV).config.bootstrap.keys[0]
+    assert key.session_required is True
 
 
 def test_fail_open_opt_out_is_listed(tmp_path: Path) -> None:
