@@ -142,7 +142,7 @@ All notable changes to this project are documented here. The format follows
   the exception class, the frames as `module:function:line`, the catch-all's tag and the request
   id, never the message. `charged: true` shows a call that was charged although the client got
   the error. Library mode logs the same facts on the `spendgate.local` logger. Logging only:
-  responses and charges are unchanged.
+  responses and charges are unchanged. An independent fix was also proposed in #42; thank you.
 
 ## [0.1.1] - 2026-11-20
 
