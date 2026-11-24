@@ -101,9 +101,10 @@ class Compose:
 
     # --- lifecycle -------------------------------------------------------------------------
 
-    def up(self, *services: str, extra: Sequence[str] = ()) -> None:
+    def up(self, *services: str, extra: Sequence[str] = (), build: bool = True) -> None:
         self.started = True  # even a half-started stack must be torn down
-        self.run("build", "spendgate")  # the other services reuse the tag; build it first
+        if build:
+            self.run("build", "spendgate")  # the other services reuse the tag; build it first
         self.run("up", "-d", "--wait", *extra, *services)
 
     def start_stack(self, *, postgres: bool) -> None:
@@ -112,7 +113,8 @@ class Compose:
         self.started = True
         self.run("build", "spendgate")
         self.run("run", "--rm", "spendgate", "migrate")  # `serve` on Postgres does not migrate
-        self.up("spendgate", "app", "fake-provider", *(("db",) if postgres else ()))
+        db = ("db",) if postgres else ()
+        self.up("spendgate", "app", "fake-provider", *db, build=False)  # built just above
         self.run("up", "-d", "--no-deps", "demo")  # no --wait: it exits by design
 
     def exit_code(self, service: str) -> int:
