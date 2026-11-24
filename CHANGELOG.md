@@ -11,10 +11,15 @@ All notable changes to this project are documented here. The format follows
 - `spendgate catalog import --from-litellm <commit-sha> --out extra.yaml [--providers ...]`
   drafts a catalog override file from LiteLLM's `model_prices_and_context_window.json` at one
   pinned commit (https to raw.githubusercontent.com only, no redirects), or from a local copy
-  with `--from-file`. Every entry is `verified: false`; models the bundled catalog carries are
-  left out, entries without an output ceiling are refused, and an existing file is kept unless
-  `--force`. Nothing is fetched at serve time (ADR-0014). The mapping now lives in
+  with `--from-file`. Every entry is `verified: false`; models the installed bundled catalog
+  carries are left out when the file is drafted. Entries with a non-finite or non-numeric
+  value, a zero price, a long-context multiplier below 1, or no whole output ceiling are skipped
+  one by one with a reason. An existing file is kept unless `--force`, which replaces it
+  atomically. Nothing is fetched at serve time (ADR-0014). The mapping now lives in
   `spendgate.core.litellm` and `scripts/litellm_prices.py` uses it.
+- `spendgate check-config` warns when a `verified: false` catalog entry supersedes a verified
+  entry of the same id, for example a drafted entry for a model a later release bundles. Re-run
+  the import or delete such entries after upgrading.
 - `server.keep_alive_seconds` (default 75) and `server.graceful_shutdown_seconds` (default 30),
   passed to uvicorn on the data and admin listeners. Keep-alive was uvicorn's 5 s, below common
   load balancer idle timeouts. The drain after `SIGTERM` now ends at the deadline: calls still

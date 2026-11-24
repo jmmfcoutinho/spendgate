@@ -56,6 +56,9 @@ error the ledger cannot detect; the overrun record is the safety net, not a subs
 Unverified prices are never silent. When the effective catalog (bundled plus your overrides)
 holds entries with `verified: false`, `spendgate serve` and library mode log one warning at start
 naming the count and the first few ids, and `spendgate check-config` prints the same line.
+`check-config` also warns when an unverified entry supersedes a verified one of the same id (a
+later `effective_from`, or the same one in a later file): from that date the reviewed price no
+longer applies.
 
 ## 3. Load it
 
@@ -130,12 +133,18 @@ spendgate catalog import --from-litellm <commit-sha> --out extra.yaml --provider
   in spendgate that downloads anything, and it runs only when you run it.
 - **Every entry is `verified: false`**, with `effective_from` and `checked_on` set to today and
   `source_url` set to the pinned file. The file header records the SHA-256 of the bytes read.
-- **Bundled ids are left alone.** A model the bundled catalog already prices is not drafted, so
-  an unchecked number never replaces a reviewed one.
-- **No guessed ceilings.** A chat, responses or messages model without `max_output_tokens` in
-  LiteLLM is skipped (`skipped <key>: no output ceiling ...` on stderr), as is any entry that
-  would not load. The finished file is checked against the bundled catalog before it is written.
-- **Never overwrites** an existing `--out` unless you pass `--force`.
+- **Bundled ids are left alone, at draft time.** A model the installed bundled catalog prices is
+  not drafted. A later spendgate release may bundle a model you drafted; your drafted entry is
+  then dated later and wins. `check-config` warns about it (section 2). After upgrading, re-run
+  the import into a fresh file, or delete the drafted entries the release now carries.
+- **Bad entries are skipped, one by one.** Each skip is a `skipped '<key>': <reason>` line on
+  stderr, naming no value. Skipped: a value that is not a finite number (NaN, a string, a
+  boolean, an absurd exponent), a price of 0 on any meter, a long-context multiplier below 1, a
+  chat, responses or messages model without a whole `max_output_tokens` (never a guessed or
+  rounded ceiling), and anything that would not load. The finished file is checked against the
+  bundled catalog before it is written.
+- **Never overwrites** an existing `--out` unless you pass `--force`, which replaces it in one
+  rename, so a failure leaves the old file whole.
 - Exit codes: 0 written; 2 bad command line or the file exists; 3 the input is not LiteLLM's
   JSON or nothing could be drafted; 5 the download failed.
 

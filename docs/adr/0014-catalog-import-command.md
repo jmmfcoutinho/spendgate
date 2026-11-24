@@ -25,13 +25,25 @@ to it, set any price to 0 and switch the guard off.
   copy instead and downloads nothing; with both flags the file is taken as a copy of that commit.
 - The output is a new catalog override file: every entry `verified: false`, `effective_from` and
   `checked_on` today (UTC), `source_url` the pinned raw URL, and a header with the SHA-256 of the
-  bytes read. Ids the bundled catalog already carries are left out, so an unverified entry never
-  supersedes a reviewed price. An entry that would not load is skipped with a reason on stderr; a
-  chat, responses or messages entry without `max_output_tokens` is refused rather than given a
-  guessed ceiling (M-09). The file is loaded with the bundled catalog through
-  `core.catalog.parse` before it is written.
+  bytes read. Ids the installed bundled catalog carries when the file is drafted are left out, so
+  at draft time no unverified entry supersedes a bundled price. A later release can bundle one of
+  the drafted ids; then the drafted entry, dated later, wins from its date. `spendgate
+  check-config` therefore warns whenever a `verified: false` entry supersedes a verified entry of
+  the same id (a later `effective_from`, or the same one in a later file), and operators re-run
+  the import or delete those entries after upgrading.
+- Each LiteLLM entry is drafted or skipped on its own, with a reason on stderr that names the key
+  (printed with escapes, never raw) and no value. Skipped: a value that is not a finite JSON
+  number (NaN, Infinity, a string, a boolean, an exponent out of range), a price of 0 in any
+  meter or a long-context multiplier below 1 (catalog data cannot fail open, M-10), a chat,
+  responses or messages entry without `max_output_tokens` or with a fractional one (never a
+  guessed or rounded ceiling, M-09), and anything else the catalog would not load. LiteLLM's 0
+  output price on embeddings, which bill no output, is dropped rather than drafted. The file is
+  loaded with the bundled catalog through `core.catalog.parse` before it is written.
 - An existing `--out` is never overwritten without `--force` (checked before the download and
-  again on an exclusive open).
+  again on an exclusive open). With `--force` the file is written beside `--out`, flushed to disk
+  and renamed over it, so a failure leaves the old file whole. `--from-file` reads at most
+  32 MiB plus one byte, so a pipe, a device or a growing file is refused rather than read without
+  end.
 - Exit codes: 0 written; 2 bad command line or the output exists; 3 the input is not LiteLLM's
   JSON, is too large, cannot be read, or yields nothing to write; 5 the download failed.
 - The mapping moves into `spendgate.core.litellm` (pure: bytes and dicts in, dicts out), shared
@@ -45,7 +57,8 @@ to it, set any price to 0 and switch the guard off.
   that is not a provider call. It happens only when an operator runs the command; `serve`,
   `check-config`, `migrate` and library mode still read local files only.
 - No new runtime dependency (httpx and PyYAML are already base dependencies), no config key, no
-  error code, no ledger or schema change.
+  error code, no ledger or schema change. `check-config` gains one warning line (unverified over
+  verified); it never fails the check.
 - The generated entries are LiteLLM's numbers, unchecked. The start-up warning for unverified
   entries names them, and the header says so; the risk of a wrong price stays with the operator
   who loads the file.
