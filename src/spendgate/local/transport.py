@@ -24,8 +24,8 @@ from spendgate.local.bridge import (
 )
 from spendgate.local.factory import make_runtime
 from spendgate.local.runtime import Runtime
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.model import Clock
-from spendgate.pipeline.pipeline import system_ms
 
 
 class _SyncStream(SyncChunks, httpx.SyncByteStream):

@@ -24,9 +24,10 @@ from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.local.principal import LocalPrincipal
 from spendgate.local.setup import prepare_directory, prepare_scope
 from spendgate.pipeline.adapters import build_providers
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import ENDPOINTS, Clock, NoopObserver, Reply
-from spendgate.pipeline.pipeline import Pipeline, system_ms
+from spendgate.pipeline.pipeline import Pipeline
 from spendgate.pipeline.transport import upstream_timeout
 
 PEPPER_VAR = "SPENDGATE_LOCAL_PEPPER"  # config files must name a pepper; library mode never uses it

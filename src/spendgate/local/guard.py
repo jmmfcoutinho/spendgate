@@ -26,8 +26,8 @@ from spendgate.local import sdk as sdk_clients
 from spendgate.local.runtime import PEPPER_VAR, local_env
 from spendgate.local.setup import default_ledger_path
 from spendgate.local.transport import AsyncLocalTransport, LocalTransport, transport
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.model import Clock
-from spendgate.pipeline.pipeline import system_ms
 
 if TYPE_CHECKING:
     import anthropic as _anthropic

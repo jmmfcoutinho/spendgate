@@ -10,7 +10,7 @@ from collections.abc import Callable
 import pytest
 
 from spendgate.local.transport import transport
-from spendgate.pipeline.pipeline import system_ms
+from spendgate.pipeline.assembly import system_ms
 
 PARAMETERS = [
     ("settings_or_path", inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.empty),

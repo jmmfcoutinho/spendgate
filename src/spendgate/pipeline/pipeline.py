@@ -11,28 +11,24 @@ runs in a task that a cancel cannot interrupt (T-MON-11, M-13). A streamed answe
 
 import asyncio
 import contextlib
-import os
-import socket
-import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
 
 from spendgate.config import Route, Settings
 from spendgate.core.errors import ErrorCode, Refusal, Shape
-from spendgate.core.limits import Admit, InMemoryLimitStore, LimitStore
+from spendgate.core.limits import Admit, LimitStore
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
-from spendgate.ledger.ids import new_id
 from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import Held, MoneyLedger
-from spendgate.pipeline import answers, candidates, intake, replies, steps, tracing
+from spendgate.pipeline import answers, intake, replies, steps, tracing
 from spendgate.pipeline.alerts import log_alerts
+from spendgate.pipeline.assembly import Parts, PipelineOptions, assemble, request_id, system_ms
 from spendgate.pipeline.auth import authenticate, recheck
-from spendgate.pipeline.closing import Call, Closer, Sleeper
+from spendgate.pipeline.closing import Call, Sleeper
 from spendgate.pipeline.faults import InternalEvent, fault_of
 from spendgate.pipeline.forward_results import Answered, Failed, Job, unavailable
-from spendgate.pipeline.holding import HOLD_SECONDS, Holder
-from spendgate.pipeline.leases import Leases
+from spendgate.pipeline.holding import HOLD_SECONDS
 from spendgate.pipeline.model import (
     Clock,
     Endpoint,
@@ -40,7 +36,6 @@ from spendgate.pipeline.model import (
     IdGenerator,
     Inbound,
     KeyVerifier,
-    NoopObserver,
     Observer,
     RefusedEvent,
     Reply,
@@ -48,32 +43,14 @@ from spendgate.pipeline.model import (
     models_endpoint,
     report_internal,
 )
-from spendgate.pipeline.routing import Forwarder
 from spendgate.pipeline.settle import Book, Closed
 from spendgate.pipeline.streaming import PING_SECONDS, STREAM_LIMITS, Live, StreamBody, StreamEnv
-from spendgate.pipeline.upkeep import Step, Upkeep, heartbeat
+from spendgate.pipeline.upkeep import Step, heartbeat
 from spendgate.pipeline.watch import StreamFacts, session_ends_at
 from spendgate.providers.port import Provider, SseLimits
 
 _MS = 1000
 _INTERNAL = answers.INTERNAL
-
-
-def system_ms() -> int:
-    return time.time_ns() // 1_000_000
-
-
-def instance_id() -> str:
-    """A lease-owner name unique to this process: peers must never renew each other's holds.
-
-    The load test driver (`tests/load/driver.py`, `owner_of`) finds a gateway's holds by the pid
-    in this host-pid-tail form: keep the pid as the second-to-last `-` field or update it there.
-    """
-    return f"{socket.gethostname()}-{os.getpid()}-{new_id()[-6:]}"
-
-
-def request_id() -> str:
-    return "sg_req_" + new_id()
 
 
 class Pipeline:
@@ -101,59 +78,41 @@ class Pipeline:
         hold_seconds: float = HOLD_SECONDS,
         tracer: tracing.Tracer | None = None,
     ) -> None:
-        missing = {r.catalog_id.partition("/")[0] for r in settings.routes.values()} - set(
-            providers
-        )
-        if missing:  # a route nobody can serve is a start-up error, not a request-time surprise
-            raise ValueError(f"no provider adapter for {sorted(missing)}")
-        self.settings = settings
-        server = settings.config.server
-        biggest = max(
-            server.max_body_bytes * intake.COPIES,
-            server.max_json_body_bytes * intake.JSON_AMPLIFICATION,
-        )
-        self.gate = gate or intake.Gate(
-            server.max_concurrent_requests,
-            max(server.max_body_bytes, server.max_json_body_bytes),
-            max(intake.DEFAULT_MEMORY_BYTES, biggest),
-        )
-        self._max_request_s = max_request_seconds or server.max_request_seconds
-        self._body_timeout_s = body_timeout_seconds or server.body_read_timeout_seconds
-        self._ledger, self._keys, self._providers = ledger, keys, providers
-        self._limits = limits or InMemoryLimitStore()
-        self._now, self._new_id = now_ms, new_request_id
-        self._observer = observer or NoopObserver()
-        self._tracer: tracing.Tracer = tracing.Guarded(tracer) if tracer else tracing.NoTracer()
-        self._instance = instance or instance_id()
-        self._router = candidates.Router(settings.routes, settings.health)
-        self._forwarder = Forwarder(
-            sender,
-            self._router,
-            settings.catalog,
-            now_ms,
-            self._observer,
-            settings.config.routing.max_attempts,
-            stream_limits,
-            sleep,
-            self._max_request_s * _MS,
-        )
-        obs, tracer_ = self._observer, self._tracer
-        self._closer = Closer(settings, ledger, self._limits, obs, now_ms, sleep, tracer_)
+        """The ports, then the knobs (`assembly.Knobs`); `assemble` builds the parts from them."""
         self._owned: set[str] = set()  # holds this pipeline is still responsible for closing
-        self._leases = Leases(settings.lease_ms, settings.heartbeat_ms)
-        self._upkeep = Upkeep(
-            ledger,
-            self._closer,
-            self._leases,
-            self._owned,
-            now_ms,
-            self._instance,
-            settings.lease_ms,
-            self._observer,
-        )
-        self._holder = Holder(ledger, self._closer, obs, tracer_, now_ms, self._spawn, hold_seconds)
-        self._ping_seconds = ping_seconds
         self._tasks: set[asyncio.Future[object]] = set()
+        options = PipelineOptions(
+            settings=settings,
+            ledger=ledger,
+            keys=keys,
+            providers=providers,
+            sender=sender,
+            limits=limits,
+            now_ms=now_ms,
+            new_request_id=new_request_id,
+            observer=observer,
+            instance=instance,
+            gate=gate,
+            stream_limits=stream_limits,
+            ping_seconds=ping_seconds,
+            sleep=sleep,
+            max_request_seconds=max_request_seconds,
+            body_timeout_seconds=body_timeout_seconds,
+            hold_seconds=hold_seconds,
+            tracer=tracer,
+        )
+        self._adopt(assemble(options, self._owned, self._spawn))
+
+    def _adopt(self, parts: Parts) -> None:
+        """Keep the parts under the names the steps below use."""
+        self.settings, self.gate = parts.settings, parts.gate
+        self._ledger, self._keys, self._providers = parts.ledger, parts.keys, parts.providers
+        self._now, self._new_id, self._limits = parts.now, parts.new_id, parts.limits
+        self._observer, self._tracer, self._instance = parts.observer, parts.tracer, parts.instance
+        self._router, self._forwarder = parts.router, parts.forwarder
+        self._closer, self._leases, self._upkeep = parts.closer, parts.leases, parts.upkeep
+        self._holder, self._ping_seconds = parts.holder, parts.ping_seconds
+        self._max_request_s, self._body_timeout_s = parts.max_request_s, parts.body_timeout_s
 
     # --- step 1 and the adapter-facing entry points -------------------------------------------
 

@@ -31,8 +31,9 @@ from spendgate.gateway.wiring import (
 from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import MoneyLedger
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.model import Sender
-from spendgate.pipeline.pipeline import Pipeline, system_ms
+from spendgate.pipeline.pipeline import Pipeline
 
 
 @dataclass(frozen=True, slots=True)
