@@ -38,7 +38,7 @@ coverage-gates:
 	@set -e; for gate in $(COVERAGE_GATES); do \
 		pkg=$${gate%:*}; floor=$${gate#*:}; \
 		echo "coverage gate: spendgate.$$pkg >= $$floor%"; \
-		uv run coverage report --include="src/spendgate/$$pkg/*" --precision=2 --format=total \
+		uv run coverage report --include="src/spendgate/$$pkg/*" --format=total \
 			--fail-under=$$floor; \
 	done
 
@@ -58,7 +58,7 @@ test-postgres:
 	COVERAGE_FILE=$(COVERAGE_POSTGRES_FILE) uv run pytest -m postgres -q --cov --cov-report=
 	@echo "coverage gate: spendgate.ledger.postgres* >= $(COVERAGE_POSTGRES_FLOOR)% (Postgres run)"
 	uv run coverage report --data-file=$(COVERAGE_POSTGRES_FILE) \
-		--include="src/spendgate/ledger/postgres*" --precision=2 --fail-under=$(COVERAGE_POSTGRES_FLOOR)
+		--include="src/spendgate/ledger/postgres*" --fail-under=$(COVERAGE_POSTGRES_FLOOR)
 
 secrets:
 	git ls-files -z | xargs -0 uv run detect-secrets-hook --baseline .secrets.baseline  # pragma: allowlist secret

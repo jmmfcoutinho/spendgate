@@ -37,7 +37,8 @@ Rules:
 - No network. Tests that need a real provider are marked `@pytest.mark.live`, excluded by default (`-m "not live"`) and never run in CI.
 - Injected clock; no `sleep` in tests. Time moves by `clock.advance(...)`.
 - A bug fix starts with a failing test.
-- Coverage (line and branch, `make test`): >= 90% over all of `src/spendgate`, then per package >= 95% on `core/`, >= 90% on `ledger/` and >= 90% on `pipeline/`. Without a Postgres server the `ledger/` figure counts the Postgres backend at what the other tests reach; `make test-postgres` (CI's integration job) holds `ledger/postgres*.py` to >= 90% on the Postgres run alone. The floors are `COVERAGE_GATES` and `COVERAGE_POSTGRES_FLOOR` in the `Makefile`.
+- Coverage (line and branch, `make test`): >= 90% over all of `src/spendgate`, then per package >= 95% on `core/`, >= 90% on `ledger/` and >= 90% on `pipeline/`. Without a Postgres server the `ledger/` figure counts the Postgres backend at what the other tests reach; `make test-postgres` (CI's integration job) holds `ledger/postgres*.py` to >= 90% on the Postgres run alone. The floors are `COVERAGE_GATES` and `COVERAGE_POSTGRES_FLOOR` in the `Makefile`, compared at two decimals (`precision = 2` in `pyproject.toml`). They are checked on both CI Pythons (3.13 and 3.14); 3.14 reads slightly lower (`ledger/` about 91.9%).
+- `make test-postgres` runs every `postgres`-marked test, including the Postgres load cases (`tests/load`, under coverage): CI has no separate load job, so the integration job is where they run in CI. Locally, `uv run pytest -m "postgres and not load" -q` is the quick Postgres gate and `make load` runs the load suite.
 - Fuzz (`tests/fuzz`, marker `fuzz`): `make fuzz` is the short mode and is not part of `make test`; the pinned regressions (`test_regression_*.py`) are. `.github/workflows/fuzz.yml` runs every target weekly in long mode (`SPENDGATE_FUZZ_SECONDS=60` each, a new seed per run) and uploads one JSON report per target. A failure there is a finding: pin a regression test with its seed, then fix.
 - Every money rule has an id `M-NN` in the money-rule table (section 7) and a test named for it.
 
@@ -51,8 +52,8 @@ All gates run locally and in CI with the same commands. None is added "later". C
 | Format | `uv run ruff format --check .` | no diff |
 | Types | `uv run mypy --strict src tests` | zero errors |
 | Tests + coverage | `make test`: `uv run pytest -m "not live and not load and not fuzz" --cov --cov-fail-under=90` | >= 90% over `src/spendgate` |
-| Package coverage | `make coverage-gates` (run by `make test`): `uv run coverage report --include="src/spendgate/<pkg>/*" --precision=2 --fail-under=<floor>` | `core/` >= 95%, `ledger/` >= 90%, `pipeline/` >= 90% |
-| Postgres + coverage | `make test-postgres` (needs `SPENDGATE_TEST_POSTGRES_URL`; CI integration job): `pytest -m postgres --cov`, then `coverage report --include="src/spendgate/ledger/postgres*" --fail-under=90` | >= 90% on the Postgres backend |
+| Package coverage | `make coverage-gates` (run by `make test`): `uv run coverage report --include="src/spendgate/<pkg>/*" --fail-under=<floor>` | `core/` >= 95%, `ledger/` >= 90%, `pipeline/` >= 90% |
+| Postgres + coverage | `make test-postgres` (needs `SPENDGATE_TEST_POSTGRES_URL`; CI integration job): `pytest -m postgres --cov` (the Postgres load cases included), then `coverage report --include="src/spendgate/ledger/postgres*" --fail-under=90` | >= 90% on the Postgres backend |
 | Fuzz (weekly) | `SPENDGATE_FUZZ_SECONDS=60 make fuzz` (`.github/workflows/fuzz.yml`) | no failing case |
 | Architecture | `uv run lint-imports` | all contracts kept (core imports nothing; layers `cli` > `gateway` \| `local` > `pipeline` > leaf packages > `core`; `local` never imports `gateway`; no Starlette/uvicorn in `pipeline`; providers never import each other) |
 | Dependencies | `uv run pip-audit` | no known vulnerabilities (documented, dated ignores only) |
