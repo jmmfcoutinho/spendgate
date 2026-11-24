@@ -192,7 +192,7 @@ CREATE TABLE calls (
   http_status         INTEGER CHECK (http_status IS NULL OR http_status BETWEEN 100 AND 599),  -- the provider's HTTP status for this attempt; NULL when it never answered (ADR-0010)
   outcome             TEXT   NOT NULL CHECK (outcome IN ('ok','ok_no_usage','client_error','throttled',
                         'timeout','upstream_5xx','unreachable','cancelled','stream_broken','internal_error','expired')),
-  error_code          TEXT,
+  error_code          TEXT,                          -- a documented code (see `calls.error_code` values); NULL when none applies
   streamed            INTEGER NOT NULL DEFAULT 0 CHECK (streamed IN (0,1)),
   settled_by          TEXT   NOT NULL DEFAULT 'owner' CHECK (settled_by IN ('owner','sweeper')),
   review_required_at  BIGINT,                        -- set by the C-22 usage sanity flag (the usage is still booked in full)
@@ -235,6 +235,61 @@ BEGIN SELECT RAISE(ABORT, 'admin_audit is append-only'); END;
 CREATE TRIGGER admin_audit_no_delete BEFORE DELETE ON admin_audit
 BEGIN SELECT RAISE(ABORT, 'admin_audit is append-only'); END;
 ```
+
+## `calls.error_code` values
+
+What went wrong with one attempt, as a stable code ([ADR-0022](adr/0022-stable-error-codes.md)). The pipeline writes only the values
+below: the field is typed with the enums in `core.failures`, so anything else fails `mypy --strict`,
+and `tests/docs/test_error_code_docs.py` keeps this list and the enums in step. NULL when nothing
+went wrong (`ok`, `ok_no_usage`), for a non-2xx answer the adapter did not classify (a redirect)
+and for sweeper rows (`expired`).
+
+A provider's error answer records the protocol code it maps to (protocol.md section 4.2, e.g.
+`upstream_throttled`, `upstream_unavailable`, `invalid_request`). An attempt the gateway ended
+while it was in flight records its outcome (`cancelled`, `timeout` for the request deadline,
+`internal_error`). Every other value is one of these:
+
+| Value | Written when | Sent? |
+|---|---|---|
+| `connect_error` | the connection could not be opened (refused, DNS, TLS handshake) | no |
+| `connect_timeout` | opening the connection timed out | no |
+| `pool_timeout` | no pooled connection became free in time | no |
+| `proxy_error` | the outbound proxy tunnel failed | no |
+| `unsupported_protocol` | the deployment URL has a scheme the client cannot open | no |
+| `write_error` | writing the request failed part way | yes |
+| `write_timeout` | writing the request timed out | yes |
+| `read_error` | reading the answer failed (a buffered body, or a stream mid-body) | yes |
+| `read_timeout` | no answer, or no next chunk, in time | yes |
+| `close_error` | closing the connection failed | yes |
+| `remote_protocol_error` | the provider broke the HTTP protocol | yes |
+| `local_protocol_error` | the client broke the HTTP protocol | yes |
+| `decoding_error` | the answer's content encoding could not be decoded | yes |
+| `too_many_redirects` | the provider redirected too often | yes |
+| `transport_error` | any other HTTP client error | yes |
+| `unexpected_error` | an exception that is not an HTTP client error, while sending or reading | yes |
+| `response_too_large` | a buffered answer was larger than the 64 MiB cap | yes |
+| `stream_malformed` | a stream had bad framing, a bad checksum or encoding, or ended inside an event | yes |
+| `stream_limit_exceeded` | a stream crossed an SSE line, event, count, size or frame limit (C-22) | yes |
+| `relay_error` | the stream relay could not be created or raised while relaying | yes |
+| `adapter_error` | the adapter raised while reading a sent request's answer or error | yes |
+| `lease_expiring` | the gateway stopped a stream whose lease was within one heartbeat of expiry | yes |
+| `lease_lost` | the gateway stopped a stream the renewal did not return (a sweeper expired it) | yes |
+| `renewal_failed` | the gateway stopped a stream because the lease renewal failed | yes |
+| `max_duration` | the gateway stopped a stream that ran past `server.max_request_seconds` | yes |
+| `kill_switch` | the gateway stopped a stream because a kill switch now matches it | yes |
+| `session_time` | the gateway stopped a stream because its session's `max_seconds` passed | yes |
+| `client_gone` | the client disconnected or closed the stream early (`cancelled`) | yes |
+
+"Sent? no" attempts are `not_processed` (free, failed over); the others are charged by their
+outcome (ledger-state-machine.md). Codes are only added, never renamed; a new one needs a row here.
+
+**Legacy values.** Rows written by earlier releases keep what was stored then: the exception class name
+instead of the codes above, e.g. `ConnectError`, `ConnectTimeout`, `PoolTimeout`, `ProxyError`,
+`UnsupportedProtocol`, `WriteError`, `WriteTimeout`, `ReadError`, `ReadTimeout`, `CloseError`,
+`RemoteProtocolError`, `LocalProtocolError`, `DecodingError`, `TooManyRedirects`,
+`ResponseTooLarge`, `StreamBroken`, `StreamLimitExceeded`, `EventStreamError`, `FrameTooLarge`
+(or another exception class name). They are not rewritten; a query over a mixed window should
+match both spellings.
 
 ## Dialect differences
 

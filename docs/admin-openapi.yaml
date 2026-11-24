@@ -823,7 +823,7 @@ components:
         overrun_nano: {type: integer, minimum: 0}
         http_status: {type: [integer, 'null'], minimum: 100, maximum: 599, description: The HTTP status the provider answered this attempt with (for a stream, the opened response); null when the request was never sent or no response arrived (connect failure, timeout before headers, cancel before the answer, sweeper expiry)}
         outcome: {$ref: '#/components/schemas/Outcome'}
-        error_code: {type: [string, 'null']}
+        error_code: {type: [string, 'null'], description: 'Why the attempt failed: a stable code listed in data-model.md (calls.error_code values); older rows may hold a legacy exception class name; null when none applies'}
         streamed: {type: boolean}
         settled_by: {type: string, enum: [owner, sweeper]}
         review_required_at: {type: [string, 'null'], format: date-time}
