@@ -54,6 +54,9 @@ from spendgate.pipeline.watch import StreamFacts, session_ends_at
 from spendgate.providers.port import Provider, SseLimits
 
 _LEDGER_RETRY_SECONDS = 5
+# How long a call waits for its hold. Above the Postgres lock and statement timeouts (2 s, 5 s),
+# so those usually answer first; this catches the rest (pool wait, slow server, SQLite busy).
+HOLD_SECONDS = 10.0
 _MS = 1000
 _LEDGER_DOWN = Refusal(
     ErrorCode.LEDGER_UNAVAILABLE,
@@ -91,6 +94,7 @@ class Pipeline:
         gate: intake.Gate | None = None, stream_limits: SseLimits = STREAM_LIMITS,
         ping_seconds: float = PING_SECONDS, sleep: Sleeper = asyncio.sleep,
         max_request_seconds: float | None = None, body_timeout_seconds: float | None = None,
+        hold_seconds: float = HOLD_SECONDS,
     ) -> None:  # fmt: skip
         missing = {r.catalog_id.partition("/")[0] for r in settings.routes.values()} - set(
             providers
@@ -107,6 +111,7 @@ class Pipeline:
         )  # fmt: skip
         self._max_request_s = max_request_seconds or server.max_request_seconds
         self._body_timeout_s = body_timeout_seconds or server.body_read_timeout_seconds
+        self._hold_s = hold_seconds
         self._ledger, self._keys, self._providers = ledger, keys, providers
         self._limits = limits or InMemoryLimitStore()
         self._now, self._new_id = now_ms, new_request_id
@@ -240,10 +245,13 @@ class Pipeline:
         return await self._forward_and_settle(call, job, book, held)
 
     async def _hold(self, request: HoldRequest, call: Call, book: Book) -> Held | Refusal:
-        """The admission transaction, shielded: a cancel must not strand a committed hold."""
+        """The admission transaction, shielded and bounded: neither a cancel nor the deadline may
+        strand a committed hold."""
         task = asyncio.ensure_future(self._ledger.hold(request))
+        deadline = asyncio.timeout(self._hold_s)
         try:
-            result = await asyncio.shield(task)
+            async with deadline:
+                result = await asyncio.shield(task)
         except asyncio.CancelledError:
             self._spawn(
                 self._give_back(task, call, book)
@@ -251,15 +259,20 @@ class Pipeline:
             raise
         except ConflictError:
             return _INTERNAL
-        except Exception:  # the transaction may have committed: end it free, never swept at full
-            await self._closer.release_unsent(call.id, book)
+        except Exception:
+            if deadline.expired():
+                # Too slow: refuse now. The task runs on, bounded by the ledger's own timeouts,
+                # and whatever it commits is released at 0; the caller frees the limits.
+                self._spawn(self._give_back(task, replace(call, admit=None), book))
+            else:  # the transaction may have committed: end it free, never swept at full
+                await self._closer.release_unsent(call.id, book)
             return _LEDGER_DOWN
         return result.refusal if isinstance(result, Refused) else result
 
     async def _give_back(
         self, task: "asyncio.Future[Held | Refused]", call: Call, book: Book
     ) -> None:
-        """A cancel arrived while the hold ran: if it may have committed, release it (unsent)."""
+        """A cancel or the deadline cut the hold short: if it may commit, release it (unsent)."""
         try:
             result = await task
         except Exception:

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import httpx
 
+from spendgate.core.outcomes import ReservationState
 from spendgate.core.policy import KillSwitch, KillTarget
 from spendgate.core.sessions import SessionDefaults
 from spendgate.ledger.port import HoldRequest, LedgerPort, LedgerUnavailable
@@ -249,6 +250,51 @@ def test_ledger_down_is_refused_without_contact(tmp_path: Path) -> None:
             assert r.headers["retry-after"] == "5"
             s.assert_no_contact()
             assert await s.totals() == (0, 0)
+
+    run(case, tmp_path)
+
+
+class Stalled:
+    """A ledger whose hold waits until the test lets it commit: a stuck database recovering late."""
+
+    def __init__(self, inner: LedgerPort) -> None:
+        self._inner = inner
+        self.request_ids: list[str] = []
+        self.recover = asyncio.Event()
+
+    async def hold(self, request: HoldRequest) -> object:
+        self.request_ids.append(request.request_id)
+        await self.recover.wait()
+        return await self._inner.hold(request)
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+def test_m12_a_hold_past_the_deadline_is_ledger_unavailable_and_released_when_it_lands(
+    tmp_path: Path,
+) -> None:
+    stalled: list[Stalled] = []
+
+    def wrap(ledger: LedgerPort) -> LedgerPort:
+        stalled.append(Stalled(ledger))
+        return stalled[0]  # type: ignore[return-value]
+
+    async def case(path: Path) -> None:
+        quick: dict[str, object] = {"hold_seconds": 0.05}
+        async with open_stack(path, wrap_ledger=wrap, max_concurrent=1, pipeline_kwargs=quick) as s:
+            try:
+                r = await asyncio.wait_for(s.chat(), 5)  # without the deadline: never answered
+            finally:
+                stalled[0].recover.set()  # the hold now commits, after the caller was refused
+            assert r.status_code == 503 and error_of(r)["code"] == "ledger_unavailable"
+            s.assert_no_contact()
+            await s.pipeline.aclose()  # waits for the give-back
+            reservation = await s.ledger.get_reservation(stalled[0].request_ids[0])
+            assert reservation is not None and reservation.state is ReservationState.RELEASED
+            assert await s.totals() == (0, 0)
+            again = await s.chat()  # the concurrency slot came back exactly once
+            assert again.status_code == 200, again.text
 
     run(case, tmp_path)
 
