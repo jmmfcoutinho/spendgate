@@ -126,6 +126,15 @@ def test_session_required_needs_session_defaults(tmp_path: Path) -> None:
     assert key.session_required is True
 
 
+def test_tracing_is_off_by_default_and_its_keys_are_checked(tmp_path: Path) -> None:
+    otel = load(write(tmp_path), env=ENV).config.observability.otel
+    assert (otel.enabled, otel.service_name) == (False, "spendgate")
+    on = BASE + "observability: {otel: {enabled: true, service_name: gw-eu}}\n"
+    assert load(write(tmp_path, on), env=ENV).config.observability.otel.service_name == "gw-eu"
+    typo = BASE + "observability: {otel: {enabled: true, endpoint: http://x}}\n"
+    assert "observability.otel.endpoint" in failure(write(tmp_path, typo))
+
+
 def test_fail_open_opt_out_is_listed(tmp_path: Path) -> None:
     s = load(write(tmp_path, BASE + "fail_open: {allow_remote_media: true}\n"), env=ENV)
     (line,) = s.fail_open_summary()

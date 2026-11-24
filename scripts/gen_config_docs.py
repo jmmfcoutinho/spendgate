@@ -58,6 +58,7 @@ D: dict[str, str] = {
         "Where budget warnings are sent besides the log. Unset: the `spendgate.budget` log "
         "lines only."
     ),
+    "Config.observability": "Optional tracing. Prometheus metrics need no setting.",
     # Server
     "Server.listen": "Data-plane address, `host:port`.",
     "Server.admin": (
@@ -248,6 +249,15 @@ D: dict[str, str] = {
         "How long to wait for the TCP/TLS connection to the provider (DNS included) before the "
         "attempt counts as unreachable. Read and total timeouts are not affected."
     ),
+    # Observability
+    "Observability.otel": "OpenTelemetry tracing of the hold, forward and settle steps.",
+    "Otel.enabled": (
+        "Export one span per hold, forward and settle over OTLP/HTTP, and pass the caller's "
+        "`traceparent` on to the provider. Needs the `otel` extra (`spendgate[otel]`); "
+        "without it `serve` warns at start and traces nothing. The exporter reads the standard "
+        "`OTEL_EXPORTER_OTLP_*` variables."
+    ),
+    "Otel.service_name": "The `service.name` resource attribute of every span.",
     # Anthropic
     "Anthropic.allowed_versions": "`anthropic-version` header values the proxy accepts.",
     "Anthropic.allowed_betas": "`anthropic-beta` header values the proxy accepts. Empty: none.",

@@ -22,6 +22,7 @@ Durations carry their unit in the key name (`*_seconds`). The top-level sections
 | `anthropic` | [Anthropic](#anthropic) | see below | Request header allowlists for the Anthropic endpoint. |
 | `routing` | [Routing](#routing) | see below | Failover and cooldown behaviour across deployments of one model. |
 | `alerts` | [Alerts](#alerts) | all unset | Where budget warnings are sent besides the log. Unset: the `spendgate.budget` log lines only. |
+| `observability` | [Observability](#observability) | see below | Optional tracing. Prometheus metrics need no setting. |
 
 ## Server
 
@@ -153,6 +154,14 @@ Used at `alerts`.
 |---|---|---|---|
 | `webhook` | [AlertWebhook](#alertwebhook) (optional) | unset | Post each budget warning (`soft_threshold`, `cap_breached`, `blocked`) to one HTTPS endpoint, signed. Used by `spendgate serve` only; library mode logs them. See [budget warnings](operations.md#budget-warning-webhook). |
 
+## Observability
+
+Used at `observability`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `otel` | [Otel](#otel) | see below | OpenTelemetry tracing of the hold, forward and settle steps. |
+
 ## AdminServer
 
 Used at `server.admin`.
@@ -243,6 +252,15 @@ Used at `alerts.webhook`.
 | `timeout_seconds` | positive integer | `5` | Longest one delivery attempt may take, end to end. |
 | `max_attempts` | integer 1 to 10 | `5` | Tries per warning. A network error, a timeout, a 429 or a 5xx is retried after 1, 2, 4, ... seconds (at most 30); any other answer outside 2xx is final. |
 | `queue_size` | integer 1 to 100000 | `1000` | Warnings waiting to be posted. When full, a new warning is dropped and counted in `spendgate_alert_webhooks_total{result="dropped"}`; calls are never delayed. |
+
+## Otel
+
+Used at `observability.otel`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `enabled` | boolean | `false` | Export one span per hold, forward and settle over OTLP/HTTP, and pass the caller's `traceparent` on to the provider. Needs the `otel` extra (`spendgate[otel]`); without it `serve` warns at start and traces nothing. The exporter reads the standard `OTEL_EXPORTER_OTLP_*` variables. |
+| `service_name` | string | `"spendgate"` | The `service.name` resource attribute of every span. |
 
 ## Limits
 
