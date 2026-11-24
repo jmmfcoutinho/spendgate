@@ -243,6 +243,12 @@ All notable changes to this project are documented here. The format follows
   calls are waiting or give up. A failed refresh is still an internal error and nothing is sent.
   Azure Speech now caches its Entra token until shortly before it expires, and Bedrock drops its
   credentials snapshot after a 401 or 403.
+- A call no longer waits indefinitely on the ledger. The hold transaction is bounded at 10 s and
+  then refused with `ledger_unavailable` (503) without contacting the provider; a hold that
+  commits after that is released at 0. Postgres connections get `lock_timeout` 2 s,
+  `statement_timeout` 5 s, `idle_in_transaction_session_timeout` 10 s and TCP keepalives, unless
+  the DSN or the server already sets them; a lock or statement timeout is not retried. See
+  [Postgres connections](docs/operations.md#postgres-connections).
 
 ## [0.1.1] - 2026-11-20
 

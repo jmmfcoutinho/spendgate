@@ -62,7 +62,7 @@ Pipeline order (fixed, one function per step in `spendgate.pipeline`):
 4. Route: candidate deployments of the same catalog id, skipping cooled ones (`model_not_priced` if unpriced).
 5. Price, plan budgets, worst case = max over candidates, output ceiling (protocol 2.1).
 6. Admit limits (RPM, TPM, concurrency); refund on any later refusal.
-7. Hold: one admission transaction that checks kill switches, session limits and budgets (ledger-state-machine.md). Ledger down means `ledger_unavailable`. Kill-switch checks outside the transaction are only a cache.
+7. Hold: one admission transaction that checks kill switches, session limits and budgets (ledger-state-machine.md). Ledger down, or slower than the hold deadline ([operations.md](operations.md#postgres-connections)), means `ledger_unavailable`. Kill-switch checks outside the transaction are only a cache.
 8. Adapter `prepare()` (credential refresh in a worker thread, off the event loop), `translate()` and forward; only when `not_processed(attempt)` holds (never sent, or a `free_statuses` answer), next candidate within the same reservation (no second hold), at cost 0. A 5xx or timeout after send is returned without failover.
 9. Settle once on the reservation (after send, a cancel or failure is the full hold unless usage was seen, for a stream its final usage, M-13), or `release` if every attempt was `not_processed`.
 10. Record (`calls` row per attempt) and emit headers, logs and metrics.

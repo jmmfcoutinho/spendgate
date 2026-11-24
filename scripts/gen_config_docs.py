@@ -109,7 +109,12 @@ D: dict[str, str] = {
         "0600 and is created that way."
     ),
     "PostgresLedger.kind": "Always `postgres`. Needs the `postgres` extra.",
-    "PostgresLedger.dsn": "Secret reference to the connection URL, password included.",
+    "PostgresLedger.dsn": (
+        "Secret reference to the connection URL, password included. Use `sslmode=verify-full` "
+        "when the server is on another host. Each connection gets lock, statement and "
+        "idle-in-transaction timeouts and TCP keepalives unless the URL or the server sets them: "
+        "see [Postgres connections](operations.md#postgres-connections)."
+    ),
     # Fx
     "Fx.rates": (
         "Map from currency code to rate: 1 unit of that currency equals this many ledger units, "

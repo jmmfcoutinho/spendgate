@@ -1,7 +1,7 @@
 # Operations
 
-Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retention, the sweeper,
-draining on restart, the Postgres connection, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
+Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retention, Postgres
+connections, the sweeper, draining on restart, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
 the [configuration reference](configuration.md).
 
 Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
@@ -128,6 +128,49 @@ reservations and sessions go with them, and pending holds never do. Consequences
 - Deletion is permanent. Export what you need to keep (`usage --json`) or back up first, before
   lowering the setting.
 
+## Postgres connections
+
+A call waits for its hold (the one transaction that checks and reserves its budgets) for at most
+10 seconds; after that it is refused with `ledger_unavailable` (503, `Retry-After: 5`) and nothing
+is sent upstream. If that transaction commits later anyway, the hold is released at 0. SQLite
+waits up to 30 seconds for the file lock (`busy_timeout`); the 10-second bound applies to it too.
+
+On Postgres, every pooled connection also gets these bounds, so a locked budget row or a stuck
+server ends quickly instead of holding the call:
+
+| Setting | Default | Effect |
+|---|---|---|
+| `lock_timeout` | `2s` | A row lock held longer by another session (an open `psql` transaction, a long admin change) fails the hold |
+| `statement_timeout` | `5s` | A single statement that runs longer is cancelled |
+| `idle_in_transaction_session_timeout` | `10s` | The server closes a connection left inside a transaction |
+| `keepalives`, `keepalives_idle`, `keepalives_interval`, `keepalives_count` | `1`, `15`, `5`, `3` | TCP keepalives: a dead server or a dropped network is noticed in about 30 s |
+
+A lock timeout (SQLSTATE 55P03) or a cancelled statement (57014) is refused as
+`ledger_unavailable` and not retried: a row held for 2 s is most likely still held a moment
+later. Deadlocks (40P01) and serialization failures (40001) are still retried, up to 3 times;
+keep `lock_timeout` above the server's `deadlock_timeout` (1 s by default) so a deadlock is
+reported as one. Migrations at start (`serve`, `spendgate migrate`) run without these timeouts,
+because they may wait for another instance's migration.
+
+**Overriding.** A value you set wins. The timeouts are applied only where the server still
+reports its built-in default, so anything set in the URL, `PGOPTIONS`, `ALTER ROLE ... SET`,
+`ALTER DATABASE ... SET` or `postgresql.conf` is kept. Keepalive options named in the URL are
+kept too. In the URL, server settings go in `options` (URL-encoded) and libpq options are plain
+parameters (the password is left out of this example):
+
+```text
+postgresql://spendgate@db.internal:5432/spendgate?sslmode=verify-full&sslrootcert=/etc/spendgate/db-ca.pem&keepalives_idle=30&options=-c%20lock_timeout%3D5s%20-c%20statement_timeout%3D15s
+```
+
+**TLS.** `ledger.backend.dsn` is passed unchanged to libpq, so every libpq connection parameter
+works. When the database is not on the same host or a private container network, use TLS and
+verify the server with `sslmode=verify-full` and `sslrootcert`, as in the example above.
+`verify-full` checks the certificate chain and the host name, so neither the password nor the
+ledger traffic can be read or redirected on the way; `require` only encrypts and accepts any
+certificate, and the libpq default (`prefer`) falls back to plaintext. The DSN is a secret
+reference (`env:NAME` or `file:/path`), so the whole URL, password included, lives in a secret and
+never in `spendgate.yaml`.
+
 ## The sweeper
 
 A hold whose owner died (a crash, a killed container) would block budget forever, so a background
@@ -161,16 +204,6 @@ after restart) charges it **in full**. Size the stop so that does not happen:
 - **After a kill.** Held money from the killed instance shows for up to `ledger.lease_seconds`
   (default 60) plus one `ledger.sweep_seconds` (default 30), then the sweep settles it. With one
   instance that happens after it starts again; with several, a surviving one sweeps it.
-
-## Postgres connection
-
-`ledger.backend.dsn` is passed unchanged to libpq, so every libpq connection parameter works. When
-the database is not on the same host or a private container network, use TLS and verify the
-server: `postgresql://spendgate@db.example.internal:5432/spendgate?sslmode=verify-full&sslrootcert=/etc/spendgate/db-ca.pem`.
-`verify-full` checks the certificate chain and the host name; `require` only encrypts and accepts
-any certificate, and the libpq default (`prefer`) falls back to plaintext. The DSN is a secret
-reference (`env:NAME` or `file:/path`), so the whole URL, password included, lives in a secret and
-never in `spendgate.yaml`.
 
 ## Metrics and logs
 

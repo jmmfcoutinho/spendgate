@@ -165,7 +165,7 @@ Used at `ledger.backend`.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `kind` | `postgres` | required | Always `postgres`. Needs the `postgres` extra. |
-| `dsn` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the connection URL, password included. |
+| `dsn` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the connection URL, password included. Use `sslmode=verify-full` when the server is on another host. Each connection gets lock, statement and idle-in-transaction timeouts and TCP keepalives unless the URL or the server sets them: see [Postgres connections](operations.md#postgres-connections). |
 
 ## DeploymentSpec
 
