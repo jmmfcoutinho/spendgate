@@ -14,18 +14,20 @@ import pytest
 from psycopg import errors
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
+from spendgate.core.budgets import Period, ScopeKind
+from spendgate.core.outcomes import Outcome, ReservationState
+from spendgate.core.policy import KeyPolicy
 from spendgate.ledger import sql
 from spendgate.ledger.common import i
-from spendgate.ledger.port import Held, LedgerUnavailable
+from spendgate.ledger.port import Held, LedgerUnavailable, Settlement
 from spendgate.ledger.postgres import (
     SESSION_DEFAULTS,
     TCP_DEFAULTS,
-    WAITING_PER_CONNECTION,
     PostgresLedger,
     tcp_options_for,
 )
 from spendgate.ledger.sql import Flow, q
-from tests.contract.rig import CURRENCY, T0, Rig, workdir_location
+from tests.contract.rig import CURRENCY, T0, E, Rig, World, attempt, workdir_location
 
 pytestmark = pytest.mark.postgres
 
@@ -163,25 +165,48 @@ def test_reports_and_retention_get_a_longer_statement_timeout_unless_the_operato
         pg.run(other.aclose())
 
 
-def test_callers_past_the_pool_waiting_limit_are_ledger_unavailable_at_once(pg: Rig) -> None:
-    small = pg.run(PostgresLedger.open(pg.location, currency=CURRENCY, max_size=1))
-    names = ("lock_timeout",)
+def test_settle_and_renewal_queue_behind_a_burst_of_stuck_holds_and_still_succeed(pg: Rig) -> None:
+    """Holds stuck on a locked budget fill the pool; existing holds still settle and renew.
 
-    async def stall() -> None:
+    Pool waiters queue (up to the pool timeout); none is refused for queueing, so a burst of new
+    calls cannot stop open streams or leave live holds to the sweeper.
+    """
+    w = pg.world("100")
+    ledger = pg_ledger(pg)  # sets up the data; `small` runs the burst
+    pg.hold_ok(w, "live-1", "1")
+    pg.hold_ok(w, "live-2", "1")
+    other = pg.run(ledger.create_scope(ScopeKind.USER, "u2", w.parent.id, now=T0))
+    stuck = pg.run(ledger.create_budget(other.id, Period.NONE, E("100"), now=T0))
+    pg.run(ledger.add_key_record("key-2", other.id, now=T0))
+    w2 = World(other, stuck, KeyPolicy("key-2", other.id), w.parent)
+    # Two connections and a 300 ms lock_timeout keep the test short; 12 stuck holds leave 10
+    # callers queued for a connection, ahead of the settle and the renewal.
+    small = pg.run(PostgresLedger.open(overriding(pg.location), currency=CURRENCY, max_size=2))
+    burst = 12
+
+    async def scenario() -> tuple[list[object], Settlement, tuple[str, ...]]:
         pool = await small._ensure_pool()
-        async with pool.connection():  # the only connection is busy: a stalled server
-            waiting = [asyncio.ensure_future(small._run(show(names))) for _ in range(2)]
-            for _ in range(200):  # until both queue for the connection
-                if pool.get_stats().get("requests_waiting", 0) == WAITING_PER_CONNECTION:
-                    break
-                await asyncio.sleep(0.005)
-            started = time.monotonic()
-            with pytest.raises(LedgerUnavailable):
-                await small._run(show(names))
-            assert time.monotonic() - started < 1  # refused, not queued for the pool timeout
-        assert len(await asyncio.gather(*waiting)) == 2  # the queued callers still finish
+        holds = [
+            asyncio.ensure_future(small.hold(pg.request(w2, f"stuck-{n}", "1")))
+            for n in range(burst)
+        ]
+        for _ in range(400):  # until the pool is exhausted and callers queue
+            if pool.get_stats().get("requests_waiting", 0) > 0:
+                break
+            await asyncio.sleep(0.005)
+        assert pool.get_stats().get("requests_waiting", 0) > 0
+        made = (attempt(1, Outcome.OK, E("1"), T0, usage_cost_nano=E("1")),)
+        settled = await asyncio.wait_for(small.settle("live-1", E("1"), made, T0), _GUARD_S)
+        renewed = await asyncio.wait_for(small.renew_all("A", {"live-2"}, T0, 60_000), _GUARD_S)
+        return list(await asyncio.gather(*holds, return_exceptions=True)), settled, renewed
 
-    try:
-        pg.run(stall())
-    finally:
-        pg.run(small.aclose())
+    with psycopg.connect(pg.location) as locker:
+        locker.execute(sql.render(sql.BUDGET_LOCK, sql.POSTGRES), {"id": stuck.id})
+        try:
+            outcomes, settled, renewed = pg.run(scenario())
+        finally:
+            locker.rollback()
+            pg.run(small.aclose())
+    assert settled.applied and settled.state is ReservationState.SETTLED
+    assert renewed == ("live-2",)
+    assert all(isinstance(o, LedgerUnavailable) for o in outcomes)  # 55P03, never queued forever

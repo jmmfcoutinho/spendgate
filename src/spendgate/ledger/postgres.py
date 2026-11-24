@@ -53,9 +53,6 @@ TCP_DEFAULTS: Final = {
     "keepalives_count": "3",
     "tcp_user_timeout": "30000",
 }
-# Callers that may queue for a pooled connection, per connection. Past that a caller fails at once
-# (ledger_unavailable) instead of queueing without bound while the server stalls.
-WAITING_PER_CONNECTION: Final = 2
 _SET_DEFAULTS = (
     "SELECT set_config(s.name, d.value, false) FROM pg_settings AS s"
     " JOIN unnest(%s::text[], %s::text[]) AS d(name, value) ON d.name = s.name"
@@ -194,7 +191,6 @@ class PostgresLedger(LedgerEngine):
                     "connect_timeout": _CONNECT_TIMEOUT_S,
                     **self._tcp,
                 },
-                max_waiting=high * WAITING_PER_CONNECTION,
                 configure=bound_session,
                 check=AsyncConnectionPool.check_connection,
             )

@@ -41,7 +41,7 @@ POSTGRES = Dialect(
     pyformat=True,
     tag_join="LEFT JOIN LATERAL jsonb_each_text(CAST(COALESCE(c.labels, '{}') AS JSONB)) "
     "AS t(key, value) ON TRUE",
-    skip_locked=" FOR UPDATE SKIP LOCKED",
+    skip_locked=" FOR NO KEY UPDATE SKIP LOCKED",
 )
 
 _PARAM = re.compile(r"(?<![:\w]):(\w+)")
@@ -106,8 +106,8 @@ RES_LATE = "UPDATE reservations SET charged_nano = :charged WHERE id = :id AND s
 RES_GET = """SELECT id, state, owner_instance, lease_expires_at, key_id, scope_id, session_id,
   outcome, charged_nano, meta, created_at FROM reservations WHERE id = :id"""
 # One id at a time: the caller names the holds it still owns (a hold nobody owns must expire).
-# A row another session holds is being settled, released or expired: nothing to renew, and
-# waiting for it (up to lock_timeout) would fail the whole heartbeat.
+# A locked row is skipped, not waited for (up to lock_timeout, failing the whole heartbeat): it is
+# being closed by its owner, or expired by a sweeper because its lease is already overdue.
 RES_RENEW = """UPDATE reservations SET lease_expires_at = :until
   WHERE id IN (SELECT id FROM reservations
     WHERE id = :id AND owner_instance = :owner AND state = 'pending' $SKIP_LOCKED) RETURNING id"""
