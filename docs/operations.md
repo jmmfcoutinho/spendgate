@@ -150,7 +150,24 @@ Alert on `spendgate_overruns_total`, on a growing `spendgate_holds_in_flight` th
 **Logs** are one JSON object per line on the `spendgate.call` logger, written for every settled
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,
 `request_id`, `key_prefix`, `scope_path`, `model`, `deployment`, `outcome`, token counts, `cost`,
-`currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`. Prompts, response bodies,
-headers and secrets are never logged: a field not on the list is dropped, and strings shaped like
-keys are dropped too. Refused requests write a log line but no call row. `fail_open` opt-outs are
-logged as warnings at start.
+`currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`, and for internal errors
+`where`, `error_class`, `frames`, `settled`. Prompts, response bodies, headers and secrets are
+never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
+Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
+start.
+
+An unexpected exception (a bug in an adapter, the pipeline or an admin handler) that a catch-all
+turns into `internal_error` writes one `spendgate.internal` event at level `ERROR`:
+
+| Field | Meaning |
+|---|---|
+| `request_id` | The request (`sg_req_...`, or `sg_adm_...` for the admin API) |
+| `where` | Which catch-all caught it, e.g. `routing.response`, `stream.relay`, `admin.handler` |
+| `error_class` | The exception's class name, e.g. `KeyError` |
+| `frames` | The innermost 20 frames as `module:function:line`, outermost first, joined by ` > ` |
+| `settled` | `true` when the call was charged (settled) before the client got the error |
+
+The exception's message, local variables and source lines are never logged: a message can quote a
+body or a secret. With `settled: true` the client got an error for a call it was charged for; the
+`call` line with the same `request_id` carries the cost. `false` means released, refused or not
+known to be settled. Alert on any `spendgate.internal` line and report it as a bug.
