@@ -13,26 +13,17 @@ from typing import Literal
 import httpx
 import uvicorn
 
-from spendgate import package_version
 from spendgate.cli.client import EXIT_CONFIG, EXIT_OK
 from spendgate.cli.reload import SecretReload, on_sighup
 from spendgate.cli.runtime import Runtime, open_runtime, system_ms
 from spendgate.config import ConfigError, Settings, check_config, load
 from spendgate.config.schema import Server
-from spendgate.gateway.admin import combine, create_admin_app
-from spendgate.gateway.admin_http import AdminContext
-from spendgate.gateway.alert_webhook import webhook_alerts, with_alerts
-from spendgate.gateway.app import create_app
+from spendgate.gateway.admin import combine
+from spendgate.gateway.alert_webhook import webhook_alerts
 from spendgate.gateway.bootstrap import BootstrapReport, apply_bootstrap
+from spendgate.gateway.compose import build_gateway
 from spendgate.gateway.logs import configure_json_logging
-from spendgate.gateway.maintenance import Maintenance
 from spendgate.gateway.metrics import Metrics
-from spendgate.gateway.wiring import (
-    bind_catalog_metrics,
-    bind_runtime_metrics,
-    build_pipeline,
-    default_readiness,
-)
 from spendgate.pipeline.model import Sender
 from spendgate.pipeline.tracing import Tracer
 from spendgate.pipeline.transport import upstream_timeout
@@ -193,25 +184,14 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         upstream(settings) as (sender, tracer),
         webhook_alerts(settings.alert_webhook, metrics, logger, rt.now) as alerts,
     ):
-        pipeline = build_pipeline(
-            settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger, tracer=tracer
-        )
-        # SIGHUP re-reads `file:` secrets (provider credentials, the ledger DSN) in place.
-        reload = SecretReload(settings, pipeline, logger, rt.rotate_dsn)
-        ready = default_readiness(rt.ledger, settings, rt.now)
-        bind_catalog_metrics(metrics, settings, rt.now)
-        bind_runtime_metrics(metrics, pipeline.unsettled, rt.ledger)
-        # Metrics are served by the admin app only (see gateway.admin): not given to the data app.
-        upkeep = Maintenance(rt.ledger, settings, rt.now, logger, metrics)  # sweeper + retention
-        # The webhook poster (when configured) runs beside the sweeper: stopped with it, but a
-        # failure in either leaves the other running.
-        data_app = create_app(pipeline, readiness=ready, background=with_alerts(upkeep.run, alerts))
-        ctx = AdminContext(
-            rt.ledger, rt.keys, settings, rt.now, rt.now(), metrics, package_version(),
-            readiness=ready,
+        gateway = build_gateway(
+            settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger, alerts=alerts,
+            tracer=tracer, now_ms=rt.now,
         )  # fmt: skip
+        # SIGHUP re-reads `file:` secrets (provider credentials, the ledger DSN) in place.
+        reload = SecretReload(settings, gateway.pipeline, logger, rt.rotate_dsn)
         separate = settings.config.server.admin
-        admin_app = create_admin_app(ctx, shared_port=separate is None)
+        data_app, admin_app = gateway.data_app, gateway.admin_app
         main, server = parse_listen(settings.config.server.listen), settings.config.server
         with on_sighup(asyncio.get_running_loop(), reload):
             if separate is None:
