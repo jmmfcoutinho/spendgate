@@ -191,6 +191,16 @@ forbidden_modules = ["starlette"]
 ignore_imports = ["spendgate.gateway.** -> starlette"]
 allow_indirect_imports = true
 
+# `spendgate catalog import` downloads by operator action; nothing that serves calls may reach it.
+[[tool.importlinter.contracts]]
+name = "only the catalog command uses the LiteLLM mapper"
+type = "forbidden"
+source_modules = [
+  "spendgate.gateway", "spendgate.local", "spendgate.pipeline", "spendgate.ledger",
+  "spendgate.providers", "spendgate.config", "spendgate.client", "spendgate.cli.serve",
+]
+forbidden_modules = ["spendgate.core.litellm", "spendgate.cli.catalog"]
+
 [[tool.importlinter.contracts]]
 name = "only cli.serve imports uvicorn"
 type = "forbidden"

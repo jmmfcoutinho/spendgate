@@ -37,6 +37,7 @@ def test_every_documented_command_parses() -> None:
         ["budgets", "ack-overrun", "b", "--reason", "r"], ["kill", "on", "--reason", "r"],
         ["kill", "on", "--model", "openai/x", "--reason", "r"], ["kill", "off", "id"],
         ["usage", "--by", "service,model", "--since", "7d", "--json"], ["status", "--local"],
+        ["catalog", "import", "--from-litellm", "a" * 40, "--out", "x.yaml", "--force"],
     ):  # fmt: skip
         assert p.parse_args(argv).command == argv[0]
 

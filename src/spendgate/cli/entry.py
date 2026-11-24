@@ -21,7 +21,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from spendgate import package_version
-from spendgate.cli import serve
+from spendgate.cli import catalog, serve
 from spendgate.cli.client import EXIT_AUTH, EXIT_CONFIG, EXIT_OK, Client, CliError
 from spendgate.cli.commands import COMMANDS, Command
 from spendgate.cli.runtime import open_runtime
@@ -152,6 +152,7 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--basis", choices=("charged", "usage"))
     u.add_argument("--limit", type=int)
     _leaf(top, "status", common, "gateway status, kill switches and budget alerts")
+    catalog.add_parser(top)
     return parser
 
 
@@ -239,19 +240,25 @@ def resolve_defaults(args: argparse.Namespace) -> None:
     args.config = args.config or os.environ.get(ENV_CONFIG) or DEFAULT_CONFIG
 
 
+def _dispatch(args: argparse.Namespace) -> int:
+    if args.command == "catalog":  # no config and no admin key: an offline file tool
+        return catalog.main(args)
+    resolve_defaults(args)
+    match args.command:
+        case "serve":
+            return serve.run_serve(args.config, bootstrap=not args.no_bootstrap)
+        case "check-config":
+            return serve.run_check_config(args.config)
+        case "migrate":
+            return serve.run_migrate(args.config, bootstrap=args.bootstrap)
+        case _:
+            return asyncio.run(_run_admin(args))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    resolve_defaults(args)
     try:
-        match args.command:
-            case "serve":
-                return serve.run_serve(args.config, bootstrap=not args.no_bootstrap)
-            case "check-config":
-                return serve.run_check_config(args.config)
-            case "migrate":
-                return serve.run_migrate(args.config, bootstrap=args.bootstrap)
-            case _:
-                return asyncio.run(_run_admin(args))
+        return _dispatch(args)
     except CliError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return exc.code
