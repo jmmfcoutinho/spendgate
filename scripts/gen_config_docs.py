@@ -264,7 +264,9 @@ D: dict[str, str] = {
     "BootstrapKey.session_required": (
         "Refuse every call on this key that does not send `X-Spendgate-Session` "
         "(`invalid_request`), so an agent cannot leave its session limits behind. Needs "
-        "`session_defaults`."
+        "`session_defaults`. Like every key setting it applies when the key is created; use "
+        "`PATCH /admin/v1/keys/{key_id}` for existing keys (`migrate --bootstrap` warns when "
+        "an existing key differs)."
     ),
     "SessionDefaultsSpec.budget": "Cap of one session, inside the shared budgets.",
     "SessionDefaultsSpec.max_steps": "Most requests in one session.",

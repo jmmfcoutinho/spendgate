@@ -51,6 +51,8 @@ Issue #29: the defaults left an agent more room than the session design suggests
   `max_new_sessions_per_hour: 60` unless they say otherwise; a PATCH that sends a new
   `session_defaults` object replaces it and gets the default too. Keys already stored keep the
   limits they were created with (bootstrap is create-only); no data migration.
+  `migrate --bootstrap` warns when a configured key exists with other `session_required` or
+  `session_defaults` than the config, and names the PATCH that changes it.
 - `session_required` is opt-in, so no existing key changes. An older spendgate reading a key row
   with `"required": true` ignores the flag; downgrading drops the enforcement.
 - The CLI `keys create` has no session options yet; agent keys with `session_required` are made

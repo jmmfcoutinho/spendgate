@@ -16,7 +16,7 @@ from spendgate.config.schema import BootstrapBudget, BootstrapKey
 from spendgate.core.budgets import Period, ScopeKind
 from spendgate.core.sessions import SessionDefaults
 from spendgate.ledger.admin_port import AdminLedger
-from spendgate.ledger.key_types import AdminScope, KeyKind, KeySpec
+from spendgate.ledger.key_types import AdminScope, KeyKind, KeyRecord, KeySpec
 from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import ScopeRow
 
@@ -37,6 +37,7 @@ class BootstrapReport:
     scopes: list[str] = field(default_factory=list)
     budgets: list[str] = field(default_factory=list)
     keys: list[CreatedKey] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 async def _ensure_scope(
@@ -114,10 +115,29 @@ async def _key(
     path = k.scope if k.scope is not None else ADMIN_SCOPE_PATH
     scope = await _ensure_scope(ledger, path, now, report)
     kind = KeyKind.ADMIN if k.admin_scopes is not None else KeyKind.API
-    if any(r.name == k.name for r in await ledger.list_keys(scope.id, kind=kind)):
-        return  # a revoked key is not recreated either
+    existing = [r for r in await ledger.list_keys(scope.id, kind=kind) if r.name == k.name]
+    if existing:  # a revoked key is not recreated either
+        _warn_session_drift(k, path, existing, report)
+        return
     made = await keys.create_key(_spec(k, scope), actor=ACTOR, now=now)
     report.keys.append(CreatedKey(k.name, kind.value, path, made.secret))
+
+
+def _warn_session_drift(
+    k: BootstrapKey, path: str, existing: list[KeyRecord], report: BootstrapReport
+) -> None:
+    """Create-only would keep an old key's session settings silently; `session_required` is a
+    security setting, so a difference from the config is reported, never applied."""
+    if k.admin_scopes is not None:
+        return
+    wanted = _session_defaults(k)
+    for rec in existing:
+        if rec.revoked_at is None and rec.policy.session_defaults != wanted:
+            report.warnings.append(
+                f"key {k.name} ({path}) exists with other session_required or session_defaults "
+                f"than the config; bootstrap applies them only when it creates a key: change the "
+                f"existing key with PATCH /admin/v1/keys/{rec.id}"
+            )
 
 
 async def apply_bootstrap(

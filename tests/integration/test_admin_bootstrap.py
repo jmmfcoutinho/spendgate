@@ -143,10 +143,40 @@ async def test_m11_a_bootstrap_agent_key_stores_session_required_and_the_new_ses
     settings = await _settings(tmp_path, agent)
     ledger = SqliteLedger.open(settings.ledger_path, currency="USD")  # type: ignore[arg-type]
     try:
-        await apply_bootstrap(settings, ledger, KeyService(ledger, PEPPER), NOW_MS)
+        keys = KeyService(ledger, PEPPER)
+        await apply_bootstrap(settings, ledger, keys, NOW_MS)
         (key,) = await ledger.list_keys(None)
         assert key.policy.session_defaults == SessionDefaults(
             max_steps=5, max_new_sessions_per_hour=60, required=True
         )
+        again = await apply_bootstrap(settings, ledger, keys, NOW_MS + 1)
+        assert again.warnings == []  # the stored key matches the config: nothing to report
+    finally:
+        ledger.close()
+
+
+@async_test
+async def test_bootstrap_warns_when_an_existing_key_has_other_session_settings(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    settings = await _settings(tmp_path)
+    ledger = SqliteLedger.open(settings.ledger_path, currency="USD")  # type: ignore[arg-type]
+    try:
+        keys = KeyService(ledger, PEPPER)
+        await apply_bootstrap(settings, ledger, keys, NOW_MS)
+        same = await apply_bootstrap(settings, ledger, keys, NOW_MS + 1)
+        assert same.warnings == []  # unchanged config: nothing to report
+        agent = BOOTSTRAP.replace(
+            "limits: {rpm: 10}",
+            "limits: {rpm: 10}, session_required: true, session_defaults: {max_steps: 5}",
+        )
+        changed = await _settings(tmp_path, agent)
+        report = await apply_bootstrap(changed, ledger, keys, NOW_MS + 2)
+        (warning,) = report.warnings
+        assert "app-key" in warning and "PATCH /admin/v1/keys/" in warning
+        api = [k for k in await ledger.list_keys(None) if k.name == "app-key"]
+        assert api[0].policy.session_defaults is None  # create-only: never applied
+        serve.print_bootstrap(report)
+        assert "warning: bootstrap: key app-key" in capsys.readouterr().err
     finally:
         ledger.close()

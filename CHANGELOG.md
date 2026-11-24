@@ -40,6 +40,9 @@ All notable changes to this project are documented here. The format follows
   ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
 - `spendgate.local.guard(concurrency=...)`: the most calls each client admits at once (16 by
   default, `None` for no bound). With `config=`, the file's `defaults.limits.concurrency` sets it.
+- `spendgate migrate --bootstrap` warns when a configured key already exists with other
+  `session_required` or `session_defaults` than the config. Bootstrap stays create-only; change
+  an existing key with `PATCH /admin/v1/keys/{key_id}`.
 
 ### Changed
 
