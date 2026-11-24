@@ -41,7 +41,7 @@ perimeter when something must be enforced. See [Running locally](https://github.
 Install from PyPI with the SDK you use (`openai`, `anthropic`), then write a config. The package
 needs Python 3.13 or newer; without it, run the proxy from the signed container image
 (`ghcr.io/jmmfcoutinho/spendgate:<version>`, which carries its own Python), as
-[Running locally](docs/deploy/local.md#container-image) shows. Providers, prices and budgets are
+[Running locally](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/deploy/local.md#container-image) shows. Providers, prices and budgets are
 data; this config routes one model and gives it a 5 USD lifetime cap.
 
 ```bash
@@ -157,9 +157,9 @@ The bundled catalog ships about 26 priced models across these providers. A model
 routed in `models:` is refused with `model_not_allowed`, and routing a catalog id with no price in
 force fails `check-config` and `serve` ("has no price in the catalog"); `model_not_priced` is the
 request-time refusal when an entry cannot price that particular request. To use another model,
-give it a price in an override file ([adding a model](docs/catalog-how-to.md), or draft entries
+give it a price in an override file ([adding a model](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md), or draft entries
 from LiteLLM's price file as in
-[section 6](docs/catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)).
+[section 6](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)).
 
 ## Documentation
 
