@@ -7,6 +7,7 @@ is the injected `FakeClock` and the heartbeat is driven by hand, never by sleepi
 """
 
 import asyncio
+import json
 from collections import Counter
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -26,7 +27,7 @@ from tests.fakes import FakeUpstream, FakeUsage, Script
 from tests.integration.harness import CHAT, NOW_MS, PEPPER, Stack, async_test, open_stack, usd
 from tests.integration.stream_rig import chat_chunk, chat_usage
 from tests.integration.test_gateway_stream_stops import beat, engage
-from tests.integration.test_gateway_streaming import BODY, SEEN, gated, open_call, priced
+from tests.integration.test_gateway_streaming import SEEN, gated, open_call, priced
 
 WORKERS = 40
 CAP = "0.01"
@@ -151,8 +152,10 @@ async def test_t_sess_03_m13_a_kill_switch_mid_loop_refuses_the_next_call_and_st
             await short.finish()
             assert short.status == 200
         await engage(s, KillTarget.SCOPE, s.scope.id)
-        refused = await s.post(CHAT, BODY)
-        assert refused.status_code == 503 and refused.json()["error"]["code"] == "kill_switch"
+        refused = await open_call(s)  # returns at the headers: a regression fails, not hangs
+        assert refused.status == 503
+        assert json.loads(await refused.read_all())["error"]["code"] == "kill_switch"
+        await refused.finish()
         assert len(up.requests) == 4  # the refused call never reached the upstream
         up.streams[0].put(chat_chunk("b"))
         assert await long.chunk() == chat_chunk("b")  # until the heartbeat, the stream runs
