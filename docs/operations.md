@@ -390,7 +390,7 @@ posts each budget warning above to one HTTPS endpoint. Library mode does not pos
 ```yaml
 alerts:
   webhook:
-    url: env:SPENDGATE_ALERT_WEBHOOK_URL               # a secret reference: the URL often holds a token
+    url: env:SPENDGATE_ALERT_WEBHOOK_URL  # a secret reference: the URL often holds a token
     signing_secret: env:SPENDGATE_ALERT_WEBHOOK_SECRET
     # timeout_seconds: 5, max_attempts: 5, queue_size: 1000 (the defaults)
 ```
