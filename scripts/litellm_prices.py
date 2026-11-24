@@ -793,7 +793,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             if problems:
                 print(f"skipped {len(problems)} entries that do not validate", file=sys.stderr)
                 problems = []
-    except InputError as exc:
+    except (InputError, ArithmeticError) as exc:  # ArithmeticError: an exponent out of range
         print(f"error: {exc}", file=sys.stderr)
         return 2
     _emit(text, args.out)

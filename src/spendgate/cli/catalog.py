@@ -12,7 +12,9 @@ JSON, or nothing could be drafted; 5 the download failed.
 
 import argparse
 import hashlib
+import os
 import sys
+import tempfile
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -106,13 +108,15 @@ def _source(args: argparse.Namespace, url: str, fetcher: Fetch) -> litellm.Sourc
 
 
 def _read(path: Path) -> bytes:
+    """At most MAX_BYTES; a FIFO, a device or a growing file cannot make it read more."""
     try:
-        size = path.stat().st_size
-        if size > litellm.MAX_BYTES:
-            raise CliError(EXIT_CONFIG, f"{path} is larger than {litellm.MAX_BYTES} bytes")
-        return path.read_bytes()
+        with path.open("rb") as fh:
+            raw = fh.read(litellm.MAX_BYTES + 1)
     except OSError as exc:
         raise CliError(EXIT_CONFIG, f"cannot read {path} ({type(exc).__name__})") from None
+    if len(raw) > litellm.MAX_BYTES:
+        raise CliError(EXIT_CONFIG, f"{path} is larger than {litellm.MAX_BYTES} bytes")
+    return raw
 
 
 def _bundled() -> dict[str, Any]:
@@ -135,13 +139,30 @@ def _check(text: str, bundled: dict[str, Any]) -> None:
 
 def _write(out: Path, text: str, *, force: bool) -> None:
     try:
+        if force:
+            _replace(out, text)
+            return
         # "x" fails if the file exists: an operator's reviewed override is never clobbered.
-        with out.open("w" if force else "x", encoding="utf-8") as fh:
+        with out.open("x", encoding="utf-8") as fh:
             fh.write(text)
     except FileExistsError:
         raise CliError(EXIT_USAGE, f"{out} exists; pass --force to overwrite it") from None
     except OSError as exc:
         raise CliError(EXIT_CONFIG, f"cannot write {out} ({type(exc).__name__})") from None
+
+
+def _replace(out: Path, text: str) -> None:
+    """Write beside `out`, fsync, then rename over it: a crash leaves the old file or the new."""
+    fd, name = tempfile.mkstemp(dir=out.parent, prefix=f".{out.name}.", suffix=".tmp")
+    tmp = Path(name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        tmp.replace(out)
+    finally:
+        tmp.unlink(missing_ok=True)  # gone after a successful replace
 
 
 def run_import(
@@ -157,9 +178,13 @@ def run_import(
     source = _source(args, url, fetcher)
     bundled = _bundled()
     carried = {str(m["id"]) for m in bundled["models"]}
-    drafts = litellm.draft_overrides(source, carried=carried, providers=providers, today=day)
+    try:
+        drafts = litellm.draft_overrides(source, carried=carried, providers=providers, today=day)
+    except (litellm.LiteLLMError, ArithmeticError) as exc:
+        raise CliError(EXIT_CONFIG, f"the LiteLLM file cannot be mapped ({exc})") from None
     for key, reason in drafts.skipped:
-        print(f"skipped {key}: {reason}", file=sys.stderr)
+        # repr: a key is third-party text, and a raw control sequence would drive the terminal.
+        print(f"skipped {key!r}: {reason}", file=sys.stderr)
     if not drafts.entries:
         raise CliError(EXIT_CONFIG, "nothing to write: no mappable model the catalog lacks")
     body = yaml.safe_dump(

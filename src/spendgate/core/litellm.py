@@ -53,6 +53,7 @@ _SHA = re.compile(r"[0-9a-f]{40}")
 _ABOVE = re.compile(r"^input_cost_per_token_above_(\d+)k_tokens$")
 _CHAT_MODES = frozenset({"chat", "responses", "messages"})
 _NOTE_MAX = 300  # PriceEntry.note
+_MAX_EXPONENT = 9  # largest accepted price per catalog unit: under 10^10
 
 type Spec = Mapping[str, Any]
 
@@ -65,14 +66,34 @@ class LiteLLMError(ValueError):
 
 
 def to_decimal(value: object) -> Decimal:
-    """A JSON number as an exact Decimal (parsed with `parse_float=Decimal`, never a float)."""
+    """A JSON number as an exact Decimal (parsed with `parse_float=Decimal`, never a float).
+
+    NaN and Infinity reach here as floats (json's `parse_constant`), strings and booleans as
+    themselves: all are refused. The message names the type only, never the value.
+    """
     if isinstance(value, bool) or not isinstance(value, (int, Decimal)):
-        raise LiteLLMError(f"not a number: {value!r}")
-    return Decimal(value)
+        raise LiteLLMError(f"not a JSON number ({type(value).__name__})")
+    number = Decimal(value)
+    if not number.is_finite():
+        raise LiteLLMError("not a finite number")
+    return number
+
+
+def whole(value: object) -> int:
+    """A JSON number that must be a whole number (a token limit): never rounded."""
+    number = to_decimal(value)
+    if number != number.to_integral_value():
+        raise LiteLLMError("not a whole number")
+    return int(number)
 
 
 def scale(value: object, factor: Decimal) -> Decimal:
-    return _CTX.multiply(to_decimal(value), factor)
+    """`value` x `factor`, refused above 10^10 per unit: no real meter is near that, and the
+    decimal string of a huge exponent would be megabytes long."""
+    scaled = _CTX.multiply(to_decimal(value), factor)
+    if scaled.adjusted() > _MAX_EXPONENT:
+        raise LiteLLMError("a price is out of range")
+    return scaled
 
 
 def dec_str(value: Decimal) -> str:
@@ -274,6 +295,8 @@ def draft_entry(m: Mapped, source: Source, today: date) -> dict[str, Any]:
     conv = convert_meters(slug, spec)
     if conv.get("reasoning_per_mtok") == conv.get("output_per_mtok"):
         conv.pop("reasoning_per_mtok", None)  # priced as output already
+    if m.mode == "embedding" and conv.get("output_per_mtok") == 0:
+        del conv["output_per_mtok"]  # LiteLLM lists 0 for embeddings, which bill no output
     entry["meters"] = {k: dec_str(v) for k, v in conv.items()}
     listed = long_contexts(spec)
     if len(listed) == 1:
@@ -287,7 +310,7 @@ def draft_entry(m: Mapped, source: Source, today: date) -> dict[str, Any]:
         tail = " Several long-context tiers exist: none imported."
         entry["note"] = entry["note"][: _NOTE_MAX - len(tail)] + tail
     limits = {
-        name: int(to_decimal(spec[field_name]))
+        name: whole(spec[field_name])
         for name, field_name in (
             ("max_output_tokens", "max_output_tokens"),
             ("context_window", "max_input_tokens"),
@@ -302,11 +325,22 @@ def draft_entry(m: Mapped, source: Source, today: date) -> dict[str, Any]:
 
 
 def entry_problem(entry: Mapping[str, Any]) -> str | None:
-    """Why `entry` would not load as a catalog entry, or None. Never names a value."""
+    """Why `entry` must not be drafted, or None. Never names a value.
+
+    Stricter than the catalog schema: a zero meter or a long-context discount from a third
+    party would make calls free or cheaper than billed, so they are refused here (M-10).
+    """
     limits = entry.get("limits") or {}
     if entry.get("mode") in _CHAT_MODES and limits.get("max_output_tokens") is None:
         # The worst-case hold needs a ceiling; guessing one would let a call outspend its budget.
         return "no output ceiling (LiteLLM lists no max_output_tokens)"
+    for meter, price in (entry.get("meters") or {}).items():
+        if Decimal(price) == 0:
+            return f"zero price for {meter}"
+    lc = entry.get("long_context") or {}
+    for name in ("input_multiplier", "output_multiplier"):
+        if name in lc and Decimal(lc[name]) < 1:
+            return f"long-context {name} below 1"
     try:
         PriceEntry.model_validate(dict(entry))
     except ValidationError as exc:
@@ -329,8 +363,8 @@ def draft_overrides(
 ) -> Drafts:
     """Valid `verified: false` drafts for mappable models of `providers` not in `carried`.
 
-    An id the catalog already carries is left out: a newer unverified entry would replace a
-    reviewed price from today on.
+    An id the catalog carries when the draft is made is left out: a newer unverified entry
+    would replace a reviewed price from its date on. One bad entry is skipped, never fatal.
     """
     out = Drafts()
     for entry_id, variants in sorted(index(source.data).items()):
@@ -340,7 +374,11 @@ def draft_overrides(
         if entry_id in carried:
             out.carried.append(entry_id)
             continue
-        entry = draft_entry(m, source, today)
+        try:
+            entry = draft_entry(m, source, today)
+        except (LiteLLMError, ArithmeticError):  # NaN, a string, a bool, an exponent overflow
+            out.skipped.append((m.key, "a price or limit is not a usable finite number"))
+            continue
         if (problem := entry_problem(entry)) is not None:
             out.skipped.append((m.key, problem))
             continue

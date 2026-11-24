@@ -82,7 +82,7 @@ def test_m09_an_entry_without_an_output_ceiling_is_refused_never_defaulted(
     out = tmp_path / "extra.yaml"
     assert run("--from-file", str(FIXTURE), "--out", str(out)) == EXIT_OK
     assert "openai/gpt-6-nolimit" not in {e["id"] for e in models(out)}
-    assert "skipped gpt-6-nolimit: no output ceiling" in capsys.readouterr().err
+    assert "skipped 'gpt-6-nolimit': no output ceiling" in capsys.readouterr().err
     data = litellm.parse_litellm(FIXTURE.read_bytes())
     mapped = litellm.map_key("gpt-6-nolimit", data["gpt-6-nolimit"])
     assert mapped is not None
@@ -289,3 +289,164 @@ def test_the_mapper_refuses_an_oversized_file(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(litellm, "MAX_BYTES", 1)
     with pytest.raises(litellm.LiteLLMError, match="larger than"):
         litellm.parse_litellm(b"{}")
+
+
+# --- hostile input ---------------------------------------------------------------------------
+
+GOOD = (
+    '"ok-model": {"litellm_provider": "openai", "mode": "chat", "input_cost_per_token": 1e-06,'
+    ' "output_cost_per_token": 2e-06, "max_output_tokens": 1000}'
+)
+
+
+def chat(key: str, **fields: object) -> str:
+    spec: dict[str, object] = {
+        "litellm_provider": "openai", "mode": "chat", "input_cost_per_token": 1e-06,
+        "output_cost_per_token": 2e-06, "max_output_tokens": 1000,
+    }  # fmt: skip
+    spec.update(fields)
+    return f"{json.dumps(key)}: {json.dumps(spec)}"
+
+
+def import_text(
+    tmp_path: Path, body: str, capsys: pytest.CaptureFixture[str]
+) -> tuple[int, list[str], str]:
+    src = tmp_path / "prices.json"
+    src.write_text("{" + body + "}", encoding="utf-8")
+    out = tmp_path / "extra.yaml"
+    out.unlink(missing_ok=True)
+    rc = run("--from-file", str(src), "--out", str(out))
+    ids = [e["id"] for e in models(out)] if out.exists() else []
+    return rc, ids, capsys.readouterr().err
+
+
+def test_one_bad_value_skips_that_entry_and_keeps_the_rest(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    raw = (
+        '"m-nan": {"litellm_provider": "openai", "mode": "chat", "input_cost_per_token": NaN,'
+        ' "output_cost_per_token": 1e-06, "max_output_tokens": 10},'
+        '"m-big": {"litellm_provider": "openai", "mode": "chat",'
+        ' "input_cost_per_token": 1e999990, "output_cost_per_token": 1e-06,'
+        ' "max_output_tokens": 10},'
+    )
+    body = raw + ",".join(
+        (
+            chat("m-str", input_cost_per_token="0.000001"),  # noqa: S106 - a price, not a secret
+            chat("m-bool", output_cost_per_token=True),
+        )
+    )
+    rc, ids, err = import_text(tmp_path, body + "," + GOOD, capsys)
+    assert rc == EXIT_OK and ids == ["openai/ok-model"]
+    for key in ("m-nan", "m-big", "m-str", "m-bool"):
+        assert f"skipped '{key}': a price or limit is not a usable finite number" in err
+    assert "0.000001" not in err and "True" not in err and "999990" not in err
+
+
+def test_a_bad_value_inside_the_mapper_is_a_config_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*args: object, **kwargs: object) -> litellm.Drafts:
+        raise ArithmeticError
+
+    monkeypatch.setattr(litellm, "draft_overrides", broken)
+    assert run("--from-file", str(FIXTURE), "--out", str(tmp_path / "x.yaml")) == EXIT_CONFIG
+
+
+def test_m10_a_zero_price_from_litellm_is_never_drafted(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = ",".join(
+        (
+            chat("m-free", input_cost_per_token=0, output_cost_per_token=0),
+            chat("m-free-out", output_cost_per_token=0.0),
+            chat("m-free-reasoning", output_cost_per_reasoning_token=0),
+            chat("m-free-cache", cache_read_input_token_cost=0),
+            TINY,
+            GOOD,
+        )
+    )
+    rc, ids, err = import_text(tmp_path, body, capsys)
+    assert rc == EXIT_OK and ids == ["openai/ok-model"]
+    assert "skipped 'm-free': zero price for input_per_mtok" in err
+    assert "skipped 'm-free-out': zero price for output_per_mtok" in err
+    assert "skipped 'm-free-reasoning': zero price for reasoning_per_mtok" in err
+    assert "skipped 'm-free-cache': zero price for cached_input_per_mtok" in err
+    assert "skipped 'm-tiny': zero price for input_per_mtok" in err  # underflows to 0
+
+
+# Below Decimal's smallest exponent: the conversion underflows to 0, which must not pass as free.
+TINY = (
+    '"m-tiny": {"litellm_provider": "openai", "mode": "chat",'
+    ' "input_cost_per_token": 1e-999999999, "output_cost_per_token": 1e-06,'
+    ' "max_output_tokens": 10}'
+)
+
+
+def test_m10_an_embedding_drops_the_zero_output_meter_it_never_bills(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec = {
+        "litellm_provider": "openai", "mode": "embedding", "input_cost_per_token": 1e-08,
+        "output_cost_per_token": 0.0,
+    }  # fmt: skip
+    rc, ids, _ = import_text(tmp_path, f'"emb-q4-test": {json.dumps(spec)}', capsys)
+    assert rc == EXIT_OK and ids == ["openai/emb-q4-test"]
+    assert models(tmp_path / "extra.yaml")[0]["meters"] == {"input_per_mtok": "0.01"}
+
+
+def test_m10_a_long_context_discount_is_refused(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = chat("m-lc", input_cost_per_token_above_200k_tokens=5e-07) + "," + GOOD
+    rc, ids, err = import_text(tmp_path, body, capsys)
+    assert rc == EXIT_OK and ids == ["openai/ok-model"]
+    assert "skipped 'm-lc': long-context input_multiplier below 1" in err
+
+
+def test_m09_a_fractional_output_ceiling_is_refused_never_rounded(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc, ids, err = import_text(tmp_path, chat("m-frac", max_output_tokens=4096.9), capsys)
+    assert rc == EXIT_CONFIG and ids == []
+    assert "skipped 'm-frac': a price or limit is not a usable finite number" in err
+    assert litellm.whole(4096) == 4096
+    with pytest.raises(litellm.LiteLLMError, match="whole"):
+        litellm.whole(litellm.to_decimal(litellm.parse_litellm(b'{"x": {"n": 1.5}}')["x"]["n"]))
+
+
+def test_a_skipped_key_cannot_drive_the_terminal(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    body = chat("\x1b]0;pwned\x07\x1b[2J-x") + "," + GOOD
+    rc, _, err = import_text(tmp_path, body, capsys)
+    assert rc == EXIT_OK
+    assert "\x1b" not in err and "\x07" not in err and "\\x1b]0;pwned" in err
+
+
+@pytest.mark.skipif(not Path("/dev/zero").exists(), reason="needs /dev/zero")
+def test_from_file_reads_no_more_than_the_cap_from_an_endless_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(litellm, "MAX_BYTES", 1024)  # stat says 0 bytes; the read must stop
+    assert run("--from-file", "/dev/zero", "--out", str(tmp_path / "x.yaml")) == EXIT_CONFIG
+
+
+def test_force_replaces_the_file_in_one_step_and_leaves_no_temp_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out = tmp_path / "extra.yaml"
+    out.write_text("# old\n", encoding="utf-8")
+    real = Path.replace
+
+    def crash(self: Path, target: Any) -> Path:  # noqa: ANN401 - mirrors Path.replace
+        raise OSError("disk gone")
+
+    monkeypatch.setattr(Path, "replace", crash)
+    assert run("--from-file", str(FIXTURE), "--out", str(out), "--force") == EXIT_CONFIG
+    assert out.read_text(encoding="utf-8") == "# old\n"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["extra.yaml"]
+    monkeypatch.setattr(Path, "replace", real)
+    assert run("--from-file", str(FIXTURE), "--out", str(out), "--force") == EXIT_OK
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["extra.yaml"]
+    assert models(out)[0]["id"] == "openai/gpt-6-new"
