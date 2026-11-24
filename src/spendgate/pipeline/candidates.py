@@ -8,7 +8,7 @@ uses this lives in `pipeline.routing`.
 
 import math
 import random
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
@@ -75,19 +75,25 @@ class Router:
     def targets(self, alias: str) -> tuple[Target, ...]:
         return self._targets[alias]
 
-    def reload(self, routes: Mapping[str, Route]) -> None:
-        """Swap in re-read credentials for the same deployments; health stays per label.
+    def reload(self, routes: Mapping[str, Route]) -> Callable[[], None]:
+        """Targets with re-read credentials for the same deployments; the result swaps them in.
 
-        One assignment, so a request admitted now sees either the old targets or the new ones,
-        and a request already in flight keeps the targets it took.
+        Built now (a mismatch raises before anything changes), swapped later in one assignment,
+        so a request admitted then sees either the old targets or the new ones, and a request
+        already in flight keeps the targets it took. Health stays per label.
         """
-        self._targets = {
+        targets = {
             alias: tuple(
                 replace(t, deployment=_deployment(routes[alias].deployments[i]))
-                for i, t in enumerate(targets)
+                for i, t in enumerate(old)
             )
-            for alias, targets in self._targets.items()
+            for alias, old in self._targets.items()
         }
+
+        def swap() -> None:
+            self._targets = targets
+
+        return swap
 
     def pick(self, targets: Iterable[Target], tried: set[str], now: int) -> Target | None:
         """The first untried deployment health allows (a half-open probe is taken only here)."""
