@@ -107,13 +107,24 @@ class WebhookAlerts(logging.Handler):
         return self._queue.qsize()
 
     async def run(self) -> None:
-        """Post queued warnings one at a time until cancelled; what is left counts as dropped."""
+        """Post queued warnings one at a time until cancelled; what is left counts as dropped.
+
+        Only a cancel ends it: a warning whose delivery raises counts as failed and the next one
+        is posted, so the poster cannot die while the server serves.
+        """
         self._loop = asyncio.get_running_loop()
         body: bytes | None = None
         try:
             while True:
                 body = await self._queue.get()
-                await self.deliver(body)
+                try:
+                    await self.deliver(body)
+                except Exception as exc:
+                    self._metrics.alert_webhooks.inc(result="failed")
+                    log_event(
+                        self._logger, "alert_webhook_failed", logging.WARNING,
+                        reason=type(exc).__name__, http_status=None,
+                    )  # fmt: skip
                 body = None
         finally:
             unsent = self._queue.qsize() + (body is not None)
@@ -186,13 +197,16 @@ type Job = Callable[[], Coroutine[object, object, None]]
 
 
 def with_alerts(job: Job, alerts: WebhookAlerts | None) -> Job:
-    """One background job that also runs the poster: both stop when the app stops."""
+    """One background job that also runs the poster: both stop when the app stops.
+
+    Neither can stop the other: the job is the sweeper and retention (the money backstop), so a
+    poster failure must not cancel it, and a job failure must not silence the warnings.
+    """
     if alerts is None:
         return job
 
     async def both() -> None:
-        async with asyncio.TaskGroup() as group:  # a cancel, or either one failing, stops both
-            group.create_task(job())
-            group.create_task(alerts.run())
+        # A cancel reaches both; an exception in one leaves the other running.
+        await asyncio.gather(job(), alerts.run(), return_exceptions=True)
 
     return both

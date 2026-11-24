@@ -39,8 +39,8 @@ type Handler = (
 )
 
 
-def target(*, attempts: int = 3, queue: int = 10) -> WebhookTarget:
-    return WebhookTarget(Secret(URL), Secret(SIGNING), 5, attempts, queue)
+def target(*, attempts: int = 3, queue: int = 10, signing: str = SIGNING) -> WebhookTarget:
+    return WebhookTarget(Secret(URL), Secret(signing), 5, attempts, queue)
 
 
 class Receiver:
@@ -59,7 +59,9 @@ class Receiver:
 
 
 class Rig:
-    def __init__(self, receiver: Handler, *, attempts: int = 3, queue: int = 10) -> None:
+    def __init__(
+        self, receiver: Handler, *, attempts: int = 3, queue: int = 10, signing: str = SIGNING
+    ) -> None:
         self.metrics = Metrics()
         self.log = io.StringIO()
         self.logger = logging.getLogger("tests.alert_webhook")
@@ -69,8 +71,9 @@ class Rig:
         self.waits: list[float] = []
         ids = iter(range(1, 1000))
         self.client = httpx.AsyncClient(transport=httpx.MockTransport(receiver))
+        hook = target(attempts=attempts, queue=queue, signing=signing)
         self.alerts = WebhookAlerts(
-            target(attempts=attempts, queue=queue), self.client, self.metrics, self.logger,
+            hook, self.client, self.metrics, self.logger,
             now=lambda: NOW_MS, sleep=self.sleep, new_event_id=lambda: f"sg_evt_{next(ids)}",
         )  # fmt: skip
 
@@ -285,6 +288,30 @@ def test_a_warning_after_the_loop_closed_is_counted_not_raised() -> None:
     assert rig.count("dropped") == 1
 
 
+def test_a_delivery_that_raises_counts_as_failed_and_the_poster_goes_on() -> None:
+    """A key that cannot be signed fails each warning, by class only, and never stops `run`."""
+    receiver = Receiver()
+    rig = Rig(receiver, signing="fake\udcff")  # an undecodable environment byte, escaped
+
+    async def go() -> bool:
+        poster = asyncio.ensure_future(rig.alerts.run())
+        rig.emit(ALERT, ALERT)
+        await until(lambda: rig.count("failed") == 2)
+        running = not poster.done()
+        poster.cancel()
+        await asyncio.gather(poster, return_exceptions=True)
+        await rig.client.aclose()
+        return running
+
+    assert asyncio.run(go()) is True
+    assert receiver.requests == [] and rig.count("delivered") == rig.count("dropped") == 0
+    lines = [json.loads(x) for x in rig.log.getvalue().splitlines()]
+    assert [(x["event"], x["reason"]) for x in lines] == [
+        ("alert_webhook_failed", "UnicodeEncodeError")
+    ] * 2
+    assert "fake" not in rig.log.getvalue()
+
+
 @contextmanager
 def budget_handlers() -> Iterator[logging.Logger]:
     logger = logging.getLogger(BUDGET_LOGGER)
@@ -339,3 +366,57 @@ def test_with_alerts_runs_the_poster_beside_the_job_and_stops_both() -> None:
 
     asyncio.run(go())
     assert ran == ["job"] and rig.count("delivered") == 1
+
+
+class _Crashing(WebhookAlerts):
+    async def run(self) -> None:
+        raise RuntimeError("poster bug")
+
+
+def test_a_raising_poster_leaves_the_job_beside_it_running() -> None:
+    """The job is the sweeper and retention: a poster failure must not cancel it."""
+    rig = Rig(Receiver())
+    crashing = _Crashing(target(), rig.client, rig.metrics, rig.logger, now=lambda: NOW_MS)
+    release, ticks = asyncio.Event(), [0]
+
+    async def job() -> None:
+        while not release.is_set():
+            ticks[0] += 1
+            await asyncio.sleep(0)
+
+    async def go() -> tuple[bool, bool]:
+        both = asyncio.ensure_future(with_alerts(job, crashing)())
+        await until(lambda: ticks[0] > 100)  # long after the poster raised
+        seen = ticks[0]
+        await until(lambda: ticks[0] > seen)
+        still = not both.done()
+        release.set()
+        await until(both.done)
+        await rig.client.aclose()
+        return still, both.exception() is None
+
+    assert asyncio.run(go()) == (True, True)
+
+
+def test_a_raising_job_leaves_the_poster_beside_it_running() -> None:
+    rig = Rig(Receiver())
+    crashed: list[bool] = []
+
+    async def job() -> None:
+        crashed.append(True)
+        raise RuntimeError("sweeper bug")
+
+    async def go() -> None:
+        both = asyncio.ensure_future(with_alerts(job, rig.alerts)())
+        await until(lambda: bool(crashed))
+        for _ in range(10):  # let a cancel caused by the crash land, if there is one
+            await asyncio.sleep(0)
+        rig.emit(ALERT)  # queued only after the job is gone
+        await until(lambda: rig.count("delivered") == 1)
+        assert not both.done()
+        both.cancel()
+        await asyncio.gather(both, return_exceptions=True)
+        await rig.client.aclose()
+
+    asyncio.run(go())
+    assert rig.count("delivered") == 1

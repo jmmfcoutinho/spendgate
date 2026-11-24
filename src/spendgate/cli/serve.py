@@ -155,7 +155,8 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         bind_catalog_metrics(metrics, settings, rt.now)
         # Metrics are served by the admin app only (see gateway.admin): not given to the data app.
         upkeep = Maintenance(rt.ledger, settings, rt.now, logger)  # sweeper + retention
-        # The webhook poster (when configured) runs beside the sweeper, stopped with it.
+        # The webhook poster (when configured) runs beside the sweeper: stopped with it, but a
+        # failure in either leaves the other running.
         data_app = create_app(pipeline, readiness=ready, background=with_alerts(upkeep.run, alerts))
         ctx = AdminContext(
             rt.ledger, rt.keys, settings, rt.now, rt.now(), metrics, package_version(),
