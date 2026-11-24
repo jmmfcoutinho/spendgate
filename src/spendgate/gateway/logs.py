@@ -21,7 +21,7 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "event", "request_id", "key_prefix", "scope_path", "model", "deployment", "outcome",
         "input_tokens", "output_tokens", "cached_tokens", "cost", "currency", "latency_ms",
         "ttft_ms", "status", "http_status", "reason", "level", "ts", "logger",
-        "where", "error_class", "frames", "settled",
+        "where", "error_class", "frames", "charged",
     }
 )  # fmt: skip
 
@@ -89,7 +89,7 @@ def log_internal(logger: logging.Logger, event: InternalEvent) -> None:
     fault = event.fault
     log_event(
         logger, INTERNAL_EVENT, logging.ERROR, request_id=event.request_id, where=fault.where,
-        error_class=fault.error_class, frames=fault.frames_text, settled=event.settled,
+        error_class=fault.error_class, frames=fault.frames_text, charged=event.charged,
     )  # fmt: skip
 
 

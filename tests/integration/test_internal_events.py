@@ -9,7 +9,7 @@ message never reaches the log: it can quote a body or a secret.
 import io
 import json
 import logging
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
 from typing import NoReturn
@@ -26,6 +26,8 @@ from spendgate.gateway.logs import INTERNAL_EVENT, configure_json_logging
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.wiring import GatewayObserver
 from spendgate.ledger.key_types import AdminScope
+from spendgate.ledger.port import LedgerPort, LedgerUnavailable
+from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.providers.anthropic import AnthropicProvider
 from spendgate.providers.bedrock import Bedrock
 from spendgate.providers.google import GoogleProvider
@@ -43,7 +45,7 @@ from spendgate.providers.port import (
 from tests.fakes import Script
 from tests.integration.harness import AWS_EXAMPLE, Stack, async_test, open_stack
 
-SECRET = "sk-fake-" + "0" * 24  # secret-shaped and obviously fake
+SECRET = "sk-fake-" + "0" * 24  # pragma: allowlist secret
 MARKER = "MESSAGE-TEXT-MARKER"  # not secret-shaped: shows the message itself is never read
 STREAM = {"stream": True, "stream_options": {"include_usage": True}}
 
@@ -132,11 +134,14 @@ def internal_lines(sink: io.StringIO) -> list[dict[str, object]]:
 
 
 @asynccontextmanager
-async def broken_stack(tmp_path: Path, method: str) -> AsyncIterator[tuple[Stack, io.StringIO]]:
+async def broken_stack(
+    tmp_path: Path, method: str, wrap_ledger: Callable[[SqliteLedger], LedgerPort] | None = None
+) -> AsyncIterator[tuple[Stack, io.StringIO]]:
     with json_log() as sink:
         observer = GatewayObserver(Metrics(), logging.getLogger("spendgate.call"))
         extra = {"observer": observer, "providers": providers(Broken(method))}
-        async with open_stack(tmp_path, attempts=1, pipeline_kwargs=extra) as s:
+        rig = open_stack(tmp_path, attempts=1, pipeline_kwargs=extra, wrap_ledger=wrap_ledger)
+        async with rig as s:
             yield s, sink
 
 
@@ -157,12 +162,12 @@ async def test_an_adapter_keyerror_leaves_exactly_one_redacted_internal_event(
         event = events[0]
         assert event["error_class"] == "KeyError" and event["where"] == "routing.usage"
         assert event["request_id"] == r.headers["x-spendgate-request-id"]
-        assert event["level"] == "ERROR" and event["settled"] is True  # charged at the full hold
+        assert event["level"] == "ERROR" and event["charged"] is True  # charged at the full hold
         frames = str(event["frames"]).split(" > ")
         assert any(f.startswith("spendgate.pipeline.routing:Forwarder._answered:") for f in frames)
         assert frames[-1].startswith(f"{__name__}:boom:")  # the innermost frame is the bug
         assert set(event) == {
-            "event", "request_id", "where", "error_class", "frames", "settled", "level", "ts",
+            "event", "request_id", "where", "error_class", "frames", "charged", "level", "ts",
         }  # fmt: skip
         assert_redacted(sink)
 
@@ -178,7 +183,7 @@ async def test_a_secret_in_an_exception_message_never_reaches_the_logs(tmp_path:
 
 
 @async_test
-async def test_a_charged_answer_that_cannot_be_converted_says_it_was_settled(
+async def test_a_charged_answer_that_cannot_be_converted_says_it_was_charged(
     tmp_path: Path,
 ) -> None:
     """The provider answered and the call was charged, then the client got a 500: visible."""
@@ -187,15 +192,40 @@ async def test_a_charged_answer_that_cannot_be_converted_says_it_was_settled(
         assert r.status_code == 500
         rid = r.headers["x-spendgate-request-id"]
         (event,) = internal_lines(sink)
-        assert event["where"] == "routing.response" and event["settled"] is True
+        assert event["where"] == "routing.response" and event["charged"] is True
         assert event["request_id"] == rid
         row = await s.ledger.get_reservation(rid)
         assert row is not None and row.state is ReservationState.SETTLED
         assert (await s.totals())[0] > 0  # unchanged money behaviour: the answer is charged
 
 
+class SettleDown:
+    """A ledger whose `settle` fails: the close is not booked and the sweeper charges the hold."""
+
+    def __init__(self, inner: LedgerPort) -> None:
+        self._inner = inner
+
+    async def settle(self, *args: object) -> object:
+        raise LedgerUnavailable("gone")
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._inner, name)
+
+
+@async_test
+async def test_a_charged_call_whose_settle_the_ledger_did_not_take_still_reads_charged(
+    tmp_path: Path,
+) -> None:
+    async with broken_stack(tmp_path, "response", SettleDown) as (s, sink):  # type: ignore[arg-type]
+        r = await s.chat()
+        assert r.status_code == 500
+        (event,) = internal_lines(sink)
+        assert event["where"] == "routing.response" and event["charged"] is True
+        assert (await s.totals())[1] > 0  # still held: the sweeper charges it in full
+
+
 @pytest.mark.parametrize(
-    ("method", "where", "settled", "status"),
+    ("method", "where", "charged", "status"),
     [
         ("translate", "routing.translate", False, 500),  # never sent: released
         ("error", "routing.error", True, 500),  # unknown what the provider did: full hold
@@ -204,16 +234,16 @@ async def test_a_charged_answer_that_cannot_be_converted_says_it_was_settled(
 )
 @async_test
 async def test_each_buffered_catch_all_reports_its_tag(
-    tmp_path: Path, method: str, where: str, settled: bool, status: int
+    tmp_path: Path, method: str, where: str, charged: bool, status: int
 ) -> None:
     async with broken_stack(tmp_path, method) as (s, sink):
         s.fake.enqueue(Script(status=500))  # only `error` reads it
         r = await s.chat()
         assert r.status_code == status
         (event,) = internal_lines(sink)
-        assert (event["where"], event["settled"], event["error_class"]) == (
+        assert (event["where"], event["charged"], event["error_class"]) == (
             where,
-            settled,
+            charged,
             "KeyError",
         )
         assert_redacted(sink)
@@ -232,7 +262,7 @@ async def test_each_stream_catch_all_reports_its_tag_once(
         assert r.status_code in {200, 500}
         await s.pipeline.aclose()
         (event,) = internal_lines(sink)
-        assert event["where"] == where and event["settled"] is True  # sent: charged
+        assert event["where"] == where and event["charged"] is True  # sent: charged
         assert event["request_id"] == r.headers["x-spendgate-request-id"]
         assert_redacted(sink)
 
@@ -244,7 +274,19 @@ async def test_a_pipeline_bug_outside_the_adapters_is_reported_too(tmp_path: Pat
         r = await s.chat()
         assert r.status_code == 500
         (event,) = internal_lines(sink)
-        assert event["where"] == "pipeline.forward" and event["settled"] is False  # released
+        assert event["where"] == "pipeline.forward" and event["charged"] is False  # released
+        assert_redacted(sink)
+
+
+@async_test
+async def test_a_bug_before_forwarding_is_reported_by_the_outer_catch_all(tmp_path: Path) -> None:
+    async with broken_stack(tmp_path, "none") as (s, sink):
+        s.pipeline._router.targets = lambda alias: boom()  # type: ignore[method-assign]
+        r = await s.chat()
+        assert r.status_code == 500 and r.json()["error"]["code"] == "internal_error"
+        (event,) = internal_lines(sink)
+        assert event["where"] == "pipeline.handle" and event["charged"] is False  # not known
+        assert event["request_id"] == r.headers["x-spendgate-request-id"]
         assert_redacted(sink)
 
 

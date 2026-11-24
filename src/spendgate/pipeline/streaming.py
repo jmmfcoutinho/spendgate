@@ -304,7 +304,7 @@ class StreamBody:
             closed = await self._env.close(self._book, self._ttft)
         if self._fault is not None:
             report_internal(
-                self._env.observer, InternalEvent(self._id, self._fault, closed.settled)
+                self._env.observer, InternalEvent(self._id, self._fault, closed.charged)
             )
         return closed
 

@@ -3,7 +3,7 @@
 from spendgate.gateway.logs import redact
 from spendgate.pipeline.faults import MAX_FRAMES, fault_of
 
-SECRET = "sk-fake-" + "1" * 24  # secret-shaped and obviously fake
+SECRET = "sk-fake-" + "1" * 24  # pragma: allowlist secret
 
 
 def deep(n: int) -> None:

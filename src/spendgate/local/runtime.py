@@ -24,7 +24,8 @@ from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.local.principal import LocalPrincipal
 from spendgate.local.setup import prepare_directory, prepare_scope
 from spendgate.pipeline.adapters import build_providers
-from spendgate.pipeline.model import ENDPOINTS, Clock, Reply
+from spendgate.pipeline.faults import InternalEvent
+from spendgate.pipeline.model import ENDPOINTS, Clock, NoopObserver, Reply
 from spendgate.pipeline.pipeline import Pipeline, system_ms
 from spendgate.pipeline.transport import upstream_timeout
 
@@ -38,6 +39,20 @@ _log = logging.getLogger("spendgate.local")
 def local_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
     """The environment `config.load` resolves `env:` references in."""
     return {**os.environ, PEPPER_VAR: "unused-in-library-mode", **(extra or {})}
+
+
+class LocalObserver(NoopObserver):
+    """Library mode has no JSON call log: a catch-all's redacted trace goes to `spendgate.local`.
+
+    Only the catch-all's tag, the class and the frames: never the exception's message.
+    """
+
+    def on_internal(self, event: InternalEvent) -> None:
+        fault = event.fault
+        _log.error(
+            "internal error: where=%s error_class=%s request_id=%s charged=%s frames=%s",
+            fault.where, fault.error_class, event.request_id, event.charged, fault.frames_text,
+        )  # fmt: skip
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,7 +110,7 @@ class Runtime:
         pipeline = Pipeline(
             settings=settings, ledger=self._ledger, keys=principal,
             providers=build_providers(settings), sender=self._client, now_ms=self._now,
-            instance=instance,
+            instance=instance, observer=LocalObserver(),
         )  # fmt: skip
         # Every fail-open option is logged at start (CR-09, ADR-0003); loudly when one is on.
         level = logging.WARNING if settings.config.fail_open.allow_remote_media else logging.INFO

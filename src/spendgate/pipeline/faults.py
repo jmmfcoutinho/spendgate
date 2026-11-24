@@ -34,7 +34,7 @@ class InternalEvent:
 
     request_id: str
     fault: Fault
-    settled: bool = False  # the call's settle transition (a charge) was booked before the answer
+    charged: bool = False  # the call was decided charged (settled, not released); else unknown
 
 
 def fault_of(where: str, exc: BaseException) -> Fault:

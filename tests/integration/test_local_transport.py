@@ -1,15 +1,20 @@
 """Library mode through real httpx clients: sync, async, in a running loop, sessions, streams."""
 
 import asyncio
+import logging
 from pathlib import Path
 
 import httpx
 import pytest
 
+from spendgate.config import Settings
 from spendgate.core.money import Money
-from spendgate.local import session, transport
+from spendgate.local import runtime, session, transport
 from spendgate.local.runtime import Call, Runtime
+from spendgate.pipeline.adapters import build_providers
 from spendgate.pipeline.model import Reply
+from spendgate.providers.openai import OpenAIProvider
+from spendgate.providers.port import CleanRequest, Provider, UpstreamResponse
 from tests.fakes import FakeUpstream
 from tests.integration.test_local_support import (
     BODY,
@@ -214,3 +219,31 @@ def test_a_real_stream_is_relayed_and_settled(tmp_path: Path) -> None:
     left = Money.from_amount(after.headers["x-spendgate-budget-remaining"].split()[0], "USD")
     ten = Money.from_amount("10", "USD")
     assert ten.nano - left.nano > 2 * Money.from_amount("0.000003", "USD").nano  # two calls paid
+
+
+# --- a bug caught by a catch-all leaves a redacted trace on `spendgate.local` ------------------
+
+
+def test_a_catch_all_in_library_mode_logs_class_and_frames_but_not_the_message(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    marker = "MESSAGE-TEXT-MARKER"
+
+    class Broken(OpenAIProvider):
+        def response(self, req: CleanRequest, resp: UpstreamResponse) -> UpstreamResponse:
+            raise KeyError(marker)
+
+    def providers(settings: Settings) -> dict[str, Provider]:
+        return build_providers(settings) | {"openai": Broken()}
+
+    monkeypatch.setattr(runtime, "build_providers", providers)
+    caplog.set_level(logging.ERROR, logger="spendgate.local")
+    with sync_client(tmp_path, FakeUpstream()) as client:
+        reply = client.post(CHAT, json=BODY)
+    assert reply.status_code == 500 and error_code(reply) == "internal_error"
+    (record,) = [r for r in caplog.records if r.name == "spendgate.local"]
+    text = record.getMessage()
+    assert "where=routing.response" in text and "error_class=KeyError" in text
+    assert "charged=True" in text and "Forwarder._answered" in text
+    assert reply.headers["x-spendgate-request-id"] in text
+    assert marker not in caplog.text and record.exc_info is None

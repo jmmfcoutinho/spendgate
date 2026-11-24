@@ -294,8 +294,8 @@ class Pipeline:
                 closed = await asyncio.shield(closing)  # a second cancel cannot stop the settle
         if isinstance(result, Live):
             return self._stream_reply(call, book, result, pre, standing)
-        if isinstance(result, Failed) and result.fault is not None:  # after the close: settled?
-            report_internal(self._observer, InternalEvent(call.id, result.fault, closed.settled))
+        if isinstance(result, Failed) and result.fault is not None:  # after the close: charged?
+            report_internal(self._observer, InternalEvent(call.id, result.fault, closed.charged))
         return answers.finished_reply(call, result, closed)
 
     async def _close(

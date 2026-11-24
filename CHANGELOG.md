@@ -140,8 +140,9 @@ All notable changes to this project are documented here. The format follows
 - An unexpected exception that a catch-all turned into `500 internal_error` (or into a refusal
   before the hold) left no log record. It now writes one `spendgate.internal` JSON log event with
   the exception class, the frames as `module:function:line`, the catch-all's tag and the request
-  id, never the message. `settled: true` shows a call that was charged although the client got
-  the error. Logging only: responses and charges are unchanged.
+  id, never the message. `charged: true` shows a call that was charged although the client got
+  the error. Library mode logs the same facts on the `spendgate.local` logger. Logging only:
+  responses and charges are unchanged.
 
 ## [0.1.1] - 2026-11-20
 
