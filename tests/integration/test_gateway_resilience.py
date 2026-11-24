@@ -11,7 +11,7 @@ import pytest
 from spendgate.core.outcomes import ReservationState
 from spendgate.gateway.logs import configure_json_logging
 from spendgate.gateway.metrics import Metrics
-from spendgate.gateway.wiring import GatewayObserver
+from spendgate.gateway.wiring import GatewayObserver, build_pipeline
 from spendgate.ledger.port import LedgerPort, LedgerUnavailable
 from spendgate.pipeline.pipeline import Pipeline
 from tests.fakes import Script
@@ -88,7 +88,24 @@ async def test_heartbeat_renews_leases_each_interval(tmp_path: Path) -> None:
         with pytest.raises(StopAsyncIteration):
             await s.pipeline.heartbeat(sleep)
         assert beats == [20.0, 20.0, 20.0]  # lease 60 s / 3
-        assert renewed == [(s.pipeline._instance, 60_000)] * 2  # its own unique name
+        assert renewed == [(s.pipeline.instance, 60_000)] * 2  # its own unique name
+
+
+@async_test
+async def test_each_gateway_instance_has_its_own_lease_owner_name(tmp_path: Path) -> None:
+    """Load-run defect 1: `serve` builds its pipeline through `build_pipeline`, which never passed
+    `instance`, so all processes wrote owner_instance = 'gateway'. `renew_all('gateway')` of any
+    live peer then kept a crashed peer's holds alive for ever and the sweeper never charged them
+    (ledger-state-machine: a restarted instance gets a new owner_instance). Seen in the load run:
+    117 holds still pending 25 s after kill -9 with a 4 s lease."""
+    async with open_stack(tmp_path) as stack:
+        sender = stack.fake.client()
+        args = (stack.settings, stack.ledger, stack.keys, sender)
+        first, second = build_pipeline(*args), build_pipeline(*args)
+        try:
+            assert first.instance != second.instance
+        finally:
+            await sender.aclose()
 
 
 @async_test

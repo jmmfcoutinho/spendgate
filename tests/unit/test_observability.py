@@ -84,6 +84,17 @@ def test_metric_deltas_after_scripted_calls() -> None:
     assert 'spendgate_cooldowns_total{deployment="d1"} 1\n' in out
 
 
+def test_cr_07_an_unknown_catalog_age_is_not_published_as_fresh() -> None:
+    """CR-07: no age known means no age gauge, not a gauge reading 0."""
+    metrics = Metrics()
+    metrics.set_catalog(sha="abc", age_seconds=None)
+    assert "\nspendgate_catalog_age_seconds " not in metrics.render()
+    metrics.set_catalog(sha="abc", age_seconds=5)
+    assert "\nspendgate_catalog_age_seconds 5\n" in metrics.render()
+    metrics.set_catalog(sha="abc", age_seconds=None)  # and it goes away again
+    assert "\nspendgate_catalog_age_seconds " not in metrics.render()
+
+
 def test_wrong_label_set_is_rejected() -> None:
     m = Metrics()
     try:
