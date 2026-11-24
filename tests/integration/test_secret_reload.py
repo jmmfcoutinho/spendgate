@@ -10,6 +10,7 @@ import json
 import logging
 import signal
 import threading
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from typing import cast
@@ -235,12 +236,86 @@ def test_shutdown_does_not_wait_for_a_reader_stuck_on_its_files(tmp_path: Path) 
         with on_sighup(loop, reload):  # the server's lifetime
             reload()
             assert await asyncio.to_thread(started.wait, 10)
-        reload()  # after shutdown began: ignored
+        reload()  # after shutdown began: ignored, and the handler stays installed
         return loop.remove_signal_handler(signal.SIGHUP)
 
     try:
         still_installed = asyncio.run(serve_then_stop())
         # `asyncio.run` returned while the read was still stuck: shutdown did not wait for it.
-        assert not finished.is_set() and not still_installed
+        assert not finished.is_set() and still_installed
     finally:
         gate.set()
+
+
+class CountingPipeline:
+    """Counts how often a reload result is applied."""
+
+    def __init__(self) -> None:
+        self.applied = 0
+
+    def reload_credentials(self, routes: object) -> Callable[[Settings], None]:
+        self.applied += 1
+        return lambda settings: None
+
+
+async def _after_pending_callbacks() -> None:
+    """Returns once callbacks already scheduled on the loop (a reader's result) have run."""
+    marker = asyncio.get_running_loop().create_future()
+    asyncio.get_running_loop().call_soon(marker.set_result, None)
+    await marker
+
+
+def _reader_thread() -> threading.Thread:
+    return next(t for t in threading.enumerate() if t.name == "spendgate-secret-reload")
+
+
+@async_test
+async def test_a_read_that_finishes_after_close_is_never_applied(tmp_path: Path) -> None:
+    started, gate = threading.Event(), threading.Event()
+    settings = load(write(tmp_path), env=ENV)
+
+    def held(settings: Settings) -> Reread:
+        started.set()
+        gate.wait(timeout=10)
+        return reread_file_secrets(settings)
+
+    pipeline = CountingPipeline()
+    reload = SecretReload(settings, cast("Pipeline", pipeline), logging.getLogger("t"), read=held)
+    reload()
+    assert await asyncio.to_thread(started.wait, 10)
+    thread = _reader_thread()
+    reload.close()
+    gate.set()  # the read completes while the loop still runs
+    await asyncio.to_thread(thread.join, 10)
+    await _after_pending_callbacks()
+    assert pipeline.applied == 0 and not thread.is_alive()
+
+
+class Stop(BaseException):
+    """Not an Exception: what a reader could raise that `except Exception` misses."""
+
+
+@async_test
+async def test_a_reader_error_that_is_not_an_exception_does_not_stop_later_reloads(
+    tmp_path: Path,
+) -> None:
+    settings = load(write(tmp_path), env=ENV)
+    reads = [0]
+
+    def flaky(settings: Settings) -> Reread:
+        reads[0] += 1
+        if reads[0] == 1:
+            raise Stop
+        return reread_file_secrets(settings)
+
+    pipeline = CountingPipeline()
+    logger, out = capture()
+    reload = SecretReload(settings, cast("Pipeline", pipeline), logger, read=flaky)
+    reload()
+    await reload.wait()
+    assert events(out)[-1]["event"] == "secret_reload_failed"
+    assert events(out)[-1]["error_class"] == "RuntimeError"
+    reload()  # the first task ended: a new SIGHUP reloads again
+    await reload.wait()
+    assert reads[0] == 2 and pipeline.applied == 1
+    assert events(out)[-1]["event"] == "secrets_reloaded"

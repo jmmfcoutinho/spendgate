@@ -130,8 +130,11 @@ def _in_daemon_thread(read: Reader, settings: Settings) -> "asyncio.Future[Rerea
     def work() -> None:
         try:
             result = read(settings)
-        except Exception as exc:  # handed to the loop, which logs it
-            post(done.set_exception, exc)
+        except BaseException as exc:  # handed to the loop, which logs it; any error, or the
+            # task would wait forever and no reload would run again. One that is not an
+            # Exception is wrapped: raised in the task, it would stop the loop itself.
+            error = exc if isinstance(exc, Exception) else RuntimeError(type(exc).__name__)
+            post(done.set_exception, error)
         else:
             post(done.set_result, result)
 
@@ -141,13 +144,14 @@ def _in_daemon_thread(read: Reader, settings: Settings) -> "asyncio.Future[Rerea
 
 @contextlib.contextmanager
 def on_sighup(loop: AbstractEventLoop, reload: SecretReload) -> Iterator[None]:
-    """`reload` runs on SIGHUP inside the block; on leaving it, the handler and the task go."""
-    installed = install(loop, reload)
+    """`reload` runs on SIGHUP inside the block; on leaving it, reloads stop and the task goes."""
+    install(loop, reload)
     try:
         yield
     finally:
-        if installed:
-            loop.remove_signal_handler(signal.SIGHUP)
+        # The handler stays: removing it restores the default action, and a SIGHUP while the
+        # ledger closes would then end the process mid-close. A closed reload ignores signals,
+        # and closing the loop removes the handler.
         reload.close()
 
 
