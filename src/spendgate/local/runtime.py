@@ -126,20 +126,16 @@ class Runtime:
     async def _maintain(
         self, pipeline: Pipeline, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
     ) -> None:
-        """Keep this process's leases alive and settle other processes' expired ones.
+        """Keep this process's leases alive, then settle other processes' expired holds.
 
-        Renewal and the stream watch go through the pipeline, not the ledger: only it knows which
-        holds this process owns and which open streams to stop (CR-03). Then the sweep. A failed
-        round never ends the loop; the next beat retries.
+        This is the pipeline's own supervised heartbeat, the one the gateway runs: only the
+        pipeline knows which holds this process owns and which open streams to stop (CR-03). The
+        sweep is one more step of each beat; a step that fails is logged and retried next beat.
         """
-        interval = self.settings.heartbeat_ms / 1000
-        while True:
-            await sleep(interval)
-            with contextlib.suppress(Exception):
-                await pipeline.renew_leases()
-                await pipeline.watch_streams()
-            with contextlib.suppress(Exception):
-                await self._ledger.sweep_expired(self._now())
+        await pipeline.heartbeat(sleep, also=[("sweep", self._sweep)])
+
+    async def _sweep(self) -> None:
+        await self._ledger.sweep_expired(self._now())
 
     async def handle(self, call: Call) -> Reply:
         pipeline = await self.start()
