@@ -169,6 +169,20 @@ All notable changes to this project are documented here. The format follows
   in the same transaction. Before, the reservation kept showing only the swept hold
   while the budget and the call row already carried the overrun. Reporting only: the money
   booked to the budgets was already correct (ADR-0011).
+- `spendgate --version` prints the installed version.
+- Admin commands without `--local` or `--url` now find the admin API from `--config`
+  (`server.admin.listen`, else `server.listen`) instead of assuming `127.0.0.1:8081`, which the
+  README config does not use. `SPENDGATE_URL` and `--url` still take precedence.
+- `spendgate status --local` and the admin API report the installed version, not `0.0.0`.
+- `spendgate keys list` (and `keys create`) show the key's scope path, such as `org:demo`, not
+  the scope's id. `--json` output is unchanged.
+- `serve`, `migrate` and `check-config` no longer accept or list `--url`, `--local` and `--json`,
+  which never applied to them.
+- `check-config` and start-up print each configuration problem once: deployments sharing a
+  provider credential no longer repeat it, and an unpriced routed model is no longer reported
+  again as a warning.
+- The hint after `kill on` repeats the `--local`, `--config` and `--url` flags the command was
+  given, so `kill off` reaches the same ledger or API.
 
 ## [0.1.1] - 2026-11-20
 
