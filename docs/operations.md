@@ -92,6 +92,9 @@ extra room that expires on its own. See [how money is protected](how-money-is-pr
 catalog id (`provider/model`, such as `openai/gpt-6-*`), never against the alias a client sends.
 A filter that matches no routed catalog id is refused (`invalid_request`, `param: model_filter`),
 since that budget would never apply; in `bootstrap.budgets` it is a `check-config` warning.
+So route the model first, or declare the budget in `bootstrap.budgets` next to the new route: the
+check uses the routes of the instance that serves the admin call, which during a rolling deploy
+may not have the new route yet.
 
 ## Usage queries
 

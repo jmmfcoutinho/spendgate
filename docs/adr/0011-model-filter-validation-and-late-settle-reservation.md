@@ -34,6 +34,9 @@ A review found two gaps (issue #19):
 - Public behaviour: an API client that created budgets with never-matching filters now gets a
   400 instead of a stored budget that never applied. `get_reservation` after a late settle with
   an overrun now shows the hold plus the overrun.
+- A filter for a new model needs the route first (or the budget in `bootstrap.budgets` next to
+  the new route): the check uses the routes of the instance serving the admin call, so during a
+  rolling deploy an instance without the new route refuses it.
 - No schema change and no data migration. Existing budget rows with such filters and existing
   late-settled reservations are left unchanged.
 - Money booked to the budgets is unchanged; only validation and reporting change.

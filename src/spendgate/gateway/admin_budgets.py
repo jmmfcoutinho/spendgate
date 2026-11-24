@@ -60,7 +60,7 @@ def _check_model_filter(call: Call, pattern: str | None) -> None:
         raise ApiError(
             ErrorCode.INVALID_REQUEST,
             "model_filter matches no routed catalog id; it is a glob over catalog ids such as "
-            "openai/gpt-*, not over aliases.",
+            "openai/gpt-*, not over aliases. Route the model first.",
             "model_filter",
         )
 

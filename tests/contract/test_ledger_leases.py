@@ -188,12 +188,13 @@ def test_scenario_13_m04_late_settle_books_the_overrun_and_updates_the_sweepers_
 
 
 def test_late_settle_twice_changes_nothing(rig: Rig) -> None:
+    """A repeat with a different amount must not rewrite the reservation's absolute charge."""
     w = rig.world("10")
     rig.hold_ok(w, "A", "1")
     rig.sweep(T0 + 60_100)
     assert rig.settle("A", "1.80", T0 + 61 * SECOND, usage="1.80").late
     before = rig.totals(w)
-    again = rig.settle("A", "1.80", T0 + 62 * SECOND, usage="1.80")
+    again = rig.settle("A", "2.50", T0 + 62 * SECOND, usage="2.50")
     assert (again.applied, again.charged_nano) == (False, 0)
     assert rig.totals(w) == before
     assert len(rig.run(rig.ledger.get_calls("A"))) == 1
