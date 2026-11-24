@@ -30,6 +30,7 @@ OUTCOMES = "SELECT outcome, settled_by, COUNT(*), SUM(charged_nano) FROM calls G
 ATTEMPTS_SENT = "SELECT COUNT(*) FROM calls WHERE outcome <> 'unreachable' AND settled_by = 'owner'"
 MIN_MAX_HOLD = "SELECT MIN(held_nano), MAX(held_nano) FROM reservation_items WHERE held_nano > 0"
 PENDING = "SELECT COUNT(*) FROM reservations WHERE state = 'pending'"
+PENDING_BY_OWNER = "SELECT owner_instance, id FROM reservations WHERE state = 'pending'"
 
 
 def _plain(value: Any) -> Any:  # noqa: ANN401 - Decimal (PostgreSQL SUM) to int, rest as is
@@ -46,12 +47,27 @@ BUDGET_FIELDS = (
 )  # fmt: skip
 
 
+def _connect(backend: str, location: str) -> Any:  # noqa: ANN401 - sqlite3 or psycopg
+    if backend == "sqlite":
+        return sqlite3.connect(f"file:{location}?mode=ro", uri=True, timeout=30)
+    return psycopg.connect(location, autocommit=True)
+
+
+def pending_by_owner(backend: str, location: str) -> dict[str, list[str]]:
+    """Pending reservation ids per lease owner (`owner_instance`): which gateway holds what."""
+    conn = _connect(backend, location)
+    try:
+        owners: dict[str, list[str]] = {}
+        for owner, rid in _rows(conn, PENDING_BY_OWNER):
+            owners.setdefault(owner, []).append(rid)
+        return owners
+    finally:
+        conn.close()
+
+
 def read_facts(backend: str, location: str) -> dict[str, Any]:
     """Everything the checks need, as JSON-friendly lists."""
-    if backend == "sqlite":
-        conn: Any = sqlite3.connect(f"file:{location}?mode=ro", uri=True, timeout=30)
-    else:
-        conn = psycopg.connect(location, autocommit=True)
+    conn = _connect(backend, location)
     try:
         return {
             "budgets": [dict(zip(BUDGET_FIELDS, row, strict=True)) for row in _rows(conn, BUDGETS)],

@@ -1,5 +1,8 @@
 # Load, overshoot and overhead review (v0.1)
 
+> Note: tests have since moved to behaviour-named files; see CHANGELOG Unreleased and
+> docs/how-money-is-protected.md.
+
 Date: 2026-11-17. Code: the pre-release tree before the load tests were added. Tests:
 `tests/load/` (`uv run pytest -m slow tests/load`; the PostgreSQL cases need
 `SPENDGATE_TEST_POSTGRES_URL`). Provider: the fake from `tests/fakes`, never a real one.

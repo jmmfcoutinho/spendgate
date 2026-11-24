@@ -96,6 +96,11 @@ class Gate:
     def memory_bytes(self) -> int:
         return self._memory
 
+    @property
+    def buffered_bytes(self) -> int:
+        """Body bytes charged now (each times its copies): what `memory_bytes` bounds."""
+        return self._bytes
+
     def enter(
         self, content_length: int | None, *, max_body: int | None = None,
         copies: int = COPIES, owner: str = "",

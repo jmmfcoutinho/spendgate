@@ -118,6 +118,20 @@ All notable changes to this project are documented here. The format follows
 - `make test-postgres` (CI's integration job) measures coverage and holds the Postgres ledger
   backend (`ledger/postgres*.py`) to >= 90% on the Postgres run; it now refuses to start without
   `SPENDGATE_TEST_POSTGRES_URL`.
+- Tests from the v0.1 review rounds (`test_review_fixes.py`, `test_verification_fixes.py`,
+  `tests/load/test_known_defects.py`) now live in files named for the behaviour they cover
+  (intake memory, intake stalls, close retry, charge after send, request deadlines, unread
+  streams, bad input). Every test kept its name, and its review id is in its docstring.
+- `Gate.buffered_bytes` and `Pipeline.instance`, `owned()` and `unsettled()` are read-only
+  probes, and `Pipeline.drain()` waits for background settlements (`aclose` uses it), so tests
+  no longer read private attributes. The stalled-upload tests wait on an event set by the fake
+  body instead of sleeping 10 ms, and the settlement tests await `drain()` instead of polling.
+
+### Fixed
+
+- The load crash scenario could fail when the killed gateway owned no pending hold. It now waits
+  until the victim holds pending reservations of its own, checks that each of them was swept,
+  and runs the `serve` command as shipped.
 
 ## [0.1.1] - 2026-11-20
 

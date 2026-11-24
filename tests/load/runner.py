@@ -29,7 +29,7 @@ SCENARIOS: dict[str, dict[str, Any]] = {
     "overrun": {"mix": {"throttle": 0.03, "server_error": 0.01, "overreport": 0.25}},
     "crash": {
         "mix": {"throttle": 0.03, "server_error": 0.01, "max_latency_ms": 300},
-        "lease_seconds": 4, "crash_after_s": 2, "unique_instance": True,
+        "lease_seconds": 4, "crash_after_s": 2,
     },
 }  # fmt: skip
 GATEWAYS = {"sqlite": 4, "postgres": 3}

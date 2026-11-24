@@ -65,7 +65,11 @@ def system_ms() -> int:
 
 
 def instance_id() -> str:
-    """A lease-owner name unique to this process: peers must never renew each other's holds."""
+    """A lease-owner name unique to this process: peers must never renew each other's holds.
+
+    The load test driver (`tests/load/driver.py`, `owner_of`) finds a gateway's holds by the pid
+    in this host-pid-tail form: keep the pid as the second-to-last `-` field or update it there.
+    """
     return f"{socket.gethostname()}-{os.getpid()}-{new_id()[-6:]}"
 
 
@@ -375,6 +379,21 @@ class Pipeline:
                 )
         return replies.models_reply(listed, shape, rid, wanted is not None)
 
+    # --- read-only probes: what this instance still owes the ledger ----------------------------
+
+    @property
+    def instance(self) -> str:
+        """The lease-owner name on this pipeline's holds (unique per process)."""
+        return self._instance
+
+    def owned(self) -> frozenset[str]:
+        """Request ids whose hold this pipeline must still close; its heartbeat renews these."""
+        return frozenset(self._owned)
+
+    def unsettled(self) -> frozenset[str]:
+        """Closes the ledger refused, waiting for a heartbeat retry or the sweeper."""
+        return self._closer.unsettled()
+
     # --- background ----------------------------------------------------------------------------
 
     def _spawn[T](self, coro: Awaitable[T]) -> "asyncio.Future[T]":
@@ -386,11 +405,13 @@ class Pipeline:
     async def aclose(self) -> None:
         """Settle streams nobody closed, then wait for settlements that outlived their request."""
         await asyncio.gather(*(s.aclose() for s in self._leases.open()), return_exceptions=True)
+        await self.drain()
+
+    async def drain(self) -> None:
+        """Wait for settlements that outlived their request; open streams are left running."""
         while self._tasks:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
-            await asyncio.sleep(
-                0
-            )  # done tasks leave `_tasks` by callback; gather alone never yields
+            await asyncio.sleep(0)  # done tasks leave `_tasks` by callback; gather never yields
 
     async def heartbeat(self, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
         """Renew this instance's leases forever (cancel to stop); a failed renewal is retried."""

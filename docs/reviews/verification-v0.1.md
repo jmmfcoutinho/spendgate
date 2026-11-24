@@ -1,5 +1,8 @@
 # spendgate v0.1 verification of review fixes (pre-release tree)
 
+> Note: tests have since moved to behaviour-named files; see CHANGELOG Unreleased and
+> docs/how-money-is-protected.md.
+
 Scope: the fixes for CR-01…CR-13 and SR-01…SR-14 checked against `docs/reviews/code-review-v0.1.md`, `docs/reviews/security-review-v0.1.md` and ADR-0009. This was a read-only review and no repository file was changed. `tests/fuzz/` was left out: gates were run with `--ignore tests/fuzz` / `--exclude tests/fuzz`. Four behaviours were reproduced with throwaway scripts outside the repository that drive `tests/integration/harness.py` (marked "probe" below).
 
 ## Verdict

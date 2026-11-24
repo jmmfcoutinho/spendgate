@@ -197,3 +197,30 @@ async def test_write_error_after_send_is_charged(tmp_path: Path) -> None:
         held = s.observer.held[0].hold.nano
         assert await s.totals() == (held, 0)
     await sender.aclose()
+
+
+QUOTA = {"error": {"message": "quota", "type": "insufficient_quota", "code": "insufficient_quota"}}
+
+
+@async_test
+async def test_cr_06_quota_on_every_attempt_is_upstream_unavailable_without_retry_hints(
+    tmp_path: Path,
+) -> None:
+    """CR-06: a quota 429 fails over for free, but a quota fault everywhere is not "retry later"."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.host)
+        return httpx.Response(429, json=QUOTA)
+
+    sender = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    async with open_stack(tmp_path, pipeline_kwargs={"sender": sender}) as s:
+        r = await s.chat()
+        assert len(seen) == 2  # the free failover still happens
+        assert r.status_code == 502 and code_of(r) == "upstream_unavailable"
+        assert "retry-after" not in r.headers and r.headers["x-should-retry"] == "false"
+        assert "retry_after_seconds" not in r.json()["error"].get("details", {})
+        assert await s.totals() == (0, 0)  # free
+        again = await s.chat()  # both deployments are cooling on a quota fault
+        assert again.status_code == 502 and code_of(again) == "upstream_unavailable"
+    await sender.aclose()

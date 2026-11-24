@@ -352,3 +352,29 @@ def test_importing_client_does_not_import_the_sdks() -> None:
     )
     listed = json.loads(out.stdout.strip().replace("'", '"'))
     assert not [m for m in listed if m.split(".")[0] in ("openai", "anthropic")]
+
+
+class _SdkError(Exception):
+    """What the openai/anthropic SDKs raise: duck-typed, with a response carrying headers."""
+
+    def __init__(self, retry_after: str) -> None:
+        super().__init__("rate limited")
+        self.status_code = 429
+        self.body = {"error": {"code": "rate_limited", "message": "m", "details": {}}}
+        self.response = type("Response", (), {"headers": {"retry-after": retry_after}})()
+
+
+HOSTILE = ["\u00b2", "1e999", "5" * 5000, "Wed, 21 Oct 2026 07:28:00 GMT", "-1", ""]
+
+
+@pytest.mark.parametrize("raw", HOSTILE)
+def test_cr_08_the_client_never_raises_on_a_hostile_retry_after(raw: str) -> None:
+    """CR-08: a Retry-After the client cannot read is dropped, never raised."""
+    typed = sg.from_sdk_error(_SdkError(raw))
+    assert typed is not None and typed.details.get("retry_after_seconds") is None
+
+
+def test_cr_08_a_plain_retry_after_is_still_read() -> None:
+    """CR-08: a plain integer Retry-After is still read."""
+    typed = sg.from_sdk_error(_SdkError("7"))
+    assert typed is not None and typed.details.get("retry_after_seconds") == 7

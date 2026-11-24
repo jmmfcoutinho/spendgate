@@ -123,8 +123,17 @@ def verify(report: dict[str, Any], *, strict_clean: bool, crashed: bool = False)
     assert not unknown, f"gateway tracebacks: {unknown}"
     assert report["swept"] == 0 or crashed, "the final sweep still had holds to charge"
     if crashed:
-        states = {s for _i, s, *_ in report["facts"]["reservations"]}
-        assert "expired" in states, "the killed gateway's holds were not charged by a sweeper"
+        verify_victim(report)
+
+
+def verify_victim(report: dict[str, Any]) -> None:
+    """Every hold the killed gateway left pending was ended by a sweeper (per owner: holds of the
+    live gateways prove nothing about it)."""
+    victim = report["victim"]
+    assert victim["pending"], f"the gateway was killed owning no pending hold: {victim['owner']}"
+    states = {rid: state for rid, state, *_ in report["facts"]["reservations"]}
+    left = [rid for rid in victim["pending"] if states.get(rid) != "expired"]
+    assert not left, f"{len(left)} holds of the killed gateway not swept: {left[:5]}"
 
 
 def loaded_overhead(records: list[list[Any]]) -> dict[str, float]:
