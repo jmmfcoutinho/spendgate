@@ -289,7 +289,7 @@ class Pipeline:
         pre: tuple[Money, str] | None = None
         try:
             if job.request.stream:  # headers go out before the cost exists: room after the hold
-                pre = await self._closer.remaining(call.principal.scope_id, book.budget_ids)
+                pre = await self._closer.room_left(call.principal.scope_id, held.rooms)
                 standing = await self._standing(call, held)
             async with asyncio.timeout(self._max_request_s):  # SR-13: no call runs forever
                 result = await self._forwarder.run(job, book)
