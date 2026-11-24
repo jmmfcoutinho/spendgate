@@ -132,6 +132,11 @@ All notable changes to this project are documented here. The format follows
 - The load crash scenario could fail when the killed gateway owned no pending hold. It now waits
   until the victim holds pending reservations of its own, checks that each of them was swept,
   and runs the `serve` command as shipped.
+- Runaway-loop tests T-SESS-02 and T-SESS-03 in `tests/integration/test_sessions.py`: 40
+  parallel loops on one key stop at the budget cap on SQLite and Postgres (nothing over the cap,
+  nothing left held, every refusal `budget_exhausted`), and a kill switch engaged mid-loop refuses
+  the next call and stops an open stream at the next heartbeat. The threat model's C-18 row now
+  points at the files that carry each T-SESS id.
 
 ## [0.1.1] - 2026-11-20
 
