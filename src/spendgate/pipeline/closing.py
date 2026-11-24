@@ -18,6 +18,7 @@ from spendgate.core.outcomes import Outcome
 from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import LedgerPort
 from spendgate.pipeline import steps
+from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.model import Clock, Inbound, Observer, SettledEvent
 from spendgate.pipeline.settle import Book, Closed, Decision, decide
 from spendgate.pipeline.steps import Prepared
@@ -82,13 +83,14 @@ class Closer:
             try:
                 if decision.release:
                     await self._ledger.release(request_id, decision.attempts, self._now())
-                else:
-                    await self._ledger.settle(
-                        request_id, decision.charge.nano, decision.attempts, self._now()
-                    )
-                return True
+                    return True
+                done = await self._ledger.settle(
+                    request_id, decision.charge.nano, decision.attempts, self._now()
+                )
             except Exception:  # noqa: S112 - tried again; the sweeper is the backstop
                 continue
+            log_alerts(done.alerts, self._settings.ledger_currency)  # a breach, a block
+            return True
         return False
 
     def unsettled(self) -> frozenset[str]:

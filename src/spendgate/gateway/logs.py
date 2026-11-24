@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
+from spendgate.pipeline.alerts import BUDGET_LOGGER, FIELDS_ATTR
 from spendgate.pipeline.faults import InternalEvent
 
 # The only fields that may reach a log line. Adding one is a reviewed change.
@@ -22,6 +23,8 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "input_tokens", "output_tokens", "cached_tokens", "cost", "currency", "latency_ms",
         "ttft_ms", "status", "http_status", "reason", "level", "ts", "logger",
         "where", "error_class", "frames", "charged",
+        # Budget warnings (pipeline.alerts): budget facts only, never request or key data.
+        "budget_id", "period", "period_start", "spent", "cap",
     }
 )  # fmt: skip
 
@@ -29,7 +32,7 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
 # Hyphen only: key secrets are sg-/sga-/sk-; request ids (sg_req_...) must stay in the logs.
 _SECRET_SHAPE = re.compile(r"(?i)\b(?:sga?|sk)-[a-z0-9_-]{8,}|bearer\s+\S+")
 KEY_PREFIX_LEN = 8
-_EXTRA_ATTR = "spendgate_fields"
+_EXTRA_ATTR = FIELDS_ATTR
 LOGGER_NAME = "spendgate.call"
 INTERNAL_EVENT = "spendgate.internal"
 
@@ -94,11 +97,12 @@ def log_internal(logger: logging.Logger, event: InternalEvent) -> None:
 
 
 def configure_json_logging(stream: logging.Handler | None = None) -> logging.Logger:
-    """Attach the JSON formatter to the call logger (idempotent) and return it."""
-    logger = logging.getLogger(LOGGER_NAME)
+    """Attach the JSON formatter to the call and budget loggers (idempotent); return the first."""
     handler = stream or logging.StreamHandler()
     handler.setFormatter(JsonFormatter())
-    logger.handlers = [handler]
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    return logger
+    for name in (BUDGET_LOGGER, LOGGER_NAME):
+        logger = logging.getLogger(name)
+        logger.handlers = [handler]
+        logger.setLevel(logging.INFO)
+        logger.propagate = False
+    return logging.getLogger(LOGGER_NAME)
