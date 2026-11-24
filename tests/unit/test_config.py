@@ -317,7 +317,10 @@ HOOK_ENV = ENV | {
     "HOOK_URL": "https://hooks.example.test/budget?token=fake-hook-token",
     "HOOK_SECRET": "fake-signing-secret",  # pragma: allowlist secret
 }
-HOOK = 'alerts: {webhook: {url: "env:HOOK_URL", signing_secret: "env:HOOK_SECRET"}}\n'
+HOOK = (
+    'alerts: {webhook: {url: "env:HOOK_URL", '
+    'signing_secret: "env:HOOK_SECRET"}}\n'  # pragma: allowlist secret
+)
 
 
 def test_no_alert_webhook_by_default(tmp_path: Path) -> None:

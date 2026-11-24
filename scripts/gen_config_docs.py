@@ -303,7 +303,7 @@ D: dict[str, str] = {
     ),
     "AlertWebhook.queue_size": (
         "Warnings waiting to be posted. When full, a new warning is dropped and counted in "
-        "`spendgate_alert_webhooks_total{result=\"dropped\"}`; calls are never delayed."
+        '`spendgate_alert_webhooks_total{result="dropped"}`; calls are never delayed.'
     ),
 }
 
