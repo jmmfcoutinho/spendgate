@@ -1,0 +1,171 @@
+"""Provider throttling (issue #36): a short jittered cooldown, Retry-After, and a bounded wait.
+
+A 429 without Retry-After cools its deployment for 250 to 500 ms only. A call that finds every
+untried deployment cooling waits for the soonest one (at most `routing.MAX_WAIT_MS`, inside the
+request deadline) instead of refusing at once. The wait happens inside the call's one hold and
+sends nothing, so it never changes what the call costs. `Sleeps` stands in for `asyncio.sleep`
+and moves the stack's fake clock: no test really sleeps.
+"""
+
+import asyncio
+from pathlib import Path
+
+import httpx
+
+from spendgate.core.health import HealthConfig
+from spendgate.core.outcomes import Outcome, ReservationState
+from spendgate.pipeline.routing import MAX_WAIT_MS
+from tests.conftest import FakeClock
+from tests.fakes import Script
+from tests.integration.harness import Stack, async_test, open_stack
+
+Alpha_CALL = 3500  # nano USD: 10 input and 5 output tokens at the catalog price
+SHORT = HealthConfig()
+
+
+class Sleeps:
+    """A fake `asyncio.sleep` that records each pause and advances the stack's clock by it."""
+
+    def __init__(self) -> None:
+        self.taken: list[float] = []
+        self.clock: FakeClock | None = None
+
+    async def __call__(self, seconds: float) -> None:
+        assert self.clock is not None, "bind the stack's clock first"
+        self.taken.append(seconds)
+        self.clock.advance(ms=round(seconds * 1000))
+        await asyncio.sleep(0)
+
+
+def hosts(s: Stack) -> list[str]:
+    return [r.headers["host"].split(".")[0] for r in s.fake.requests]
+
+
+def rid_of(response: httpx.Response) -> str:
+    return response.headers["x-spendgate-request-id"]
+
+
+def code_of(response: httpx.Response) -> str:
+    return str(response.json()["error"]["code"])
+
+
+@async_test
+async def test_a_429_without_retry_after_cools_for_a_short_jittered_interval(
+    tmp_path: Path,
+) -> None:
+    async with open_stack(tmp_path) as s:
+        s.fake.enqueue(Script(status=429))
+        r = await s.chat("alpha-one")
+        assert r.status_code == 429 and code_of(r) == "upstream_throttled"
+        cooled = s.observer.attempts[0].cooldown_ms
+        assert cooled is not None
+        assert SHORT.throttle_min_ms <= cooled <= SHORT.throttle_max_ms  # not the 5 s default
+        assert r.headers["retry-after"] == "1"  # whole seconds, rounded up
+
+
+@async_test
+async def test_m01_a_call_waits_for_a_cooling_deployment_inside_its_one_hold(
+    tmp_path: Path,
+) -> None:
+    """Every deployment cooling: the next call waits, then is served on one hold, charged once."""
+    sleeps = Sleeps()
+    async with open_stack(tmp_path, pipeline_kwargs={"sleep": sleeps}) as s:
+        sleeps.clock = s.clock
+        s.fake.enqueue(Script(status=429), Script(status=429))
+        first = await s.chat()
+        assert first.status_code == 429 and hosts(s) == ["a", "b"] and sleeps.taken == []
+        second = await s.chat()  # a and b are both cooling: wait for the soonest, then go
+        assert second.status_code == 200, second.text
+        assert len(sleeps.taken) == 1 and sleeps.taken[0] * 1000 <= SHORT.throttle_max_ms
+        assert len(hosts(s)) == 3
+        calls = await s.ledger.get_calls(rid_of(second))
+        assert [(c.attempt, c.outcome, c.charged_nano) for c in calls] == [
+            (1, Outcome.OK, Alpha_CALL)
+        ]
+        assert len(s.observer.held) == 2  # one hold per call: the wait reserved nothing more
+        assert await s.totals() == (Alpha_CALL, 0)
+
+
+@async_test
+async def test_m13_a_wait_then_a_free_failover_still_charges_only_the_answer(
+    tmp_path: Path,
+) -> None:
+    """After the wait the first deployment throttles again: free failover to the other one."""
+    sleeps = Sleeps()
+    async with open_stack(tmp_path, pipeline_kwargs={"sleep": sleeps}) as s:
+        sleeps.clock = s.clock
+        s.fake.enqueue(
+            Script(status=429, retry_after="1"), Script(status=429, retry_after="1"),
+            Script(status=429),
+        )  # fmt: skip
+        assert (await s.chat()).status_code == 429  # a and b now cool for exactly 1 s
+        r = await s.chat()  # waits 1 s for a, a throttles again, then b (back at once) answers
+        assert r.status_code == 200, r.text
+        assert sleeps.taken == [1.0]
+        assert hosts(s) == ["a", "b", "a", "b"]
+        calls = await s.ledger.get_calls(rid_of(r))
+        assert [(c.attempt, c.outcome, c.charged_nano) for c in calls] == [
+            (1, Outcome.THROTTLED, 0),
+            (2, Outcome.OK, Alpha_CALL),
+        ]
+        assert await s.totals() == (Alpha_CALL, 0)
+
+
+@async_test
+async def test_a_retry_after_beyond_the_wait_bound_is_refused_at_once(tmp_path: Path) -> None:
+    sleeps = Sleeps()
+    async with open_stack(tmp_path, pipeline_kwargs={"sleep": sleeps}) as s:
+        sleeps.clock = s.clock
+        s.fake.enqueue(Script(status=429, retry_after="2"))
+        await s.chat("alpha-one")
+        assert s.observer.attempts[0].cooldown_ms == 2_000 > MAX_WAIT_MS  # honoured as given
+        r = await s.chat("alpha-one")
+        assert r.status_code == 429 and code_of(r) == "upstream_throttled"
+        assert sleeps.taken == [] and s.fake.calls == 1  # no wait, no contact
+        assert r.headers["retry-after"] == "2"
+        row = await s.ledger.get_reservation(rid_of(r))
+        assert row is not None and row.state is ReservationState.RELEASED
+
+
+@async_test
+async def test_the_wait_stays_inside_the_request_deadline(tmp_path: Path) -> None:
+    """A 1 s cooldown is within the wait bound but not within a 1 s request deadline."""
+    sleeps = Sleeps()
+    kwargs: dict[str, object] = {"sleep": sleeps, "max_request_seconds": 1.0}
+    async with open_stack(tmp_path, pipeline_kwargs=kwargs) as s:
+        sleeps.clock = s.clock
+        s.fake.enqueue(Script(status=429, retry_after="1"))
+        await s.chat("alpha-one")
+        r = await s.chat("alpha-one")
+        assert r.status_code == 429 and sleeps.taken == [] and s.fake.calls == 1
+        assert await s.totals() == (0, 0)
+
+
+@async_test
+async def test_a_cooldown_of_exactly_the_wait_bound_is_waited_for(tmp_path: Path) -> None:
+    sleeps = Sleeps()
+    async with open_stack(tmp_path, pipeline_kwargs={"sleep": sleeps}) as s:
+        sleeps.clock = s.clock
+        s.fake.enqueue(Script(status=429, retry_after="1"))
+        await s.chat("alpha-one")
+        r = await s.chat("alpha-one")
+        assert r.status_code == 200 and sleeps.taken == [MAX_WAIT_MS / 1000]
+        assert await s.totals() == (Alpha_CALL, 0)
+
+
+@async_test
+async def test_a_wait_that_ends_with_nothing_back_is_refused_free(tmp_path: Path) -> None:
+    """The clock stands still while it waits: the wait bound still ends it, never a spin."""
+    taken: list[float] = []
+
+    async def frozen(seconds: float) -> None:
+        taken.append(seconds)
+        await asyncio.sleep(0)
+
+    async with open_stack(tmp_path, pipeline_kwargs={"sleep": frozen}) as s:
+        s.fake.enqueue(Script(status=429))
+        await s.chat("alpha-one")
+        r = await s.chat("alpha-one")
+        assert r.status_code == 429 and code_of(r) == "upstream_throttled"
+        assert len(taken) >= 1 and sum(taken) * 1000 <= MAX_WAIT_MS
+        assert s.fake.calls == 1 and await s.totals() == (0, 0)

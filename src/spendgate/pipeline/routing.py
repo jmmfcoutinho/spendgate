@@ -1,39 +1,38 @@
-"""Step 4 and 8: which deployment to try, and the failover loop inside one reservation.
+"""Step 8: the failover loop inside one reservation.
 
-Candidates are the deployments of one alias (one catalog id) in config order. `DeploymentHealth`
-is the only tracker of cooldown and circuit state. Failover happens only after an attempt for
-which `not_processed` holds (never sent, or a `free_statuses` answer) and costs 0; every other
-result ends the request (M-01/M-13). The provider's own 429 is never a budget error.
+Candidates and their cooldowns come from `pipeline.candidates`. Failover happens only after an
+attempt for which `not_processed` holds (never sent, or a `free_statuses` answer) and costs 0;
+every other result ends the request (M-01/M-13). The provider's own 429 is never a budget error.
 
 Streaming: a streaming request uses the same pick/attempt/failover code up to the
 response head (`open_response`), classifies a non-2xx exactly like a buffered call, and on a 2xx
 returns `Live` (the unread response plus its relay). The attempt stays in flight in the `Book`
 until the stream ends; `pipeline.streaming` then records it and settles.
+
+Waiting: when every untried candidate is cooling, the loop sleeps until the soonest one is back,
+at most `MAX_WAIT_MS` per request and only inside the request deadline (ADR-0021). The hold stays
+as it is while it waits: nothing was sent, so nothing about the money changes.
 """
 
+import asyncio
 import contextlib
-import math
-from collections.abc import Iterable, Mapping
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from enum import StrEnum
 
 import httpx
 
-from spendgate.config import ResolvedDeployment, Route
 from spendgate.core.catalog import Catalog
 from spendgate.core.errors import ErrorCode, Refusal
-from spendgate.core.health import DeploymentHealth, HealthConfig
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.port import AttemptRecord
+from spendgate.pipeline.candidates import Cause, Router, Target
 from spendgate.pipeline.faults import Fault, fault_of
 from spendgate.pipeline.model import AttemptEvent, Clock, Observer, Sender
 from spendgate.pipeline.settle import Book, Flight, Reading, attempt_record, read_usage
 from spendgate.pipeline.streaming import Live
 from spendgate.pipeline.transport import SendError, SendFailure, exchange, open_response, read_body
 from spendgate.providers.port import (
-    AuthMode,
     CleanRequest,
-    Deployment,
     Provider,
     SseLimits,
     Untranslatable,
@@ -47,92 +46,9 @@ _HTTP_REDIRECT = 300
 _HTTP_ERROR = 400
 _MAX_ERROR_BYTES = 1024 * 1024  # an error answer to a streaming request is read whole, capped
 _OUR_CREDENTIAL_FAULTS = frozenset({401, 403, 404})  # the deployment is misconfigured, not busy
-
-
-class Cause(StrEnum):
-    THROTTLED = "throttled"
-    QUOTA = "quota"  # a free 429 that means the account's quota or billing, not a busy model
-    UNREACHABLE = "unreachable"
-    FAILING = "failing"
-
-
-@dataclass(slots=True)
-class Shared:
-    """Health of one real endpoint, shared by every alias that routes to it."""
-
-    health: DeploymentHealth
-    cause: Cause | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class Target:
-    label: str  # `<alias>/<index>`: stable, free of secrets, written to the calls table
-    provider: str
-    deployment: Deployment
-    shared: Shared
-
-
-class Router:
-    """Ordered candidates per alias plus the cooldown bookkeeping."""
-
-    def __init__(self, routes: Mapping[str, Route], config: HealthConfig) -> None:
-        self._config = config
-        shared: dict[ResolvedDeployment, Shared] = {}
-        self._targets: dict[str, tuple[Target, ...]] = {}
-        for alias, route in routes.items():
-            self._targets[alias] = tuple(
-                Target(
-                    f"{alias}/{i}",
-                    d.provider,
-                    _deployment(d),
-                    shared.setdefault(d, Shared(DeploymentHealth(config))),
-                )
-                for i, d in enumerate(route.deployments)
-            )
-
-    def targets(self, alias: str) -> tuple[Target, ...]:
-        return self._targets[alias]
-
-    def pick(self, targets: Iterable[Target], tried: set[str], now: int) -> Target | None:
-        """The first untried deployment health allows (a half-open probe is taken only here)."""
-        for target in targets:
-            if target.label not in tried and target.shared.health.allow(now):
-                return target
-        return None
-
-    def cool(self, target: Target, now: int, retry_after_s: int | None, cause: Cause) -> int:
-        """Put the deployment into cooldown (honouring Retry-After, capped); returns ms."""
-        wanted = max(self._config.cooldown_ms, (retry_after_s or 0) * _MS)
-        target.shared.health.record_throttled(now, wanted)
-        target.shared.cause = cause
-        return min(wanted, self._config.max_cooldown_ms)
-
-    def failed(self, target: Target, now: int) -> None:
-        target.shared.health.record_failure(now)
-        target.shared.cause = Cause.FAILING
-
-    def succeeded(self, target: Target, now: int) -> None:
-        target.shared.health.record_success(now)
-        target.shared.cause = None
-
-    def wait_seconds(self, targets: Iterable[Target], now: int) -> int:
-        """Whole seconds until the soonest deployment may be tried again (at least 1)."""
-        waits = [t.shared.health.retry_after(now) for t in targets]
-        ms = min(waits, default=0) or self._config.cooldown_ms
-        return max(math.ceil(ms / _MS), 1)
-
-    def all_throttled(self, targets: Iterable[Target]) -> bool:
-        return all(t.shared.cause in (Cause.THROTTLED, Cause.QUOTA) for t in targets)
-
-    def all_quota(self, targets: Iterable[Target]) -> bool:
-        return all(t.shared.cause is Cause.QUOTA for t in targets)
-
-
-def _deployment(d: ResolvedDeployment) -> Deployment:
-    return Deployment(
-        d.provider, d.base_url, d.model, AuthMode(d.auth), d.region, d.api_version,
-        d.credential.reveal() if d.credential is not None else "",
-    )  # fmt: skip
+# Longest a request waits for a cooling deployment. At least `HealthConfig.throttle_max_ms`, so a
+# 429 without Retry-After is always outwaited; a longer Retry-After is refused at once instead.
+MAX_WAIT_MS = 1_000
 
 
 # --- results -----------------------------------------------------------------------------------
@@ -194,21 +110,30 @@ class Forwarder:
     def __init__(  # noqa: PLR0913, PLR0917 - the loop's collaborators
         self, sender: Sender, router: Router, catalog: Catalog, now: Clock, observer: Observer,
         max_attempts: int, limits: SseLimits = SseLimits(),  # noqa: B008 - frozen default
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, deadline_ms: float | None = None,
     ) -> None:  # fmt: skip
         self._sender, self._router, self._catalog = sender, router, catalog
         self._now, self._observer, self._max = now, observer, max_attempts
-        self._limits = limits
+        self._limits, self._sleep, self._deadline_ms = limits, sleep, deadline_ms
 
     async def run(self, job: Job, book: Book) -> Answered | Failed | Live:
         tried: set[str] = set()
         retries: list[_Retry] = []
         last: Target | None = None
-        for _ in range(self._max):
+        attempts = waited = 0
+        start = self._now()
+        while attempts < self._max:
             target = self._router.pick(job.targets, tried, self._now())
             if target is None:
                 target = self._same_again(retries, last)
             if target is None:
-                break
+                pause = self._pause(job, tried, waited, start)
+                if pause is None:
+                    break
+                await self._sleep(pause / _MS)  # a wait costs no attempt: nothing is sent
+                waited += pause
+                continue
+            attempts += 1
             tried.add(target.label)
             last = target
             step = await self._attempt(job, book, target)
@@ -216,6 +141,20 @@ class Forwarder:
                 return step
             retries.append(step)
         return self._exhausted(job, book, retries)
+
+    def _pause(self, job: Job, tried: set[str], waited: int, start: int) -> int | None:
+        """Ms to wait for the soonest cooling candidate, or None: refuse now.
+
+        Bounded per request by `MAX_WAIT_MS` and by the request deadline; every pause is at
+        least 1 ms and adds to `waited`, so the loop ends even if the clock stands still.
+        """
+        now = self._now()
+        pause = self._router.soonest(job.targets, tried, now)
+        if pause is None or waited + pause > MAX_WAIT_MS:
+            return None
+        if self._deadline_ms is not None and now + pause >= start + self._deadline_ms:
+            return None
+        return pause
 
     def _same_again(self, retries: list[_Retry], last: Target | None) -> Target | None:
         """No other candidate: a connect failure (never sent) is tried once more on the same one."""

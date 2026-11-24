@@ -26,7 +26,7 @@ from spendgate.core.outcomes import Outcome
 from spendgate.ledger.ids import new_id
 from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
-from spendgate.pipeline import answers, intake, replies, steps
+from spendgate.pipeline import answers, candidates, intake, replies, steps
 from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.auth import authenticate, recheck
 from spendgate.pipeline.closing import Call, Closer, Sleeper
@@ -47,7 +47,7 @@ from spendgate.pipeline.model import (
     models_endpoint,
     report_internal,
 )
-from spendgate.pipeline.routing import Answered, Failed, Forwarder, Job, Router, unavailable
+from spendgate.pipeline.routing import Answered, Failed, Forwarder, Job, unavailable
 from spendgate.pipeline.settle import Book, Closed
 from spendgate.pipeline.streaming import PING_SECONDS, STREAM_LIMITS, Live, StreamBody, StreamEnv
 from spendgate.pipeline.upkeep import Step, Upkeep, heartbeat
@@ -119,10 +119,10 @@ class Pipeline:
         self._observer = observer or NoopObserver()
         self._instance = instance or instance_id()
         health: HealthConfig = settings.health
-        self._router = Router(settings.routes, health)
+        self._router = candidates.Router(settings.routes, health)
         self._forwarder = Forwarder(
             sender, self._router, settings.catalog, now_ms, self._observer,
-            settings.config.routing.max_attempts, stream_limits,
+            settings.config.routing.max_attempts, stream_limits, sleep, self._max_request_s * _MS,
         )  # fmt: skip
         self._closer = Closer(settings, ledger, self._limits, self._observer, now_ms, sleep)
         self._owned: set[str] = set()  # holds this pipeline is still responsible for closing
