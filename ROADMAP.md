@@ -54,14 +54,16 @@ would change public behaviour gets an ADR first (see [CONTRIBUTING.md](CONTRIBUT
 
 ## Performance
 
-- The PostgreSQL ledger adds more latency per call than SQLite and degrades with concurrency (see the
-  [load review](docs/reviews/load-v0.1.md)). Reducing that overhead is the main performance goal;
-  per-instance budget slices (above) are one way to remove the hot budget row.
+- Under many concurrent calls on one budget chain, the PostgreSQL ledger is still limited by waits on
+  the hot budget row, even after 0.2.0 cut a call to 2 transactions and 5 round trips (see the
+  [load review](docs/reviews/load-v0.1.md)). Per-instance budget slices (above) are one way to remove
+  that row from the hot path.
 
 ## Done
 
 - Soft-threshold webhook alerts before a cap is reached (0.2.0).
 - OpenTelemetry tracing as an extra (0.2.0).
+- Fewer PostgreSQL round trips per call: 5 instead of about 46 (0.2.0).
 
 ## Known limitations in v0.1
 
