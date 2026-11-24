@@ -61,13 +61,19 @@ def test_relative_links_resolve(page: Path) -> None:
 # so the README links into the repository by absolute URL; these are then checked like local links.
 REPO_URL = "https://github.com/jmmfcoutinho/spendgate"
 REPO_FILE = re.compile(re.escape(REPO_URL) + r"/blob/main/([^#?]+)(?:#(.*))?$")
-MARKDOWN_TARGET = re.compile(r"\]\(([^)\s]+)\)")  # links and images, badges included
+# Inline links and images (badges included), with or without a title or <angle brackets>.
+MARKDOWN_TARGET = re.compile(r"\]\(\s*<?([^)\s>]+)")
+REFERENCE_TARGET = re.compile(r"^\s*\[[^\]]+\]:\s*<?([^\s>]+)", re.MULTILINE)  # [id]: target
 HTML_TARGET = re.compile(r"""(?:href|src)\s*=\s*["']([^"']+)["']""")
 
 
 def readme_targets() -> list[str]:
     text = FENCE.sub("", (REPO / "README.md").read_text())
-    return MARKDOWN_TARGET.findall(text) + HTML_TARGET.findall(text)
+    return [
+        *MARKDOWN_TARGET.findall(text),
+        *REFERENCE_TARGET.findall(text),
+        *HTML_TARGET.findall(text),
+    ]
 
 
 def test_readme_has_no_relative_links_so_it_renders_on_pypi() -> None:
