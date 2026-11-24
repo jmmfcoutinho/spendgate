@@ -1,7 +1,8 @@
 name: Release
 
 # Runs when the maintainer pushes a version tag (the tag ruleset lets only the maintainer create v* tags).
-# Both publishing jobs also wait for approval in the `release` environment.
+# Both publishing jobs also wait for approval in the `release` environment; once both succeed,
+# github-release creates the GitHub Release with the tag's CHANGELOG section as its notes.
 # No long-lived tokens: PyPI uses trusted publishing (OIDC); GHCR uses the job token;
 # the image is signed keyless with cosign.
 on:
@@ -131,3 +132,32 @@ jobs:
           REF: ${{ steps.tag.outputs.ref }}
           DIGEST: ${{ steps.push.outputs.digest }}
         run: cosign sign --yes "${REF%%:*}@$DIGEST"
+
+  github-release:
+    # Last, so the Release only appears once PyPI and the image are published.
+    needs: [check, pypi, image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # create the GitHub Release for the tag
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Release notes from the CHANGELOG section
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          grep -q '[^[:space:]]' "$RUNNER_TEMP/notes.md" || { echo "::error::CHANGELOG.md [$VERSION] section is empty"; exit 1; }
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
