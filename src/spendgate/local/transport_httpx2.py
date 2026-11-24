@@ -4,7 +4,6 @@ Imported only by `guard().anthropic()` or by callers who build an `httpx2` clien
 a base install without the `anthropic` extra never loads it.
 """
 
-from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Literal, overload
 
@@ -14,35 +13,22 @@ import httpx2
 from spendgate.config import Settings
 from spendgate.local.bridge import (
     AsyncBridge,
+    AsyncChunks,
     SyncBridge,
+    SyncChunks,
     response_headers,
 )
-from spendgate.local.transport import make_runtime
-from spendgate.pipeline.model import ByteStream, Clock
+from spendgate.local.factory import make_runtime
+from spendgate.pipeline.model import Clock
 from spendgate.pipeline.pipeline import system_ms
 
 
-class _SyncStream(httpx2.SyncByteStream):
-    def __init__(self, bridge: SyncBridge, chunks: ByteStream) -> None:
-        self._bridge, self._chunks = bridge, chunks
-
-    def __iter__(self) -> Iterator[bytes]:
-        return self._bridge.chunks(self._chunks)
-
-    def close(self) -> None:
-        self._bridge.close_stream(self._chunks)
+class _SyncStream(SyncChunks, httpx2.SyncByteStream):
+    pass
 
 
-class _AsyncStream(httpx2.AsyncByteStream):
-    def __init__(self, chunks: ByteStream) -> None:
-        self._chunks = chunks
-
-    async def __aiter__(self) -> AsyncIterator[bytes]:
-        async for chunk in self._chunks:
-            yield chunk
-
-    async def aclose(self) -> None:
-        await self._chunks.aclose()
+class _AsyncStream(AsyncChunks, httpx2.AsyncByteStream):
+    pass
 
 
 class LocalTransport2(httpx2.BaseTransport):
