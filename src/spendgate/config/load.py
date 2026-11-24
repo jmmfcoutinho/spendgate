@@ -33,8 +33,11 @@ class ConfigError(Exception):
 
     def __init__(self, file: str, issues: list[tuple[str, str]]) -> None:
         self.file = file
-        self.issues = tuple(issues)
-        super().__init__("; ".join(f"{file}: {p}: {m}" if p else f"{file}: {m}" for p, m in issues))
+        # Deployments that share a provider resolve its credential once each: one line per problem.
+        self.issues = tuple(dict.fromkeys(issues))
+        super().__init__(
+            "; ".join(f"{file}: {p}: {m}" if p else f"{file}: {m}" for p, m in self.issues)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -203,6 +206,15 @@ def _validate(raw: dict[str, object], name: str) -> Config:
             for e in exc.errors(include_input=False, include_url=False)
         ]
         raise ConfigError(name, issues) from None
+
+
+def read_config(path: str | Path) -> Config:
+    """The file checked against the schema only: no secrets, catalog or cross-checks.
+
+    For a client that needs a setting (the admin listener) without the server's environment.
+    """
+    name = str(path)
+    return _validate(_yaml_mapping(_read(Path(path)), name), name)
 
 
 def _catalog_documents(cfg: Config, base: Path) -> tuple[tuple[Mapping[str, object], ...], str]:

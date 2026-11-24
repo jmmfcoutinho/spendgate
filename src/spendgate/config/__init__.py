@@ -8,10 +8,11 @@ from spendgate.config.load import (
     Settings,
     check_config,
     load,
+    read_config,
 )
 from spendgate.config.secrets import Secret
 
 __all__ = [
     "CheckReport", "ConfigError", "ResolvedDeployment", "Route", "Secret", "Settings",
-    "check_config", "load",
+    "check_config", "load", "read_config",
 ]  # fmt: skip
