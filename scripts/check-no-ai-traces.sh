@@ -22,6 +22,8 @@ content_pattern='claude\.ai/|Claude-Session|Co-Authored-By:|Generated with \[|ðŸ
 allow=(
   ':!scripts/check-commit-message.sh'
   ':!scripts/check-no-ai-traces.sh'
+  ':!scripts/check-commit-identity.sh'
+  ':!tests/unit/test_commit_identity_check.py'
   ':!.pre-commit-config.yaml'
   ':!uv.lock'
   ':!tests/data/litellm/'
