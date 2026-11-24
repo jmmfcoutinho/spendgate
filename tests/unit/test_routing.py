@@ -7,6 +7,7 @@ import httpx
 
 from spendgate.config import Settings
 from spendgate.core.errors import ErrorCode
+from spendgate.core.failures import AttemptError
 from spendgate.core.health import HealthConfig
 from spendgate.pipeline.candidates import Cause, Router, retry_hint
 from spendgate.pipeline.routing import MAX_WAIT_MS
@@ -138,7 +139,7 @@ def test_never_sent_versus_sent_table() -> None:
     assert (
         classify(httpx.ConnectTimeout("x")).timeout and not classify(httpx.ConnectTimeout("x")).sent
     )
-    assert classify(httpx.ConnectError("secret-host.test")).kind == "ConnectError"  # no message
+    assert classify(httpx.ConnectError("secret-host.test")).code is AttemptError.CONNECT_ERROR
 
 
 def test_the_wait_bound_outlasts_a_no_hint_cooldown() -> None:

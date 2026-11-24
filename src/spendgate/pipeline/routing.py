@@ -23,6 +23,7 @@ import httpx
 
 from spendgate.core.catalog import Catalog
 from spendgate.core.errors import ErrorCode, Refusal
+from spendgate.core.failures import AttemptError, CallErrorCode
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.port import AttemptRecord
 from spendgate.pipeline.candidates import Cause, Router, Target, retry_hint
@@ -233,7 +234,7 @@ class Forwarder:
         except Exception as exc:
             await opened.aclose()  # the request was sent: charged at the full hold
             self._record(job, book, target, started, Outcome.INTERNAL_ERROR, opened.status_code,
-                         not_processed=False, error_code="relay_error")  # fmt: skip
+                         not_processed=False, error_code=AttemptError.RELAY_ERROR)  # fmt: skip
             refusal = Refusal(ErrorCode.INTERNAL_ERROR, "The stream could not be relayed.")
             return Failed(refusal, 500, fault=fault_of("routing.relay", exc))
         self._router.succeeded(target, self._now(), started)
@@ -245,7 +246,7 @@ class Forwarder:
     def _record(  # noqa: PLR0913, PLR0917 - one attempt's facts
         self, job: Job, book: Book, target: Target, started: int, outcome: Outcome,
         status: int | None, *, not_processed: bool, cooldown_ms: int | None = None,
-        error_code: str | None = None, reading: Reading | None = None,
+        error_code: CallErrorCode | None = None, reading: Reading | None = None,
     ) -> AttemptRecord:  # fmt: skip
         """Write the attempt's row and end its flight: the outcome is now recorded."""
         now = self._now()
@@ -278,14 +279,14 @@ class Forwarder:
             self._router.failed(target, now)
             self._record(
                 job, book, target, started, Outcome.UNREACHABLE, None, not_processed=True,
-                error_code=failure.kind,
+                error_code=failure.code,
             )  # fmt: skip
             return _Retry(Cause.UNREACHABLE, None)
         self._router.failed(target, now)
         outcome = Outcome.TIMEOUT if failure.timeout else Outcome.UPSTREAM_5XX
         self._record(
             job, book, target, started, outcome, None, not_processed=False,
-            error_code=failure.kind,
+            error_code=failure.code,
         )  # fmt: skip
         if failure.timeout:
             return unavailable(target.provider, "The provider timed out.", 504)
@@ -298,7 +299,7 @@ class Forwarder:
         self._router.failed(target, self._now())
         self._record(
             job, book, target, started, Outcome.INTERNAL_ERROR, status, not_processed=False,
-            error_code="adapter_error",
+            error_code=AttemptError.ADAPTER_ERROR,
         )  # fmt: skip
         internal = Refusal(ErrorCode.INTERNAL_ERROR, "The provider answer could not be read.")
         return Failed(internal, 500, fault=fault)
@@ -355,13 +356,13 @@ class Forwarder:
             cooldown = self._router.cool(target, now, retry_s, cause, unknown=unknown)
             self._record(
                 job, book, target, started, err.outcome(free), status, not_processed=True,
-                cooldown_ms=cooldown, error_code=err.code.value,
+                cooldown_ms=cooldown, error_code=err.code,
             )  # fmt: skip
             return _Retry(cause, retry_s)
         self._feed_health(target, status, now, started)
         self._record(
             job, book, target, started, err.outcome(free), status, not_processed=False,
-            error_code=err.code.value,
+            error_code=err.code,
         )  # fmt: skip
         return _failure_for(err, target.provider)
 

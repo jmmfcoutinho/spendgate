@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from spendgate.core.catalog import Catalog, PriceEntry
 from spendgate.core.cost import UnpricedUsage, Usage, actual_cost
+from spendgate.core.failures import CallErrorCode
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome, charge
 from spendgate.ledger.port import AttemptRecord
@@ -179,7 +180,7 @@ def fx_rate_nano(catalog: Catalog, currency: str) -> int:
 
 def attempt_record(  # noqa: PLR0913 - one attempt's facts, built in exactly one place
     book: Book, flight: Flight, outcome: Outcome, now: int, *, request_id: str = "",
-    status: int | None = None, not_processed: bool = False, error_code: str | None = None,
+    status: int | None = None, not_processed: bool = False, error_code: CallErrorCode | None = None,
     reading: Reading | None = None, streamed: bool = False, ttfb_ms: int | None = None,
 ) -> AttemptRecord:  # fmt: skip
     """The `calls` row of one attempt (buffered, streamed or interrupted)."""
@@ -204,7 +205,7 @@ def decide(book: Book, interrupted: Outcome | None, now: int) -> Decision:
     attempts = list(book.attempts)
     if book.flight is not None:
         outcome = interrupted or Outcome.INTERNAL_ERROR
-        attempts.append(attempt_record(book, book.flight, outcome, now, error_code=outcome.value))
+        attempts.append(attempt_record(book, book.flight, outcome, now, error_code=outcome))
     if not attempts:  # nothing was ever sent: release with no `calls` row at all
         return Decision(True, Money.zero(hold.currency), (), interrupted or book.idle_outcome,
                         book.label)  # fmt: skip

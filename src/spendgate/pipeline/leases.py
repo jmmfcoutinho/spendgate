@@ -14,12 +14,13 @@ stream so stopped is no longer renewed and `abort` settles it even if nobody rea
 from collections.abc import Collection
 from typing import Protocol
 
+from spendgate.core.failures import StopReason
 from spendgate.core.policy import KillSwitch
 from spendgate.pipeline.watch import StreamFacts, stop_reason
 
 
 class Abortable(Protocol):
-    def abort(self, reason: str) -> None: ...
+    def abort(self, reason: StopReason) -> None: ...
 
     async def aclose(self) -> None: ...
 
@@ -42,7 +43,7 @@ class Leases:
         if deadline is not None:
             self._deadline[rid] = deadline
 
-    def _stop(self, rid: str, reason: str) -> None:
+    def _stop(self, rid: str, reason: StopReason) -> None:
         self._stopping.add(rid)  # never renewed again, whatever the settlement takes
         self._streams[rid].abort(reason)
 
@@ -50,7 +51,7 @@ class Leases:
         """Stop every open stream that outlived its deadline, read or not (SR-13, NF-02)."""
         for rid, deadline in list(self._deadline.items()):
             if now >= deadline and rid in self._streams:
-                self._stop(rid, "max_duration")
+                self._stop(rid, StopReason.MAX_DURATION)
 
     def stopping(self) -> frozenset[str]:
         """Streams being stopped: their holds are settled, not renewed."""
@@ -88,11 +89,11 @@ class Leases:
             if rid in renewed:
                 self._until[rid] = now + self._lease_ms
             else:
-                self._stop(rid, "lease_lost")
+                self._stop(rid, StopReason.LEASE_LOST)
 
     def failed(self, watched: frozenset[str]) -> None:
         for rid in watched & self._streams.keys():
-            self._stop(rid, "renewal_failed")
+            self._stop(rid, StopReason.RENEWAL_FAILED)
 
     def near_expiry(self, rid: str, now: int) -> bool:
         until = self._until.get(rid)
