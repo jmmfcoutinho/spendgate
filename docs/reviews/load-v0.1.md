@@ -190,5 +190,10 @@ interleaved after, before, after):
 
 The ten pooled connections still mostly wait on the hot budget row (about 8 in `Lock` at any sample):
 each transaction holds it for one round trip plus the gateway's own work now, not for a dozen round
-trips. `make load` was not re-run for this change; its overshoot scenarios and the overhead criterion
-are left to the next load run.
+trips.
+
+`make load` on this change, run alone on the 4-CPU machine (SQLite and Postgres 16): every money
+scenario passed, including the overshoot scenarios on both backends; 6 passed, 3 expected failures
+(the existing Postgres overhead targets). The SQLite overhead target (p50 under 5 ms) was missed on
+this machine with and without the change: p50 5.80 ms on the base and 5.20 ms on this change,
+measured back to back.
