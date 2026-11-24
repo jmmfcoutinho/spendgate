@@ -1,7 +1,7 @@
 # Operations
 
-Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retention, the sweeper
-and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
+Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retention, the sweeper,
+draining on restart, the Postgres connection, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
 the [configuration reference](configuration.md).
 
 Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
@@ -136,6 +136,41 @@ every `ledger.sweep_seconds` (default 30). An expired hold is charged **in full*
 that may have reached the provider is paid for. After a crash, a budget therefore shows held money
 for up to `ledger.lease_seconds` (default 60) plus one sweep interval, then it settles. Nothing to schedule: every instance sweeps, any of them may settle an expired hold, and a hold
 still being renewed by a live instance is left alone. A failing pass is logged as `sweep_failed` and retried on the next tick, never fatal.
+
+## Draining on restart
+
+On `SIGTERM`, `serve` closes its listener at once and waits for every call in flight, streams
+included, before it shuts down; the lease heartbeat keeps running while it waits, so those holds
+are settled normally. It does not set a drain deadline of its own: the orchestrator's grace period
+is the deadline. Once shutdown has started, a `SIGINT` forces an exit and a second `SIGTERM` does
+nothing (uvicorn 0.54). A forced exit skips the lifespan shutdown, so the holds still open are left
+to the sweeper. A call still running when the process is killed or forced out is never settled by
+it; its hold expires after `ledger.lease_seconds` and the next sweep (any instance, or this one
+after restart) charges it **in full**. Size the stop so that does not happen:
+
+- **Stop sending new calls first.** The listener closes as soon as `SIGTERM` arrives, so new
+  connections are refused until the load balancer drops the instance, and `/readyz` does not turn
+  unready before that. That gap is why the load balancer needs time before the signal: in
+  Kubernetes a `preStop` hook that waits 5 to 10 seconds, with the `sleep` lifecycle action
+  (Kubernetes 1.30 and later) or `exec: {command: ["sleep", "10"]}`.
+- **Grace period sized to the longest stream.** One call or stream runs at most
+  `server.max_request_seconds` (default 900). Set `terminationGracePeriodSeconds` (Compose:
+  `stop_grace_period`, default 10 s) to at least the `preStop` wait plus `max_request_seconds` plus
+  a margin of about 30 s. In Kubernetes the `preStop` wait counts against the grace period. A
+  shorter grace period is a choice to charge the longest calls in full on every restart.
+- **After a kill.** Held money from the killed instance shows for up to `ledger.lease_seconds`
+  (default 60) plus one `ledger.sweep_seconds` (default 30), then the sweep settles it. With one
+  instance that happens after it starts again; with several, a surviving one sweeps it.
+
+## Postgres connection
+
+`ledger.backend.dsn` is passed unchanged to libpq, so every libpq connection parameter works. When
+the database is not on the same host or a private container network, use TLS and verify the
+server: `postgresql://spendgate@db.example.internal:5432/spendgate?sslmode=verify-full&sslrootcert=/etc/spendgate/db-ca.pem`.
+`verify-full` checks the certificate chain and the host name; `require` only encrypts and accepts
+any certificate, and the libpq default (`prefer`) falls back to plaintext. The DSN is a secret
+reference (`env:NAME` or `file:/path`), so the whole URL, password included, lives in a secret and
+never in `spendgate.yaml`.
 
 ## Metrics and logs
 

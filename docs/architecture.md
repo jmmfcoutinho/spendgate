@@ -1,6 +1,6 @@
 # spendgate architecture
 
-Status: proposed, 2026-11-13. Decisions: [decisions.md](./decisions.md). ADRs: [0001](adr/0001-ports-and-adapters.md) to [0005](adr/0005-sqlite-and-postgres-no-redis.md).
+Status: current for v0.1.1 (first written 2026-11-13). Decisions: [decisions.md](./decisions.md). ADRs: [0001](adr/0001-ports-and-adapters.md) to [0010](adr/0010-calls-http-status.md).
 
 ## 1. Components
 
@@ -47,7 +47,7 @@ Every component above is exactly one package. Rows show the one-line job and the
 
 Notes:
 - `catalog/prices.yaml` and `catalog/schema.json` are data, not a package. `config` reads them; `core.catalog.parse` validates and resolves.
-- Only `gateway.app`, `gateway.admin` and `gateway.observability` may import Starlette. `pipeline` stays framework free so `local` can reuse it. A contract checks this.
+- Only `spendgate.gateway` imports Starlette: today `gateway.app`, `gateway.admin`, `gateway.admin_http`, `gateway.admin_budgets`, `gateway.admin_scopes`, `gateway.admin_reports` and `gateway.observability`. `cli.serve` imports uvicorn to run the gateway apps, and nothing else imports uvicorn. `pipeline` stays framework free so `local` can reuse it. Three import-linter contracts check this ("pipeline has no HTTP framework", "only the gateway imports Starlette", "only cli.serve imports uvicorn").
 - No package is named `utils` or `common`. Shared code goes to `core` if pure, or to its owner package.
 - Sibling adapters never import each other: `ledger.sqlite` vs `ledger.postgres`, and each provider module vs the others.
 - Limits (RPM, TPM, concurrency) are per process in v0.1; budgets are exact in the ledger. A shared limiter store is on the [roadmap](../ROADMAP.md).
@@ -56,8 +56,8 @@ Notes:
 
 Pipeline order (fixed, one function per step in `spendgate.pipeline`):
 
-1. Body size and concurrency check, before reading the body.
-2. Authenticate (`Authorization: Bearer sg-<prefix>-<secret>`).
+1. Authenticate from the headers (`Authorization: Bearer sg-<prefix>-<secret>`), before any body byte is read, so a caller without a valid key never holds a gate place or memory (SR-01).
+2. Body size and concurrency: the declared `Content-Length`, the key's in-flight uploads, then the size and concurrency gate; only then is the body read under its cap and parsed (`pipeline/intake.py`).
 3. Endpoint allowlist validation (protocol section 2); no provider translation yet.
 4. Route: candidate deployments of the same catalog id, skipping cooled ones (`model_not_priced` if unpriced).
 5. Price, plan budgets, worst case = max over candidates, output ceiling (protocol 2.1).
@@ -67,7 +67,9 @@ Pipeline order (fixed, one function per step in `spendgate.pipeline`):
 9. Settle once on the reservation (after send, a cancel or failure is the full hold unless usage was seen, for a stream its final usage, M-13), or `release` if every attempt was `not_processed`.
 10. Record (`calls` row per attempt) and emit headers, logs and metrics.
 
-Refused requests write no `calls` row (logs and metrics only). Steps 4 to 6 run in `core` (pure). Steps 7 and 9 use the ledger port. Step 8 uses the provider port.
+Both entry points, the gateway and library mode, call `Pipeline.serve`, which runs steps 1 and 2 and then steps 3 to 10 on the parsed request. Library mode sends a placeholder key that its local key store accepts.
+
+Refused requests write no `calls` row (logs and metrics only). Steps 3 to 6 are functions in `pipeline/steps.py` (`prepare`, `admit_limits`) that call the pure rules in `core` (catalog, estimate, cost, policy, limits); they contact neither a provider nor the ledger. Steps 7 and 9 use the ledger port. Step 8 uses the provider port.
 
 ## 4. Dependency rules
 
@@ -132,9 +134,25 @@ name = "pipeline has no HTTP framework"
 type = "forbidden"
 source_modules = ["spendgate.pipeline"]
 forbidden_modules = ["starlette", "uvicorn"]
+
+[[tool.importlinter.contracts]]
+name = "only the gateway imports Starlette"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["starlette"]
+ignore_imports = ["spendgate.gateway.** -> starlette"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only cli.serve imports uvicorn"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["uvicorn"]
+ignore_imports = ["spendgate.cli.serve -> uvicorn"]
+allow_indirect_imports = true
 ```
 
-Notes: `include_external_packages` is needed for the external bans. The `|` layer is independent (siblings), so `local` cannot import `gateway` and vice versa; the `layers` contract also stops lower layers importing upward. The `independence` contract on `spendgate.providers.*` must list real modules, so add each file when it lands. Provider SDKs (boto3, google-auth) may be imported only inside their own adapter, as optional extras.
+Notes: `include_external_packages` is needed for the external bans. The Starlette and uvicorn contracts are allow-lists: the whole package is the source, so a new package is covered at once, and only the `ignore_imports` entries are exempt. They check direct imports only, because `cli` imports `gateway` to serve it; the `layers` contract already keeps every other package away from `gateway`. The `|` layer is independent (siblings), so `local` cannot import `gateway` and vice versa; the `layers` contract also stops lower layers importing upward. The `independence` contract on `spendgate.providers.*` must list real modules, so add each file when it lands. Provider SDKs (boto3, google-auth) may be imported only inside their own adapter, as optional extras.
 
 ## 5. Dependencies (base install: at most 6, 5 used)
 
@@ -147,3 +165,8 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0003](adr/0003-fail-closed.md): fail closed.
 - [ADR-0004](adr/0004-integer-money.md): integer money.
 - [ADR-0005](adr/0005-sqlite-and-postgres-no-redis.md): SQLite and Postgres, no Redis in v0.1.
+- [ADR-0006](adr/0006-raise-product-size-limit.md): raise the product size limit (superseded by ADR-0007).
+- [ADR-0007](adr/0007-drop-the-total-size-limit.md): drop the total product-size limit.
+- [ADR-0008](adr/0008-scope-display-name.md): scope display name (migration 0003).
+- [ADR-0009](adr/0009-review-hardening.md): behaviour changes from the v0.1 code and security reviews.
+- [ADR-0010](adr/0010-calls-http-status.md): `calls.http_status` is the provider's status, range-checked (migration 0004).
