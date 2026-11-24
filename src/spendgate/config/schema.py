@@ -240,6 +240,20 @@ class Bootstrap(_Strict):
     keys: list[BootstrapKey] = Field(default_factory=list)
 
 
+class AlertWebhook(_Strict):
+    """Budget warnings posted to one operator endpoint, signed, off the request path."""
+
+    url: SecretRef  # a webhook URL often carries a token, so it is referenced like a secret
+    signing_secret: SecretRef  # HMAC-SHA256 key for the signature header
+    timeout_seconds: PosInt = 5  # one delivery attempt, end to end
+    max_attempts: Annotated[int, Field(strict=True, ge=1, le=10)] = 5
+    queue_size: Annotated[int, Field(strict=True, ge=1, le=100_000)] = 1000
+
+
+class Alerts(_Strict):
+    webhook: AlertWebhook | None = None
+
+
 class Config(_Strict):
     server: Server
     ledger: Ledger
@@ -254,3 +268,4 @@ class Config(_Strict):
     bootstrap: Bootstrap = Field(default_factory=Bootstrap)
     anthropic: Anthropic = Field(default_factory=Anthropic)
     routing: Routing = Field(default_factory=Routing)
+    alerts: Alerts = Field(default_factory=Alerts)

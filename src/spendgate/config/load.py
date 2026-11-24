@@ -61,6 +61,17 @@ class Route:
 
 
 @dataclass(frozen=True, slots=True)
+class WebhookTarget:
+    """`alerts.webhook` with its URL and signing secret resolved (both hidden from reprs)."""
+
+    url: Secret  # a webhook URL often carries a token: it is never logged
+    signing_secret: Secret
+    timeout_seconds: int
+    max_attempts: int
+    queue_size: int
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Everything the gateway needs, validated. Secrets are `Secret` holders."""
 
@@ -74,6 +85,7 @@ class Settings:
     ledger_dsn: Secret | None  # postgres only
     ledger_path: Path | None  # sqlite only, resolved against the config file's directory
     routes: Mapping[str, Route]
+    alert_webhook: WebhookTarget | None = None  # `spendgate serve` posts budget warnings here
 
     @property
     def ledger_currency(self) -> str:
@@ -288,6 +300,21 @@ def _base_url_issue(url: str) -> str | None:
     return "must be an https:// URL (http:// only for localhost)"
 
 
+def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
+    hook = cfg.alerts.webhook
+    if hook is None:
+        return None
+    url = _secret(hook.url, "alerts.webhook.url", ctx)
+    key = _secret(hook.signing_secret, "alerts.webhook.signing_secret", ctx)
+    # The same rule as a provider base_url; the message never quotes the URL.
+    if url is not None and (problem := _base_url_issue(url.reveal())) is not None:
+        ctx.issues.append(("alerts.webhook.url", problem))
+        return None
+    if url is None or key is None:
+        return None
+    return WebhookTarget(url, key, hook.timeout_seconds, hook.max_attempts, hook.queue_size)
+
+
 def _deployment(
     spec: DeploymentSpec, prov: Provider, model_part: str, at: str, ctx: _Ctx
 ) -> ResolvedDeployment | None:
@@ -423,10 +450,11 @@ def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: lis
         if (problem := _ledger_file_issue(ledger_path)) is not None:
             issues.append(("ledger.backend.path", problem))
     routes = _routes(cfg, catalog, now_ms, ctx)
+    webhook = _webhook(cfg, ctx)
     _bootstrap_issues(cfg, catalog, issues)
     if issues or pepper is None:
         raise ConfigError(name, issues)
-    return Settings(path, cfg, catalog, docs, sha, fx, pepper, dsn, ledger_path, routes)
+    return Settings(path, cfg, catalog, docs, sha, fx, pepper, dsn, ledger_path, routes, webhook)
 
 
 def load(path: str | Path, *, env: Mapping[str, str], now_ms: int | None = None) -> Settings:

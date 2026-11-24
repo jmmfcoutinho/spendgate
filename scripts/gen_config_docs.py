@@ -54,6 +54,10 @@ D: dict[str, str] = {
     ),
     "Config.anthropic": "Request header allowlists for the Anthropic endpoint.",
     "Config.routing": "Failover and cooldown behaviour across deployments of one model.",
+    "Config.alerts": (
+        "Where budget warnings are sent besides the log. Unset: the `spendgate.budget` log "
+        "lines only."
+    ),
     # Server
     "Server.listen": "Data-plane address, `host:port`.",
     "Server.admin": (
@@ -277,6 +281,29 @@ D: dict[str, str] = {
     "SessionDefaultsSpec.max_new_sessions_per_hour": (
         "Most new sessions this key may start in an hour, idle restarts included, so minting "
         "session ids cannot dodge the limits. `null` removes the bound."
+    ),
+    # Alerts
+    "Alerts.webhook": (
+        "Post each budget warning (`soft_threshold`, `cap_breached`, `blocked`) to one HTTPS "
+        "endpoint, signed. Used by `spendgate serve` only; library mode logs them. See "
+        "[budget warnings](operations.md#budget-warning-webhook)."
+    ),
+    "AlertWebhook.url": (
+        "Secret reference to the receiver URL (it often carries a token). `https` only, or "
+        "`http` for loopback; redirects are not followed."
+    ),
+    "AlertWebhook.signing_secret": (
+        "Secret reference to the HMAC-SHA256 key. Each post carries `X-Spendgate-Signature: "
+        "sha256=<hex>` over the exact body bytes."
+    ),
+    "AlertWebhook.timeout_seconds": "Longest one delivery attempt may take, end to end.",
+    "AlertWebhook.max_attempts": (
+        "Tries per warning. A network error, a timeout, a 429 or a 5xx is retried after 1, 2, "
+        "4, ... seconds (at most 30); any other answer outside 2xx is final."
+    ),
+    "AlertWebhook.queue_size": (
+        "Warnings waiting to be posted. When full, a new warning is dropped and counted in "
+        "`spendgate_alert_webhooks_total{result=\"dropped\"}`; calls are never delayed."
     ),
 }
 
