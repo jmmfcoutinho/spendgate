@@ -41,7 +41,7 @@ Every component above is exactly one package. Rows show the one-line job and the
 | `spendgate.config` | Reads `spendgate.yaml` and catalog YAML files, computes their sha256, produces typed settings and the dicts for `core.catalog.parse`. | `core` |
 | `spendgate.client` | SDK helpers and proxy-mode client: headers, error mapping. | `core` |
 | `spendgate.pipeline` | The 10 steps, routing (ordered deployments plus `DeploymentHealth`), streaming relay, key verification. No HTTP framework. Also the composition helper `pipeline/adapters.py` (`build_providers`): the one module that imports the concrete provider adapters, because it builds them from `Settings` and `providers` and `config` may not meet. It is the only place that does, and the gateway and library mode both call it. | `core`, `ledger.port`, `providers.port`, `config`; `providers.*` and `ledger.ids`/`ledger.key_types` from `adapters.py` and the type imports of `pipeline.py` only |
-| `spendgate.gateway` | Starlette app, admin API, observability, the optional budget-warning webhook (`alert_webhook.py`, a handler on the `spendgate.budget` logger with its own background poster). Wires ledger, providers and config. | `pipeline` and below |
+| `spendgate.gateway` | Starlette app, admin API, observability, the optional budget-warning webhook (`alert_webhook.py`, a handler on the `spendgate.budget` logger with its own background poster). Wires ledger, providers and config. `gateway/otel.py` is the only module that imports OpenTelemetry (the optional `otel` extra), behind the pipeline's `Tracer` port. | `pipeline` and below |
 | `spendgate.local` | In-process library mode: `spendgate.local.guard(cap="5 USD", catalog=None)` builds the same pipeline with a `LocalPrincipal`; the ledger currency follows the cap's currency (bundled catalog is USD; another currency needs `fx=` and otherwise fails with a clear message); sync transport runs its own loop thread (safe in notebooks) plus an async transport. Never imports `gateway`. | `pipeline` and below |
 | `spendgate.cli` | Command line: serve, keys, budgets, usage, kill switch, migrate. Thin layer over the same ledger functions as the admin API. Also `catalog import` (`cli/catalog.py`), the only code that downloads anything, by operator action and never while serving ([ADR-0014](adr/0014-catalog-import-command.md)). | everything |
 
@@ -159,13 +159,21 @@ source_modules = ["spendgate"]
 forbidden_modules = ["uvicorn"]
 ignore_imports = ["spendgate.cli.serve -> uvicorn"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only gateway.otel imports OpenTelemetry"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["opentelemetry"]
+ignore_imports = ["spendgate.gateway.otel -> opentelemetry"]
+allow_indirect_imports = true
 ```
 
 Notes: `include_external_packages` is needed for the external bans. The Starlette and uvicorn contracts are allow-lists: the whole package is the source, so a new package is covered at once, and only the `ignore_imports` entries are exempt. They check direct imports only, because `cli` imports `gateway` to serve it; the `layers` contract already keeps every other package away from `gateway`. The `|` layer is independent (siblings), so `local` cannot import `gateway` and vice versa; the `layers` contract also stops lower layers importing upward. The `independence` contract on `spendgate.providers.*` must list real modules, so add each file when it lands. Provider SDKs (boto3, google-auth) may be imported only inside their own adapter, as optional extras.
 
 ## 5. Dependencies (base install: at most 6, 5 used)
 
-Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psycopg`), boto3 and Google auth are extras. SQLite is in the standard library.
+Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psycopg`), boto3, Google auth and OpenTelemetry (`otel`) are extras. SQLite is in the standard library.
 
 ## 6. Decisions
 
@@ -181,3 +189,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0010](adr/0010-calls-http-status.md): `calls.http_status` is the provider's status, range-checked (migration 0004).
 - [ADR-0015](adr/0015-readiness-and-shutdown.md): a kill switch leaves readiness alone; keep-alive and drain deadline settings.
 - [ADR-0018](adr/0018-migration-policy.md): migrations are a separate step (`serve` migrates Postgres only when asked); code accepts one compatible step ahead.
+- [ADR-0019](adr/0019-otel-extra.md): ledger health metrics and the optional OpenTelemetry extra (`otel`).
