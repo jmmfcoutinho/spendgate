@@ -35,7 +35,8 @@ Issue #29: the defaults left an agent more room than the session design suggests
   an agent minting an id per call.
 - `defaults.limits.concurrency` defaults to 16, the value the Compose reference and the example
   config already set. It applies to every key without its own `concurrency`, in the proxy and in
-  library mode. An explicit `null` keeps it unlimited. The default sits on a `DefaultLimits` model,
+  library mode, where `guard(concurrency=...)` changes it (`None`: no bound). An explicit `null`
+  keeps it unlimited. The default sits on a `DefaultLimits` model,
   so a key's own `limits` still default to unset and keep following `defaults.limits`.
 - `docs/how-money-is-protected.md` states the bound this gives: the overrun past the cap at a
   crossing is at most the sum, over the calls in flight at that moment, of `actual - hold`.

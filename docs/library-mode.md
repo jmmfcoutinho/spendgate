@@ -63,6 +63,12 @@ the ledger connections (`await guard.aclose()` for async clients).
   `cap="5 USD"` needs no exchange rate. `cap="5 EUR"` needs
   `fx=FxSnapshot.of("USD", "EUR", "0.92", "2026-11-17", "ECB")` and otherwise fails at start with
   `no FX rate USD to EUR`. A currency cannot be changed on an existing ledger.
+- **Calls in flight.** Each client (and each `transport()`) admits at most 16 calls at once, as
+  the proxy does per key; more are refused with `rate_limited` (`details.limit: concurrency`)
+  until one finishes. The bound also limits how far past the cap the budget can go when calls
+  settle above their holds ([how money is protected](how-money-is-protected.md)). Change it with
+  `guard(cap=..., concurrency=64)`; `concurrency=None` removes it. With `config=`, the file's
+  `defaults.limits.concurrency` sets it instead (`null` removes it).
 - **Ledger location.** `default_ledger_path()`: `$XDG_DATA_HOME/spendgate/local-ledger.db`
   (default `~/.local/share/...`) on Linux, `~/Library/Application Support/spendgate/` on macOS
   (POSIX only: setup uses `fcntl` file locks). The folder is created 0700 and the file 0600; a file
@@ -100,14 +106,6 @@ limits because the proxy takes them from the key. Here the limits travel with ea
 local principal's session defaults, and the ledger copies them onto the session the first time
 its id is used. Later blocks with the same id keep the limits the session started with. A session
 budget is its own cap inside the shared one; reaching it returns `session_limit_reached`.
-
-## Calls in flight
-
-A transport admits at most 16 calls in flight at once by default, as the proxy does per key: more
-are refused with `rate_limited` (`details.limit: concurrency`) until one finishes. The bound also
-limits how far past the cap a budget can go when calls settle above their holds
-([how money is protected](how-money-is-protected.md)). With a config file,
-`defaults.limits.concurrency` sets it (`null` removes it).
 
 ## Several scripts, one machine
 

@@ -38,11 +38,15 @@ All notable changes to this project are documented here. The format follows
   (`param: X-Spendgate-Session`) before any hold, so an agent cannot leave its session limits
   behind by dropping the header. It needs `session_defaults`
   ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
+- `spendgate.local.guard(concurrency=...)`: the most calls each client admits at once (16 by
+  default, `None` for no bound). With `config=`, the file's `defaults.limits.concurrency` sets it.
 
 ### Changed
 
 - Safer defaults for agents ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)):
-  `defaults.limits.concurrency` is 16 when the config leaves it out (it was unlimited), and
+  `defaults.limits.concurrency` is 16 when the config leaves it out (it was unlimited), also in
+  library mode, where each `guard()` client now admits 16 calls at once unless `concurrency=`
+  says otherwise (`concurrency=None` for no bound), and
   `session_defaults.max_new_sessions_per_hour` is 60 when a key's session defaults leave it out,
   in the config and the admin API (it was unlimited). An explicit `null` keeps either unlimited.
   Keys already stored keep the session limits they were created with. The example config has

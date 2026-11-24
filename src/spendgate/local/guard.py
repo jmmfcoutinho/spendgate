@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Literal, Protocol, overload
 import httpx
 
 from spendgate.config import ConfigError, Settings, load
+from spendgate.config.schema import DEFAULT_CONCURRENCY
 from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.money import FxSnapshot, Money, parse_amount
 from spendgate.local import sdk as sdk_clients
@@ -115,9 +116,10 @@ def _load_synthesized(
             raise
 
 
-def _synthesize(
+def _synthesize(  # noqa: PLR0913 - guard()'s options, passed through
     cap: Money, catalog: str | Path | None, ledger_path: Path,
-    fx: FxSnapshot | Sequence[FxSnapshot] | None, provider_keys: Mapping[str, str] | None,
+    fx: FxSnapshot | Sequence[FxSnapshot] | None, provider_keys: Mapping[str, str] | None, *,
+    concurrency: int | None,
 ) -> Settings:  # fmt: skip
     keys = dict(provider_keys or {})
     unknown = set(keys) - set(PROVIDERS)
@@ -134,7 +136,9 @@ def _synthesize(
         names = " or ".join(var for var, _ in PROVIDERS.values())
         raise GuardError(f"no provider credentials: set {names}, pass provider_keys=, or config=")
     extra = Path(catalog).resolve() if catalog is not None else None
-    config = _config(cap, ledger_path, extra, fx, present)
+    # The proxy's `defaults.limits.concurrency`: calls in flight per transport (None = unbounded).
+    limits = {"defaults": {"limits": {"concurrency": concurrency}}}
+    config = _config(cap, ledger_path, extra, fx, present) | limits
     return _load_synthesized(config, env, fx is not None, cap)
 
 
@@ -250,6 +254,7 @@ def guard(  # noqa: PLR0913 - the quick start's documented options
     fx: FxSnapshot | Sequence[FxSnapshot] | None = None,
     provider_keys: Mapping[str, str] | None = None, config: str | Path | None = None,
     client: httpx.AsyncClient | None = None, now_ms: Clock = system_ms,
+    concurrency: int | None = DEFAULT_CONCURRENCY,
 ) -> Guard:  # fmt: skip
     """Open (or create) the local ledger with a lifetime budget of `cap` and return a `Guard`.
 
@@ -258,22 +263,28 @@ def guard(  # noqa: PLR0913 - the quick start's documented options
     another cap is an error, never a silent change. The ledger currency is the cap's currency; a
     cap that differs from the catalog's (USD) needs `fx=`. `config=` takes a `spendgate.yaml`
     instead of building routes from the environment (it must use the same currency as `cap`).
+    `concurrency` is the most calls each client admits at once (None: no bound); with `config=`
+    the file's `defaults.limits.concurrency` sets it instead.
     """
     amount = parse_amount(cap)
     if amount.nano <= 0:
         raise GuardError("cap must be greater than zero")
+    if concurrency is not None and (isinstance(concurrency, bool) or concurrency < 1):
+        raise GuardError("concurrency must be a positive integer or None")
     path = Path(ledger_path) if ledger_path is not None else default_ledger_path()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if config is not None:
         if catalog is not None or fx is not None or provider_keys is not None:
             raise GuardError("config= already names the catalog, fx and credentials; drop those")
+        if concurrency != DEFAULT_CONCURRENCY:
+            raise GuardError("config= sets defaults.limits.concurrency; drop concurrency=")
         settings = load(config, env=local_env())
         if settings.ledger_currency != amount.currency:
             raise GuardError(
                 f"{config} has ledger currency {settings.ledger_currency}, not {amount.currency}"
             )
     else:
-        settings = _synthesize(amount, catalog, path, fx, provider_keys)
+        settings = _synthesize(amount, catalog, path, fx, provider_keys, concurrency=concurrency)
     # Start one transport and drop it: scope and budget are created now, so a bad cap, a wrong
     # currency or a mismatched ledger fails here and not on the first request.
     transport(settings, ledger_path=path, cap=cap, client=client, now_ms=now_ms).close()
