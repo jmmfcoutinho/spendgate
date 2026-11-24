@@ -143,6 +143,14 @@ All notable changes to this project are documented here. The format follows
   id, never the message. `charged: true` shows a call that was charged although the client got
   the error. Library mode logs the same facts on the `spendgate.local` logger. Logging only:
   responses and charges are unchanged. An independent fix was also proposed in #42; thank you.
+  responses and charges are unchanged.
+- A `budget_exhausted` or `budget_period_exhausted` refusal from a budget that still has room no
+  longer says the budget is exhausted. The message now says the call's worst-case hold exceeds the
+  remaining budget and suggests setting `max_tokens` (or `max_output_tokens`) or raising the cap;
+  without `max_tokens` the hold uses the catalog's output ceiling, so a 5 USD cap could refuse a
+  flagship call with 4.99 USD left. The code and status are unchanged, and `details.hold` now carries
+  the hold in the same format as `details.remaining`. A budget with nothing left keeps the old
+  message.
 
 ## [0.1.1] - 2026-11-20
 
