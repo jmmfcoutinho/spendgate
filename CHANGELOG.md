@@ -192,6 +192,20 @@ All notable changes to this project are documented here. The format follows
   as its notes (marked as a pre-release for `aN`, `bN` and `rcN` versions). An empty section stops
   the release before anything is published.
 - README links are absolute, so they work on the PyPI project page.
+- Docs: the local guide documents the signed GHCR images (`:<version>` and `:<version>-full`),
+  how to verify them with cosign, and using them with Compose instead of building.
+- Docs: the LiteLLM comparison covers end-user and team budgets, budget windows, soft-budget
+  alerts, admin UI and SSO, guardrails and caching, budgets without a database server and supply
+  chain, with links to LiteLLM's documentation, and a section on running spendgate in front of
+  LiteLLM.
+- Docs: the README quickstart config sets an output ceiling (`defaults.max_output_tokens`) and a
+  separate admin listener (`server.admin`), and every `create()` sample passes `max_tokens`. The
+  README states the catalog size, links how to add models, and says the image needs no Python
+  3.13 on the host.
+- Docs: the local guide installs from PyPI (or `uvx`) instead of saying the package is not
+  published; stale paths and wording fixed in the catalog schema page, the design summary (name
+  check done), decision D4 (`ledger.currency` is required) and the example config header (which
+  secrets must exist before `check-config`).
 
 ## [0.1.1] - 2026-11-20
 

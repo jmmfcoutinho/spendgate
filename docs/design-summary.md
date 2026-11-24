@@ -31,11 +31,11 @@
 
 | Doc | What it fixes |
 |---|---|
-| [decisions.md](./decisions.md) | Name, Apache-2.0 licence, hosting, EUR, no telemetry, providers, Python 3.13+, local-first |
+| [decisions.md](./decisions.md) | Name, Apache-2.0 licence, hosting, ledger currency, no telemetry, providers, Python 3.13+, local-first |
 | [architecture.md](./architecture.md) + [ADRs 0001–0005](./adr/) | Packages, import rules, pipeline order, Starlette, fail closed, integer money, SQLite + Postgres |
 | [protocol.md](./protocol.md) + [admin-openapi.yaml](./admin-openapi.yaml) | Endpoints, allowlists, headers, error codes and statuses, admin API |
 | [data-model.md](./data-model.md) + [ledger-state-machine.md](./ledger-state-machine.md) | Tables (SQL), reservation states, 19 money scenarios (simulated in SQLite) |
-| [catalog-schema.md](./catalog-schema.md) (+ `.json`, example) | Price file format; every price of the earlier in-house guard expressed as data |
+| [catalog-schema.md](./catalog-schema.md) (+ `.json`, example) | Price file format; every price of a private tool that predates spendgate, expressed as data |
 | [threat-model.md](./threat-model.md) | 19 threats, controls, test ids, 5 accepted risks |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) + `lightweight_report.py` | Code style, tests, quality gates, size report, release process |
 | [reviews/](reviews/) | Code, security, load, verification and live-smoke reviews of v0.1, with findings and severities |
@@ -54,4 +54,4 @@ Also by design: SDK-only (library) mode is cooperative. Code holding a provider 
 
 ## Still open
 
-Some catalog prices are still `verified: false` until re-checked against the provider's page. The trademark registers (EUIPO, USPTO, UK IPO) have not been searched yet; see [decisions.md](decisions.md).
+Some catalog prices are still `verified: false` until re-checked against the provider's page. The name check is done: the trademark registers (USPTO; EUIPO, UK IPO and national offices through TMview) were searched on 2026-11-20 with no result for "spendgate"; see [decisions.md](decisions.md).
