@@ -6,6 +6,7 @@ from pathlib import Path
 
 from spendgate.core.failures import AttemptError, StopReason
 from spendgate.core.outcomes import Outcome
+from spendgate.pipeline import streaming
 from tests.fakes import Script
 from tests.integration.harness import async_test, open_stack
 from tests.integration.stream_rig import chat_chunk
@@ -58,3 +59,18 @@ async def test_a_client_that_goes_away_is_stored_as_client_gone(tmp_path: Path) 
         await s.pipeline.aclose()
         rid = s.observer.held[0].request_id
         assert codes(tmp_path, rid) == [(Outcome.CANCELLED, StopReason.CLIENT_GONE)]
+
+
+@async_test
+async def test_a_stream_past_its_deadline_stops_itself_as_max_duration(tmp_path: Path) -> None:
+    """No heartbeat runs, so no abort: the stream's own next step sees the deadline (SR-13)."""
+    async with gated(tmp_path, pipeline_kwargs={"max_request_seconds": 1}) as (s, up):
+        call = await open_call(s)
+        s.clock.advance(seconds=2)  # past the deadline; the 60 s lease is nowhere near expiry
+        up.streams[0].put(chat_chunk("late"))
+        text = (await call.read_all()).decode()
+        await call.finish()
+        await s.pipeline.aclose()
+        assert streaming._TOO_LONG_MESSAGE in text  # the table itself is what is checked
+        rid = s.observer.held[0].request_id
+        assert codes(tmp_path, rid) == [(Outcome.STREAM_BROKEN, StopReason.MAX_DURATION)]
