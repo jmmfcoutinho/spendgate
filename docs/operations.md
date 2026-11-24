@@ -139,17 +139,20 @@ still being renewed by a live instance is left alone. A failing pass is logged a
 
 ## Draining on restart
 
-On `SIGTERM`, `serve` stops accepting connections and waits for every call in flight, streams
+On `SIGTERM`, `serve` closes its listener at once and waits for every call in flight, streams
 included, before it shuts down; the lease heartbeat keeps running while it waits, so those holds
 are settled normally. It does not set a drain deadline of its own: the orchestrator's grace period
-is the deadline, and a second `SIGTERM` or `SIGINT` exits at once. A call still running when the process is killed is never settled by it; its hold
-expires after `ledger.lease_seconds` and the next sweep (any instance, or this one after restart)
-charges it **in full**. Size the stop so that does not happen:
+is the deadline. Once shutdown has started, a `SIGINT` forces an exit and a second `SIGTERM` does
+nothing (uvicorn 0.54). A forced exit skips the lifespan shutdown, so the holds still open are left
+to the sweeper. A call still running when the process is killed or forced out is never settled by
+it; its hold expires after `ledger.lease_seconds` and the next sweep (any instance, or this one
+after restart) charges it **in full**. Size the stop so that does not happen:
 
-- **Stop sending new calls first.** `/readyz` does not turn unready on `SIGTERM`, so give the load
-  balancer time to drop the instance before the signal: in Kubernetes a `preStop` hook that waits
-  5 to 10 seconds (the `sleep` lifecycle action; the image has no shell, but
-  `python -c "import time; time.sleep(10)"` also works).
+- **Stop sending new calls first.** The listener closes as soon as `SIGTERM` arrives, so new
+  connections are refused until the load balancer drops the instance, and `/readyz` does not turn
+  unready before that. That gap is why the load balancer needs time before the signal: in
+  Kubernetes a `preStop` hook that waits 5 to 10 seconds, with the `sleep` lifecycle action
+  (Kubernetes 1.30 and later) or `exec: {command: ["sleep", "10"]}`.
 - **Grace period sized to the longest stream.** One call or stream runs at most
   `server.max_request_seconds` (default 900). Set `terminationGracePeriodSeconds` (Compose:
   `stop_grace_period`, default 10 s) to at least the `preStop` wait plus `max_request_seconds` plus

@@ -208,6 +208,8 @@ All notable changes to this project are documented here. The format follows
   secrets must exist before `check-config`).
 - An import-linter contract, "only the gateway imports Starlette", so no package but
   `spendgate.gateway` can import Starlette directly.
+- Import-linter contracts "only the gateway imports Starlette" and "only cli.serve imports
+  uvicorn": allow-lists over the whole package, so a new module is covered at once.
 - Operations guidance for draining on restart (a `preStop` wait, a grace period sized to
   `server.max_request_seconds`, and the lease and sweep window after a kill) and for a verified
   TLS Postgres connection (`sslmode=verify-full`).

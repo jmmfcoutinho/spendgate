@@ -47,7 +47,7 @@ Every component above is exactly one package. Rows show the one-line job and the
 
 Notes:
 - `catalog/prices.yaml` and `catalog/schema.json` are data, not a package. `config` reads them; `core.catalog.parse` validates and resolves.
-- Only `spendgate.gateway` imports Starlette: today `gateway.app`, `gateway.admin`, `gateway.admin_http`, `gateway.admin_budgets`, `gateway.admin_scopes`, `gateway.admin_reports` and `gateway.observability`. `cli.serve` imports uvicorn to run the gateway apps, and nothing else imports uvicorn. `pipeline` stays framework free so `local` can reuse it. Two import-linter contracts check this ("pipeline has no HTTP framework", "only the gateway imports Starlette").
+- Only `spendgate.gateway` imports Starlette: today `gateway.app`, `gateway.admin`, `gateway.admin_http`, `gateway.admin_budgets`, `gateway.admin_scopes`, `gateway.admin_reports` and `gateway.observability`. `cli.serve` imports uvicorn to run the gateway apps, and nothing else imports uvicorn. `pipeline` stays framework free so `local` can reuse it. Three import-linter contracts check this ("pipeline has no HTTP framework", "only the gateway imports Starlette", "only cli.serve imports uvicorn").
 - No package is named `utils` or `common`. Shared code goes to `core` if pure, or to its owner package.
 - Sibling adapters never import each other: `ledger.sqlite` vs `ledger.postgres`, and each provider module vs the others.
 - Limits (RPM, TPM, concurrency) are per process in v0.1; budgets are exact in the ledger. A shared limiter store is on the [roadmap](../ROADMAP.md).
@@ -67,7 +67,7 @@ Pipeline order (fixed, one function per step in `spendgate.pipeline`):
 9. Settle once on the reservation (after send, a cancel or failure is the full hold unless usage was seen, for a stream its final usage, M-13), or `release` if every attempt was `not_processed`.
 10. Record (`calls` row per attempt) and emit headers, logs and metrics.
 
-Steps 1 and 2 are `Pipeline.serve`, the HTTP entry. Library mode passes an already parsed request to `Pipeline.handle`, which authenticates its local principal and runs steps 3 to 10.
+Both entry points, the gateway and library mode, call `Pipeline.serve`, which runs steps 1 and 2 and then steps 3 to 10 on the parsed request. Library mode sends a placeholder key that its local key store accepts.
 
 Refused requests write no `calls` row (logs and metrics only). Steps 3 to 6 are functions in `pipeline/steps.py` (`prepare`, `admit_limits`) that call the pure rules in `core` (catalog, estimate, cost, policy, limits); they contact neither a provider nor the ledger. Steps 7 and 9 use the ledger port. Step 8 uses the provider port.
 
@@ -138,15 +138,21 @@ forbidden_modules = ["starlette", "uvicorn"]
 [[tool.importlinter.contracts]]
 name = "only the gateway imports Starlette"
 type = "forbidden"
-source_modules = [
-  "spendgate.core", "spendgate.ledger", "spendgate.providers", "spendgate.config",
-  "spendgate.client", "spendgate.pipeline", "spendgate.local", "spendgate.cli",
-]
+source_modules = ["spendgate"]
 forbidden_modules = ["starlette"]
+ignore_imports = ["spendgate.gateway.** -> starlette"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only cli.serve imports uvicorn"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["uvicorn"]
+ignore_imports = ["spendgate.cli.serve -> uvicorn"]
 allow_indirect_imports = true
 ```
 
-Notes: `include_external_packages` is needed for the external bans. The Starlette contract checks direct imports only, because `cli` imports `gateway` to serve it; the `layers` contract already keeps every other package away from `gateway`. The `|` layer is independent (siblings), so `local` cannot import `gateway` and vice versa; the `layers` contract also stops lower layers importing upward. The `independence` contract on `spendgate.providers.*` must list real modules, so add each file when it lands. Provider SDKs (boto3, google-auth) may be imported only inside their own adapter, as optional extras.
+Notes: `include_external_packages` is needed for the external bans. The Starlette and uvicorn contracts are allow-lists: the whole package is the source, so a new package is covered at once, and only the `ignore_imports` entries are exempt. They check direct imports only, because `cli` imports `gateway` to serve it; the `layers` contract already keeps every other package away from `gateway`. The `|` layer is independent (siblings), so `local` cannot import `gateway` and vice versa; the `layers` contract also stops lower layers importing upward. The `independence` contract on `spendgate.providers.*` must list real modules, so add each file when it lands. Provider SDKs (boto3, google-auth) may be imported only inside their own adapter, as optional extras.
 
 ## 5. Dependencies (base install: at most 6, 5 used)
 

@@ -181,16 +181,22 @@ type = "forbidden"
 source_modules = ["spendgate.pipeline"]
 forbidden_modules = ["starlette", "uvicorn"]
 
-# Direct imports only: cli imports gateway (which uses Starlette) to serve it, and the layers and
-# independence contracts already keep every other package from reaching gateway.
+# Allow-lists: the whole package is the source, and only the named imports are exempt. Direct
+# imports only, because cli reaches Starlette through gateway (the layers contract governs that).
 [[tool.importlinter.contracts]]
 name = "only the gateway imports Starlette"
 type = "forbidden"
-source_modules = [
-  "spendgate.core", "spendgate.ledger", "spendgate.providers", "spendgate.config",
-  "spendgate.client", "spendgate.pipeline", "spendgate.local", "spendgate.cli",
-]
+source_modules = ["spendgate"]
 forbidden_modules = ["starlette"]
+ignore_imports = ["spendgate.gateway.** -> starlette"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only cli.serve imports uvicorn"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["uvicorn"]
+ignore_imports = ["spendgate.cli.serve -> uvicorn"]
 allow_indirect_imports = true
 
 [tool.uv]

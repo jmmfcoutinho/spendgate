@@ -27,6 +27,8 @@ this purpose, and it can undo the guard in three ways:
 Do not give an autonomous agent with shell access a library-mode setup. Use the proxy with the
 perimeter ([Running locally](deploy/local.md)): the agent then holds only a virtual key, the ledger
 and provider keys live in another container, and an operator can stop it with the kill switch.
+Run the agent inside the app container, not on the Docker host: an agent in the `docker` group can
+`docker exec` into the gateway container and read its keys and ledger.
 
 ## Quick start
 
