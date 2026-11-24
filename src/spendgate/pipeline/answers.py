@@ -5,8 +5,8 @@ from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.policy import KeyPolicy, model_allowed
 from spendgate.pipeline import replies
 from spendgate.pipeline.closing import Call
+from spendgate.pipeline.forward_results import Answered, Failed
 from spendgate.pipeline.model import Reply
-from spendgate.pipeline.routing import Answered, Failed
 from spendgate.pipeline.settle import Closed
 
 INTERNAL = Refusal(ErrorCode.INTERNAL_ERROR, "The gateway failed; the request was not completed.")

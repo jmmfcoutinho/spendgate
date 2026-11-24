@@ -30,6 +30,7 @@ from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.auth import authenticate, recheck
 from spendgate.pipeline.closing import Call, Closer, Sleeper
 from spendgate.pipeline.faults import InternalEvent, fault_of
+from spendgate.pipeline.forward_results import Answered, Failed, Job, unavailable
 from spendgate.pipeline.holding import HOLD_SECONDS, Holder
 from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import (
@@ -47,7 +48,7 @@ from spendgate.pipeline.model import (
     models_endpoint,
     report_internal,
 )
-from spendgate.pipeline.routing import Answered, Failed, Forwarder, Job, unavailable
+from spendgate.pipeline.routing import Forwarder
 from spendgate.pipeline.settle import Book, Closed
 from spendgate.pipeline.streaming import PING_SECONDS, STREAM_LIMITS, Live, StreamBody, StreamEnv
 from spendgate.pipeline.upkeep import Step, Upkeep, heartbeat

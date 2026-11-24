@@ -1,6 +1,8 @@
 """Step 8: the failover loop inside one reservation.
 
-Candidates and their cooldowns come from `pipeline.candidates`. Failover happens only after an
+Candidates and their cooldowns come from `pipeline.candidates` (the `Router`); the result types
+and the refusal of a request that ends without an answer from `pipeline.forward_results`. This
+module is the loop itself and the classification of each attempt. Failover happens only after an
 attempt for which `not_processed` holds (never sent, or a `free_statuses` answer) and costs 0;
 every other result ends the request (M-01/M-13). The provider's own 429 is never a budget error.
 
@@ -17,7 +19,6 @@ as it is while it waits: nothing was sent, so nothing about the money changes.
 import asyncio
 import contextlib
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
 
 import httpx
 
@@ -28,18 +29,20 @@ from spendgate.core.outcomes import Outcome
 from spendgate.ledger.port import AttemptRecord
 from spendgate.pipeline.candidates import Cause, Router, Target, retry_hint
 from spendgate.pipeline.faults import Fault, fault_of
+from spendgate.pipeline.forward_results import (
+    Answered,
+    Failed,
+    Job,
+    Retry,
+    exhausted,
+    failure_for,
+    unavailable,
+)
 from spendgate.pipeline.model import AttemptEvent, Clock, Observer, Sender
 from spendgate.pipeline.settle import Book, Flight, Reading, attempt_record, read_usage
 from spendgate.pipeline.streaming import Live
 from spendgate.pipeline.transport import SendError, SendFailure, exchange, open_response, read_body
-from spendgate.providers.port import (
-    CleanRequest,
-    Provider,
-    SseLimits,
-    Untranslatable,
-    UpstreamError,
-    UpstreamResponse,
-)
+from spendgate.providers.port import SseLimits, Untranslatable, UpstreamResponse
 
 _MS = 1000
 _HTTP_OK = 200
@@ -50,59 +53,6 @@ _OUR_CREDENTIAL_FAULTS = frozenset({401, 403, 404})  # the deployment is misconf
 # Longest a request waits for a cooling deployment. At least `HealthConfig.throttle_max_ms`, so a
 # 429 without Retry-After is always outwaited; a longer Retry-After is refused at once instead.
 MAX_WAIT_MS = 1_000
-
-
-# --- results -----------------------------------------------------------------------------------
-
-
-@dataclass(frozen=True, slots=True)
-class Answered:
-    """A successful provider answer, already in the client's shape."""
-
-    response: UpstreamResponse
-
-
-@dataclass(frozen=True, slots=True)
-class Failed:
-    """The request ended without an answer for the client."""
-
-    refusal: Refusal
-    status: int
-    should_retry: bool = False
-    fault: Fault | None = None  # a catch-all's redacted trace, reported once the call is closed
-
-
-@dataclass(frozen=True, slots=True)
-class _Retry:
-    cause: Cause
-    retry_after_s: int | None
-
-
-@dataclass(frozen=True, slots=True)
-class Job:
-    """Everything the loop needs about one admitted request."""
-
-    request_id: str
-    request: CleanRequest
-    provider: Provider
-    targets: tuple[Target, ...]
-    free_statuses: frozenset[int]
-    model: str  # catalog id, for events
-
-
-def _throttled(provider: str, retry_after_s: int) -> Failed:
-    refusal = Refusal(
-        ErrorCode.UPSTREAM_THROTTLED,
-        "The provider is rate limiting this model; retry later.",
-        details={"provider": provider},
-        retry_after_seconds=retry_after_s,
-    )
-    return Failed(refusal, 429, should_retry=True)
-
-
-def unavailable(provider: str, message: str, status: int, *, retry: bool = False) -> Failed:
-    refusal = Refusal(ErrorCode.UPSTREAM_UNAVAILABLE, message, details={"provider": provider})
-    return Failed(refusal, status, should_retry=retry)
 
 
 class Forwarder:
@@ -126,7 +76,7 @@ class Forwarder:
 
     async def run(self, job: Job, book: Book) -> Answered | Failed | Live:
         tried: set[str] = set()
-        retries: list[_Retry] = []
+        retries: list[Retry] = []
         last: Target | None = None
         attempts = waited = 0
         start = self._now()
@@ -145,10 +95,10 @@ class Forwarder:
             tried.add(target.label)
             last = target
             step = await self._attempt(job, book, target)
-            if not isinstance(step, _Retry):
+            if not isinstance(step, Retry):
                 return step
             retries.append(step)
-        return self._exhausted(job, book, retries)
+        return exhausted(self._router, self._now, job, book, retries)
 
     def _pause(self, job: Job, tried: set[str], waited: int, start: int) -> int | None:
         """Ms to wait for the soonest cooling candidate, or None: refuse now.
@@ -168,42 +118,15 @@ class Forwarder:
             return None
         return pause
 
-    def _same_again(self, retries: list[_Retry], last: Target | None) -> Target | None:
+    def _same_again(self, retries: list[Retry], last: Target | None) -> Target | None:
         """No other candidate: a connect failure (never sent) is tried once more on the same one."""
         if last is None or not retries or retries[-1].cause is not Cause.UNREACHABLE:
             return None
         return last if last.shared.health.allow(self._now()) else None
 
-    def _exhausted(self, job: Job, book: Book, retries: list[_Retry]) -> Failed:
-        """Every attempt was not_processed (or none could be made): the hold is released."""
-        provider = job.targets[0].provider
-        hinted = [r.retry_after_s for r in retries if r.retry_after_s is not None]
-        wait = max(hinted) if hinted else self._router.wait_seconds(job.targets, self._now())
-        if retries:
-            if all(r.cause is Cause.QUOTA for r in retries):  # retrying a billing fault is futile
-                return unavailable(provider, "The provider could not serve the request.", 502)
-            if any(r.cause in (Cause.THROTTLED, Cause.QUOTA) for r in retries):
-                return _throttled(provider, wait)
-            return unavailable(provider, "The provider could not be reached.", 502, retry=True)
-        # Nothing was tried: every deployment is cooling or circuit-open.
-        if self._router.all_quota(job.targets):
-            book.idle_outcome = Outcome.THROTTLED
-            return unavailable(provider, "The provider could not serve the request.", 502)
-        if self._router.all_throttled(job.targets):
-            book.idle_outcome = Outcome.THROTTLED
-            return _throttled(provider, wait)
-        book.idle_outcome = Outcome.UNREACHABLE
-        refusal = Refusal(
-            ErrorCode.UPSTREAM_UNAVAILABLE,
-            "Every deployment is temporarily unavailable.",
-            details={"provider": provider},
-            retry_after_seconds=wait,
-        )
-        return Failed(refusal, 503, should_retry=True)
-
     async def _attempt(
         self, job: Job, book: Book, target: Target
-    ) -> _Retry | Answered | Failed | Live:
+    ) -> Retry | Answered | Failed | Live:
         try:
             # Token refreshes are blocking network calls: `prepare` runs them in a worker thread,
             # so a slow identity provider never stalls the other requests on this event loop.
@@ -309,7 +232,7 @@ class Forwarder:
 
     def _send_failed(
         self, job: Job, book: Book, target: Target, started: int, failure: SendFailure
-    ) -> _Retry | Failed:
+    ) -> Retry | Failed:
         now = self._now()
         if not failure.sent:  # connect/DNS/TLS before the request left: free, fail over
             # No cooldown: a slow DNS answer is not the provider asking us to wait. It counts
@@ -325,7 +248,7 @@ class Forwarder:
                 not_processed=True,
                 error_code=failure.code,
             )
-            return _Retry(Cause.UNREACHABLE, None)
+            return Retry(Cause.UNREACHABLE, None)
         self._router.failed(target, now)
         outcome = Outcome.TIMEOUT if failure.timeout else Outcome.UPSTREAM_5XX
         self._record(
@@ -395,7 +318,7 @@ class Forwarder:
 
     def _rejected(
         self, job: Job, book: Book, target: Target, started: int, response: UpstreamResponse
-    ) -> _Retry | Failed:
+    ) -> Retry | Failed:
         """A non-2xx answer: failover only when `not_processed`, otherwise it ends the request."""
         status = response.status
         if status < _HTTP_ERROR:  # a redirect or 1xx we never asked for: charged, fail closed
@@ -427,7 +350,7 @@ class Forwarder:
                 cooldown_ms=cooldown,
                 error_code=err.code,
             )
-            return _Retry(cause, retry_s)
+            return Retry(cause, retry_s)
         self._feed_health(target, status, now, started)
         self._record(
             job,
@@ -439,24 +362,10 @@ class Forwarder:
             not_processed=False,
             error_code=err.code,
         )
-        return _failure_for(err, target.provider)
+        return failure_for(err, target.provider)
 
     def _feed_health(self, target: Target, status: int, now: int, started: int) -> None:
         if status >= 500 or status == 408 or status in _OUR_CREDENTIAL_FAULTS:  # noqa: PLR2004
             self._router.failed(target, now)
         else:
             self._router.succeeded(target, now, started)  # it answered: the request was bad
-
-
-def _failure_for(err: UpstreamError, provider: str) -> Failed:
-    """The client's view of an answered provider error that did not fail over."""
-    code = err.code
-    if code is ErrorCode.INVALID_REQUEST:
-        return Failed(Refusal(code, "The provider rejected the request."), 400)
-    if code is ErrorCode.REQUEST_TOO_LARGE:
-        return Failed(Refusal(code, "The request is too large for the model."), 413)
-    if code is ErrorCode.UPSTREAM_THROTTLED:  # a 429 the catalog does not treat as free
-        return _throttled(provider, err.retry_after_seconds or 1)
-    if code is ErrorCode.UPSTREAM_UNAVAILABLE:
-        return unavailable(provider, "The provider could not serve the request.", 502)
-    return Failed(Refusal(ErrorCode.INTERNAL_ERROR, "The provider rejected the gateway."), 500)
