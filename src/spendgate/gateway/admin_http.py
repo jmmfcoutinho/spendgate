@@ -7,6 +7,7 @@ and never puts a secret or exception text in a message.
 
 import base64
 import json
+import logging
 import re
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -23,6 +24,7 @@ from spendgate.core.errors import ERROR_SPECS, DetailValue, ErrorCode, Refusal
 from spendgate.core.money import Money
 from spendgate.core.policy import KeyPolicy
 from spendgate.gateway.admin_models import MoneyIn
+from spendgate.gateway.logs import LOGGER_NAME, log_internal
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.observability import ReadinessChecks
 from spendgate.ledger.admin_port import AdminLedger
@@ -30,6 +32,7 @@ from spendgate.ledger.key_types import AdminScope, KeyKind, Principal
 from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import ConflictError, LedgerError, LedgerUnavailable, NotFoundError
 from spendgate.ledger.usage import UsageQueryError, UsageRangeError
+from spendgate.pipeline.faults import InternalEvent, fault_of
 from spendgate.pipeline.model import Clock
 from spendgate.pipeline.replies import REQUEST_ID_HEADER, error_body
 
@@ -221,7 +224,9 @@ def guarded(
             return error_response(exc.refusal, request_id)
         except Exception as exc:
             refusal = refusal_for(exc)
-            if refusal is None:
+            if refusal is None:  # a bug: leave a redacted trace on the JSON log (same logger)
+                fault = fault_of("admin.handler", exc)
+                log_internal(logging.getLogger(LOGGER_NAME), InternalEvent(request_id, fault))
                 refusal = Refusal(ErrorCode.INTERNAL_ERROR, "Internal error.")
             return error_response(refusal, request_id)
         response.headers[REQUEST_ID_HEADER] = request_id

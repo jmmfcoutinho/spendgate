@@ -10,12 +10,13 @@ from datetime import UTC, date, datetime
 
 from spendgate.config import Settings
 from spendgate.core.outcomes import Outcome
-from spendgate.gateway.logs import log_call, log_event
+from spendgate.gateway.logs import log_call, log_event, log_internal
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.observability import ReadinessChecks
 from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.port import LedgerPort
 from spendgate.pipeline.adapters import build_providers
+from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import (
     AttemptEvent,
     Clock,
@@ -85,6 +86,9 @@ class GatewayObserver:
             output_tokens=usage.output_tokens if usage else 0, cost=event.charged,
             latency_ms=event.latency_ms, http_status=event.http_status,
         )  # fmt: skip
+
+    def on_internal(self, event: InternalEvent) -> None:
+        log_internal(self._logger, event)
 
 
 def catalog_age_seconds(settings: Settings, now_ms: int) -> float | None:

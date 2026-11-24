@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
+from spendgate.pipeline.faults import InternalEvent
 
 # The only fields that may reach a log line. Adding one is a reviewed change.
 ALLOWED_FIELDS: frozenset[str] = frozenset(
@@ -20,6 +21,7 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "event", "request_id", "key_prefix", "scope_path", "model", "deployment", "outcome",
         "input_tokens", "output_tokens", "cached_tokens", "cost", "currency", "latency_ms",
         "ttft_ms", "status", "http_status", "reason", "level", "ts", "logger",
+        "where", "error_class", "frames", "settled",
     }
 )  # fmt: skip
 
@@ -29,6 +31,7 @@ _SECRET_SHAPE = re.compile(r"(?i)\b(?:sga?|sk)-[a-z0-9_-]{8,}|bearer\s+\S+")
 KEY_PREFIX_LEN = 8
 _EXTRA_ATTR = "spendgate_fields"
 LOGGER_NAME = "spendgate.call"
+INTERNAL_EVENT = "spendgate.internal"
 
 
 def redact(fields: Mapping[str, object]) -> dict[str, object]:
@@ -78,6 +81,15 @@ def log_call(  # noqa: PLR0913 - the documented call-log fields, all keyword-onl
         input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens,
         cost=amount, currency=cost.currency, latency_ms=latency_ms, ttft_ms=ttft_ms,
         http_status=http_status,
+    )  # fmt: skip
+
+
+def log_internal(logger: logging.Logger, event: InternalEvent) -> None:
+    """A catch-all's redacted trace: class and frames only, never the exception's message."""
+    fault = event.fault
+    log_event(
+        logger, INTERNAL_EVENT, logging.ERROR, request_id=event.request_id, where=fault.where,
+        error_class=fault.error_class, frames=fault.frames_text, settled=event.settled,
     )  # fmt: skip
 
 
