@@ -223,6 +223,21 @@ its owner, or a sweeper is expiring a lease that is already overdue (that stream
 Callers waiting for a pooled connection queue for up to 10 s; none is refused just for queueing,
 so a burst of new calls cannot block settlements or renewals of calls already running.
 
+**Round trips.** A budget row stays locked while the gateway waits on the network, so the
+ledger keeps round trips few: a call costs five, three for its hold and two for its settlement or
+release, however many budgets its scope chain has (a session adds a few to the hold). Statements that do not depend on each other
+go out together (psycopg pipeline mode, libpq 14 or later; with an older libpq they go one by
+one), `BEGIN` rides on the first and `COMMIT` on the last writes. The
+`X-Spendgate-Budget-Remaining` header comes back with the hold or the settlement, read under its
+locks; budget reports (`totals`) read without row locks, so they never queue behind holds.
+Pooled connections are not pinged before use. A connection the server closed (a restart, a
+failover, an idle timeout) is found by the transaction that uses it: if its `COMMIT` was not yet
+sent nothing was committed, so the transaction runs again on a fresh connection (up to 3 times)
+after the pool has dropped its other dead idle connections. A
+connection lost while the `COMMIT` was in flight is not re-run: the call is refused with
+`ledger_unavailable` and its hold, if it committed, is released at 0; a settlement is retried by
+the closer and the heartbeat, which is safe because it is state-guarded.
+
 A lock timeout (SQLSTATE 55P03) or a cancelled statement (57014) is refused as
 `ledger_unavailable` and not retried: a row held for 2 s is most likely still held a moment
 later. Deadlocks (40P01) and serialization failures (40001) are still retried, up to 3 times;
