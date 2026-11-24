@@ -32,14 +32,25 @@ Issue #33 asks for deployments that hold no long-lived cloud secret. Three gaps 
   `scope`, default the Azure Database for PostgreSQL audience), or a Google access token for Cloud
   SQL IAM sign-in (application default credentials, `sqlservice.login` scope). The DSN must name
   the user and carry no password; anything else refuses to start (exit code 3). A token is fetched
-  in a worker thread, one fetch at a time, and reused until 5 minutes before it expires. A failed
-  fetch is `ledger_unavailable`, naming the kind and the exception class only.
+  in a worker thread, one fetch at a time (callers share the fetch in flight, shielded so a
+  cancelled caller cannot start a second one), and reused until 5 minutes before it expires or
+  until a connect fails. libpq reports a rejected login (28P01, 28000) as an `OperationalError`
+  that often carries no SQLSTATE, so any failed connect forgets the cached token. A failed fetch is
+  `ledger_unavailable`, naming the kind and the exception class only. A DSN that is not a valid
+  connection string is refused without quoting it.
+- **The token libraries are imported by the ledger.** `ledger.postgres_auth` imports botocore,
+  azure-identity and google-auth, each lazily and only for its kind. This is an exception to the
+  rule that provider SDKs are imported only inside their own adapter (architecture.md section
+  4): the database login is not a provider call, and routing it through an adapter would make
+  the ledger depend on `providers`.
 - The pool reads its login per connection: psycopg_pool 3.3 accepts a callable `conninfo` and an
   async callable `kwargs`, so the DSN is read from the ledger and the token source is awaited each
   time a connection opens. The migration connection asks the token source too.
-- **SIGHUP** in `serve` re-reads every `file:` secret: provider credentials (swapped into the
-  router in one assignment, so a call in flight keeps the credential it started with) and the
-  ledger DSN (handed to connections opened from then on). A DSN may change only in its password; a
+- **SIGHUP** in `serve` re-reads every `file:` secret in a worker thread, so a slow mount never
+  blocks the event loop; signals during a reload coalesce into one more read after it. The
+  results are applied on the loop: provider credentials (the new router targets are built first,
+  then swapped in with one assignment, so a call in flight keeps the credential it started with)
+  and the ledger DSN (handed to connections opened from then on). A DSN may change only in its password; a
   new host, port, database, user or option is refused and the old DSN kept, because a silent move
   to another ledger with holds open would break the hold/settle pairing. `env:` secrets, the key
   pepper and every non-secret setting are not reloaded. A file that cannot be read keeps its old

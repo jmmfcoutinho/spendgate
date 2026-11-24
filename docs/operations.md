@@ -124,8 +124,10 @@ rollback-safe ships at most one migration, and marks it compatible.
   hour, at most seven days), so you can roll the new one out first.
 - **Revoke** now: `spendgate keys revoke KEY_ID`. List with `spendgate keys list`; secrets are
   never shown.
-- **Provider keys** live in the proxy's environment or secret files (`env:` and `file:` references)
-  and are read when the proxy starts. Rotate one by updating the secret and restarting.
+- **Provider keys** live in the proxy's environment or secret files (`env:` and `file:` references).
+  A `file:` key is read again on `SIGHUP`, without a restart (see
+  [rotating secrets](#rotating-secrets)); an `env:` key is read only at start, so rotating one
+  needs a restart.
 - **The pepper** protects stored key hashes. Do not rotate it casually: it invalidates every key.
 
 ## Kill switch
@@ -327,7 +329,8 @@ ledger:
 | `cloudsql_iam` | Google access token from application default credentials (`sqlservice.login` scope) | `google` | Cloud SQL IAM database authentication and an IAM user; for a service account the user is its email without `.gserviceaccount.com` |
 
 A token is fetched in a worker thread, one fetch at a time, and reused for every connection opened
-until 5 minutes before it expires. It is only needed to log in: a connection already open keeps
+until 5 minutes before it expires, or until a connect fails: the server may have rejected it, so
+the next login fetches a new one. It is only needed to log in: a connection already open keeps
 working after its token expires. The migration connection at start uses a token too. If a token
 cannot be fetched, the call that needed a new connection is refused with `ledger_unavailable`
 and the log names the kind and the error class, never the token. Use TLS (`sslmode=verify-full`,
@@ -444,6 +447,11 @@ no restart and no drain:
   the new password; open connections keep their session. Only the password may change. A DSN that
   names another host, port, database, user or option is refused and the old one stays in use:
   moving to another ledger is a restart.
+
+The files are read in a worker thread, so a slow or hung mount delays only the reload, never the
+calls being served; a `SIGHUP` that arrives during a reload makes it read once more when it ends,
+however many arrive. A DSN that is not a valid connection string is refused the same way as one
+that names another database, and the other secrets are still applied.
 
 `env:` secrets are not read again (a process's environment cannot change), nor is anything else in
 `spendgate.yaml`: routes, budgets and limits change with a restart. The key pepper is never
