@@ -116,6 +116,47 @@ def test_m01_a_second_call_on_the_last_unit_is_refused_because_of_the_held_amoun
     assert refusal.details["remaining"] == "0.000000000 EUR"
 
 
+def test_refusal_with_room_left_says_the_worst_case_hold_is_too_big() -> None:
+    """Issue #16: 9.999 left and a 10 hold is not "exhausted"; the message names the hold."""
+    refusal = check_admission(budget(), PeriodState(1, 0), 10 * U, 0, CUR).refusal
+    assert refusal is not None
+    assert refusal.code is ErrorCode.BUDGET_EXHAUSTED and refusal.http_status == 402
+    assert refusal.details["remaining"] == "0.000009999 EUR"
+    assert refusal.details["hold"] == "0.000010000 EUR"
+    assert "is exhausted" not in refusal.message
+    assert "worst-case hold for this call (0.000010000 EUR)" in refusal.message
+    assert "(0.000009999 EUR)" in refusal.message
+    assert "max_tokens" in refusal.message and "raise the cap" in refusal.message
+
+
+def test_period_refusal_with_room_left_says_the_worst_case_hold_is_too_big() -> None:
+    b = budget(period=Period.MONTH, scope_path="org:acme")
+    refusal = check_admission(b, PeriodState(0, 5 * U), 6 * U, ms(2026, 11, 13), CUR).refusal
+    assert refusal is not None
+    assert refusal.code is ErrorCode.BUDGET_PERIOD_EXHAUSTED
+    assert refusal.details["hold"] == "0.000006000 EUR"
+    assert refusal.details["period_resets_at"] == "2026-12-01T00:00:00Z"
+    assert "worst-case hold for this call (0.000006000 EUR)" in refusal.message
+    assert "org:acme (0.000005000 EUR)" in refusal.message
+
+
+def test_refusal_with_nothing_left_keeps_the_exhausted_message() -> None:
+    for period in (Period.NONE, Period.DAY):
+        b = budget(period=period, scope_path="org:acme")
+        refusal = check_admission(b, PeriodState(10 * U, 0), 1, ms(2026, 11, 13), CUR).refusal
+        assert refusal is not None
+        assert refusal.message == "Budget for org:acme is exhausted."
+        assert refusal.details["remaining"] == "0.000000000 EUR"
+        assert refusal.details["hold"] == "0.000000001 EUR"
+
+
+def test_overrun_review_refusal_keeps_its_message_without_a_hold() -> None:
+    refusal = check_admission(budget(review_required_at=5), PeriodState(0, 0), 1, 10, CUR).refusal
+    assert refusal is not None
+    assert refusal.message == "Budget for s1 awaits overrun review."
+    assert "hold" not in refusal.details
+
+
 def test_period_none_refusal_is_budget_exhausted_without_retry_after() -> None:
     refusal = check_admission(budget(), PeriodState(10 * U, 0), 1, 0, CUR).refusal
     assert refusal is not None

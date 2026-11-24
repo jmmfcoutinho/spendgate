@@ -175,6 +175,39 @@ def test_rate_limit_is_refused_before_upstream(tmp_path: Path) -> None:
     run(case, tmp_path)
 
 
+def test_refusal_with_room_left_names_the_worst_case_hold(tmp_path: Path) -> None:
+    """Issue #16: the hold, not the budget, is too big; the code stays `budget_exhausted`."""
+
+    async def case(path: Path) -> None:
+        async with open_stack(path, budget="0.000001") as s:
+            r = await s.chat(max_tokens=1000)
+            await refused(s, r, 402, "budget_exhausted")
+            error = error_of(r)
+            details = error["details"]
+            assert isinstance(details, dict) and isinstance(error["message"], str)
+            assert details["remaining"] == "0.000001000 USD"
+            hold = details["hold"]
+            assert isinstance(hold, str) and usd(hold.split()[0]) > usd("0.000001")
+            assert f"worst-case hold for this call ({hold})" in error["message"]
+            assert "max_tokens" in error["message"] and "is exhausted" not in error["message"]
+
+    run(case, tmp_path)
+
+
+def test_refusal_with_nothing_left_says_the_budget_is_exhausted(tmp_path: Path) -> None:
+    async def case(path: Path) -> None:
+        async with open_stack(path, budget="0") as s:
+            r = await s.chat(max_tokens=1000)
+            await refused(s, r, 402, "budget_exhausted")
+            error = error_of(r)
+            assert isinstance(error["message"], str) and error["message"].endswith("is exhausted.")
+            details = error["details"]
+            assert isinstance(details, dict) and details["remaining"] == "0.000000000 USD"
+            assert "hold" in details
+
+    run(case, tmp_path)
+
+
 def test_refused_request_refunds_its_limits(tmp_path: Path) -> None:
     """Limits admitted at step 6 come back when the hold refuses (budget too small)."""
 
