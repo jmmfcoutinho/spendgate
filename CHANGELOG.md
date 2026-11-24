@@ -189,6 +189,8 @@ All notable changes to this project are documented here. The format follows
   badges on the README.
 - The release workflow creates the GitHub Release for the tag, with the tag's CHANGELOG section
   as its notes.
+  as its notes (marked as a pre-release for `aN`, `bN` and `rcN` versions). An empty section stops
+  the release before anything is published.
 - README links are absolute, so they work on the PyPI project page.
 
 ## [0.1.1] - 2026-11-20
