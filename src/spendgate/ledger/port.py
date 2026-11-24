@@ -222,6 +222,15 @@ class Settlement:
 
 
 @dataclass(frozen=True, slots=True)
+class PoolStats:
+    """A connection pool right now (Postgres only), for the gauges at `/metrics`."""
+
+    size: int  # connections the pool holds: idle, lent out or still being opened
+    in_use: int  # lent out to a transaction
+    max_size: int
+
+
+@dataclass(frozen=True, slots=True)
 class SweepResult:
     expired: tuple[str, ...]  # reservations charged in full
     normalised: tuple[str, ...]  # budgets whose excess was recorded after a grant expired
