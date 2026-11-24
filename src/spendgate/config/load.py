@@ -26,6 +26,7 @@ from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
 from spendgate.core.policy import model_filter_matches
 
 _MS = 1000
+_NOT_HTTPS = "must be an https:// URL (http:// only for localhost)"
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
 
@@ -292,6 +293,8 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
 
 
 def _base_url_issue(url: str) -> str | None:
+    if not url.isprintable() or any(c.isspace() for c in url):
+        return _NOT_HTTPS  # urlsplit drops tabs and newlines before it reads the host
     scheme = url.partition("://")[0]
     try:  # the host as the HTTP client parses it: an `@` after a `?` or `#` is not userinfo
         host = urlsplit(url).hostname or ""
@@ -301,7 +304,7 @@ def _base_url_issue(url: str) -> str | None:
         return None
     if scheme == "http" and host in _LOOPBACK:
         return None  # plain HTTP only to this machine (tests, sidecars)
-    return "must be an https:// URL (http:// only for localhost)"
+    return _NOT_HTTPS
 
 
 def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:

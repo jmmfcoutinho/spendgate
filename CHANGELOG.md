@@ -79,7 +79,8 @@ All notable changes to this project are documented here. The format follows
   instead of a reason, and a failed read of it as the warning `kill_switch_probe_failed`
   (ADR-0015).
 - The `http://`-only-for-localhost rule for a provider `base_url` reads the host the way the HTTP
-  client does: a `?` or `#` ends the host part, so text after one is never taken for it.
+  client does: a `?` or `#` ends the host part, so text after one is never taken for it, and a
+  URL with whitespace or a non-printable character is refused.
 
 ## [0.1.3] - 2026-11-24
 

@@ -255,9 +255,19 @@ def test_plain_http_only_for_loopback(tmp_path: Path) -> None:
     assert load(ok, env=ENV).routes["m"].deployments[0].base_url == "http://127.0.0.1:9000/v1"
 
 
-@pytest.mark.parametrize("url", ["http://x.test?x=@127.0.0.1/v1", "http://x.test#@localhost/v1"])
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://x.test?x=@127.0.0.1/v1",
+        "http://x.test#@localhost/v1",
+        "http://local\thost/v1",
+        "http://x.test\r\n@localhost/v1",
+    ],
+)
 def test_plain_http_is_judged_by_the_host_the_client_parses(tmp_path: Path, url: str) -> None:
-    bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", url))
+    # Written as YAML escapes inside the double-quoted scalar, so the loader sees the raw bytes.
+    escaped = url.encode("unicode_escape").decode()
+    bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", escaped))
     assert "models.m.deployments.0.base_url: must be an https:// URL" in failure(bad)
 
 
@@ -351,6 +361,8 @@ def test_the_alert_webhook_resolves_its_url_and_secret_as_secrets(tmp_path: Path
         # An `@` after `?` or `#` is not userinfo: the host is x.test, not the loopback name.
         "http://x.test?x=@127.0.0.1/hook",
         "http://x.test#@localhost/",
+        "http://local\thost/hook",  # a tab or a newline is refused, not stripped
+        "http://x.test\r\n@localhost/hook",
     ],
 )
 def test_the_alert_webhook_url_must_be_https_and_is_never_echoed(tmp_path: Path, url: str) -> None:
