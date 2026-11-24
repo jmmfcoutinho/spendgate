@@ -284,8 +284,9 @@ class Provider(Protocol):
         adapter that needs one runs it here in a worker thread, one refresh at a time per
         credential (`providers.refresh`), so `translate` then finds a cached token. Static-key
         adapters do nothing. A credential fault raises, as it would from `translate`: the
-        pipeline answers internal_error and nothing is sent. `translate` still works without it
-        (refreshing inline), for direct callers and tests.
+        pipeline answers internal_error and nothing is sent. `translate` then signs with what
+        `prepare` readied and never refreshes on the loop; without a `prepare` (direct callers,
+        tests) it fetches inline.
         """
         ...
 

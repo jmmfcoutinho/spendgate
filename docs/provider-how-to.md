@@ -55,9 +55,11 @@ Rules the pipeline relies on:
   deployments and requests must not show credentials.
 - **Hostile responses are expected.** A stream that is malformed or too large raises
   `StreamBroken` or `StreamLimitExceeded`; it is settled at the final usage seen or the full hold.
-- **Never block the event loop.** `translate` is synchronous: it reads a cached token, and any
-  refresh happens in `prepare`. A credential fault raises; the pipeline answers `internal_error`
-  and sends nothing (fail closed).
+- **Never block the event loop.** `translate` is synchronous: it signs with what `prepare`
+  readied, and any refresh happens in `prepare`, single-flight per credential (a cancelled
+  caller leaves the refresh running for the next one). Never hold a lock that `translate` could
+  wait on across a fetch. A credential fault raises; the pipeline answers `internal_error` and
+  sends nothing (fail closed).
 - **Refuse, never drop.** A request field you cannot translate is `invalid_request` with `param`,
   not silently ignored.
 - **Inline media is an image or nothing.** Accept inline images only through
