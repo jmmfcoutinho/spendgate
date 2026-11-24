@@ -8,6 +8,7 @@ provider whose credential is available: `OPENAI_API_KEY` (or `provider_keys={"op
 `ANTHROPIC_API_KEY` (or `provider_keys={"anthropic": ...}`). Other providers need a config file.
 """
 
+import enum
 import json
 import tempfile
 from collections.abc import Mapping, Sequence
@@ -40,6 +41,12 @@ PROVIDERS = {
     "openai": ("OPENAI_API_KEY", "https://api.openai.com"),
     "anthropic": ("ANTHROPIC_API_KEY", "https://api.anthropic.com"),
 }
+
+
+class _Unset(enum.Enum):
+    """Default of `guard(concurrency=)`: tells "not given" apart from an explicit 16 or None."""
+
+    TOKEN = enum.auto()
 
 
 class GuardError(ValueError):
@@ -254,7 +261,7 @@ def guard(  # noqa: PLR0913 - the quick start's documented options
     fx: FxSnapshot | Sequence[FxSnapshot] | None = None,
     provider_keys: Mapping[str, str] | None = None, config: str | Path | None = None,
     client: httpx.AsyncClient | None = None, now_ms: Clock = system_ms,
-    concurrency: int | None = DEFAULT_CONCURRENCY,
+    concurrency: int | _Unset | None = _Unset.TOKEN,
 ) -> Guard:  # fmt: skip
     """Open (or create) the local ledger with a lifetime budget of `cap` and return a `Guard`.
 
@@ -263,20 +270,22 @@ def guard(  # noqa: PLR0913 - the quick start's documented options
     another cap is an error, never a silent change. The ledger currency is the cap's currency; a
     cap that differs from the catalog's (USD) needs `fx=`. `config=` takes a `spendgate.yaml`
     instead of building routes from the environment (it must use the same currency as `cap`).
-    `concurrency` is the most calls each client admits at once (None: no bound); with `config=`
-    the file's `defaults.limits.concurrency` sets it instead.
+    `concurrency` is the most calls each client admits at once (16 unless given; None: no bound);
+    with `config=` the file's `defaults.limits.concurrency` sets it, and `concurrency=` is refused.
     """
     amount = parse_amount(cap)
     if amount.nano <= 0:
         raise GuardError("cap must be greater than zero")
-    if concurrency is not None and (isinstance(concurrency, bool) or concurrency < 1):
+    limit = DEFAULT_CONCURRENCY if concurrency is _Unset.TOKEN else concurrency
+    # `type() is int` refuses bool, float and str before they reach the synthesized config.
+    if limit is not None and (type(limit) is not int or limit < 1):
         raise GuardError("concurrency must be a positive integer or None")
     path = Path(ledger_path) if ledger_path is not None else default_ledger_path()
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     if config is not None:
         if catalog is not None or fx is not None or provider_keys is not None:
             raise GuardError("config= already names the catalog, fx and credentials; drop those")
-        if concurrency != DEFAULT_CONCURRENCY:
+        if concurrency is not _Unset.TOKEN:
             raise GuardError("config= sets defaults.limits.concurrency; drop concurrency=")
         settings = load(config, env=local_env())
         if settings.ledger_currency != amount.currency:
@@ -284,7 +293,7 @@ def guard(  # noqa: PLR0913 - the quick start's documented options
                 f"{config} has ledger currency {settings.ledger_currency}, not {amount.currency}"
             )
     else:
-        settings = _synthesize(amount, catalog, path, fx, provider_keys, concurrency=concurrency)
+        settings = _synthesize(amount, catalog, path, fx, provider_keys, concurrency=limit)
     # Start one transport and drop it: scope and budget are created now, so a bad cap, a wrong
     # currency or a mismatched ledger fails here and not on the first request.
     transport(settings, ledger_path=path, cap=cap, client=client, now_ms=now_ms).close()

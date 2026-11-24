@@ -68,7 +68,7 @@ the ledger connections (`await guard.aclose()` for async clients).
   until one finishes. The bound also limits how far past the cap the budget can go when calls
   settle above their holds ([how money is protected](how-money-is-protected.md)). Change it with
   `guard(cap=..., concurrency=64)`; `concurrency=None` removes it. With `config=`, the file's
-  `defaults.limits.concurrency` sets it instead (`null` removes it).
+  `defaults.limits.concurrency` sets it instead (`null` removes it), and `concurrency=` is refused.
 - **Ledger location.** `default_ledger_path()`: `$XDG_DATA_HOME/spendgate/local-ledger.db`
   (default `~/.local/share/...`) on Linux, `~/Library/Application Support/spendgate/` on macOS
   (POSIX only: setup uses `fcntl` file locks). The folder is created 0700 and the file 0600; a file
