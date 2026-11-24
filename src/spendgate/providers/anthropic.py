@@ -329,6 +329,9 @@ class AnthropicProvider:
             return refused.refusal
         return None
 
+    async def prepare(self, deployment: Deployment) -> None:
+        """A static API key: nothing to refresh."""
+
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         if deployment.provider != self.name or deployment.auth is not AuthMode.API_KEY:
             raise ValueError("deployment is not an Anthropic API-key deployment")

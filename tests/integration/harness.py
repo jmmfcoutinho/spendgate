@@ -9,7 +9,7 @@ observable in the fake's request log (the `host` header).
 import asyncio
 import functools
 import textwrap
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -39,6 +39,7 @@ from spendgate.pipeline.model import (
 from spendgate.pipeline.pipeline import Pipeline
 from spendgate.providers.bedrock import AwsCredentials, Bedrock
 from spendgate.providers.google import GoogleProvider
+from spendgate.providers.port import Provider
 from tests.conftest import FakeClock
 from tests.fakes import FakeUpstream
 
@@ -241,6 +242,7 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
     allowed_models: tuple[str, ...] | None = None, per_call: int | None = None,
     pipeline_kwargs: dict[str, object] | None = None,
     wrap_ledger: Callable[[SqliteLedger], LedgerPort] | None = None,
+    providers: Mapping[str, Provider] | None = None,
 ) -> AsyncIterator[Stack]:  # fmt: skip
     fake = fake or FakeUpstream()
     clock = FakeClock(NOW_MS)
@@ -274,7 +276,7 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
     providers = build_providers(settings) | {
         "bedrock": Bedrock(lambda: AWS_EXAMPLE),
         "google": GoogleProvider(),
-    }  # fmt: skip
+    } | dict(providers or {})  # fmt: skip
     kwargs: dict[str, object] = {
         "settings": settings, "ledger": wrap_ledger(ledger) if wrap_ledger else ledger,
         "keys": keys, "providers": providers,

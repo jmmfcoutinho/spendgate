@@ -4,10 +4,19 @@ The client speaks OpenAI chat; the model id (or region-pinned inference profile 
 `eu.` or `global.`) and the region come from the Deployment, never from the client.
 botocore is imported only inside the two functions that need it, so the base install and
 `import spendgate.providers.bedrock` never load it (it ships in the optional `[bedrock]` extra).
+
+Resolving the chain and refreshing a role's credentials are blocking network calls (instance
+metadata, STS), so the async `prepare` fetches a snapshot in a worker thread and `translate` signs
+with it. `prepare` takes a new snapshot once the last is `SNAPSHOT_SECONDS` old. botocore hands out
+role credentials with at least its mandatory refresh window (10 minutes; it starts refreshing at
+15) left, so a snapshot is valid for far longer than it is used. The assumption that remains: the
+chain's credentials are not revoked early. A 401 or 403 from Bedrock drops the snapshot, so the
+next call asks the chain again instead of reusing it.
 """
 
 import json
 import logging
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from http import HTTPStatus
@@ -42,12 +51,17 @@ from spendgate.providers.port import (
     never_raises_usage,
     retry_after_seconds,
 )
+from spendgate.providers.refresh import Refreshes
 from spendgate.providers.sse import asked_for_usage
 
 SERVICE: Final = "bedrock"
 CHAT: Final = "/v1/chat/completions"
 _JSON_TYPE: Final = {"content-type": "application/json"}
 _CONFIG_FAULTS = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
+SNAPSHOT_SECONDS: Final = 30  # well inside botocore's 10-minute mandatory refresh window
+_SIGN_AT_MOST_SECONDS: Final = 300  # older means no `prepare` ran lately: `translate` asks inline
+_REVOKED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
+_CHAIN: Final = "aws"  # one credential source per adapter: one lock key
 
 
 class _Silence(logging.Filter):
@@ -135,8 +149,16 @@ class Bedrock:
 
     name = "bedrock"
 
-    def __init__(self, credentials: CredentialsProvider | None = None) -> None:
+    def __init__(
+        self,
+        credentials: CredentialsProvider | None = None,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._credentials = credentials  # None: resolve the standard chain on first use
+        self._clock = clock
+        self._snapshot: tuple[AwsCredentials, float] | None = None  # set only by `prepare`
+        self._refreshes = Refreshes()
 
     def __repr__(self) -> str:
         return "Bedrock()"  # no credential provider, no state worth printing
@@ -149,6 +171,28 @@ class Bedrock:
             )
         return None
 
+    async def prepare(self, deployment: Deployment) -> None:
+        """Fetch a credentials snapshot in a worker thread unless a fresh one is cached."""
+        if deployment.auth is AuthMode.SIGV4:
+            stale = lambda: self._within(SNAPSHOT_SECONDS) is None  # noqa: E731 - one-line check
+            await self._refreshes.ensure(_CHAIN, stale, self._take)
+
+    def _within(self, seconds: float) -> AwsCredentials | None:
+        """The snapshot if it is younger than `seconds`; a lookup that never blocks."""
+        snapshot = self._snapshot
+        if snapshot is None or self._clock() - snapshot[1] >= seconds:
+            return None
+        return snapshot[0]
+
+    def _fetch(self) -> AwsCredentials:
+        """Credentials from the provider (blocking: the chain may call the network)."""
+        if self._credentials is None:
+            self._credentials = chain_credentials()
+        return self._credentials()
+
+    def _take(self) -> None:
+        self._snapshot = (self._fetch(), self._clock())
+
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         if deployment.auth is not AuthMode.SIGV4 or not deployment.region:
             raise ValueError("a bedrock deployment needs auth sigv4 and a region")
@@ -158,10 +202,10 @@ class Bedrock:
         body = json.dumps(converse, separators=(",", ":")).encode()
         verb = "converse-stream" if req.stream else "converse"
         url = f"{deployment.base_url.rstrip('/')}/model/{quote(deployment.model, safe='')}/{verb}"
-        if self._credentials is None:
-            self._credentials = chain_credentials()
         unsigned = UpstreamRequest("POST", url, _JSON_TYPE, body, stream=req.stream)
-        return sign(unsigned, self._credentials(), deployment.region)
+        # What `prepare` readied (it renewed it if old); a direct caller without it fetches inline.
+        creds = self._within(_SIGN_AT_MOST_SECONDS) or self._fetch()
+        return sign(unsigned, creds, deployment.region)
 
     @never_raises_response
     def response(self, req: CleanRequest, resp: UpstreamResponse) -> UpstreamResponse:
@@ -207,6 +251,8 @@ class Bedrock:
     def error(self, response: UpstreamResponse) -> UpstreamError:
         kind = _error_type(response)
         status = response.status
+        if status in _REVOKED:
+            self._snapshot = None  # perhaps revoked or rotated: the next call asks the chain again
         if status == HTTPStatus.TOO_MANY_REQUESTS or kind in (
             "ThrottlingException",
             "ModelNotReadyException",

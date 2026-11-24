@@ -231,6 +231,18 @@ All notable changes to this project are documented here. The format follows
   parent budgets as the backstop (README, design summary, threat model TH-09). Overruns are
   described as recorded, exposed as metrics and shown in status. The README states the current
   product size.
+- Credential refreshes (Entra ID for Azure OpenAI, the Vertex AI service-account token, the AWS
+  credential chain for Bedrock) no longer run on the event loop: a slow identity provider stalled
+  every request the gateway was serving. Adapters now refresh in a worker thread from a new async
+  `Provider.prepare` step, one refresh per credential however many calls are waiting. A failed
+  refresh is still an internal error and nothing is sent.
+- Credential refreshes (Entra ID for Azure OpenAI and Azure Speech, the Vertex AI
+  service-account token, the AWS credential chain for Bedrock) no longer run on the event loop: a
+  slow identity provider stalled every request the gateway was serving. Adapters now refresh in a
+  worker thread from a new async `Provider.prepare` step, one refresh per credential however many
+  calls are waiting or give up. A failed refresh is still an internal error and nothing is sent.
+  Azure Speech now caches its Entra token until shortly before it expires, and Bedrock drops its
+  credentials snapshot after a 401 or 403.
 
 ## [0.1.1] - 2026-11-20
 

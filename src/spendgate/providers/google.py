@@ -42,6 +42,7 @@ from spendgate.providers.port import (
     never_raises_usage,
     retry_after_seconds,
 )
+from spendgate.providers.refresh import Refreshes
 from spendgate.providers.sse import asked_for_usage
 
 CHAT = "/v1/chat/completions"
@@ -233,6 +234,10 @@ def _service_account(deployment: Deployment) -> Credentials:
     return creds
 
 
+def _digest(deployment: Deployment) -> str:
+    return hashlib.sha256(deployment.credential.encode()).hexdigest()
+
+
 class GoogleProvider:
     """Gemini API key or Vertex AI bearer auth. Credentials are injectable for tests."""
 
@@ -241,6 +246,7 @@ class GoogleProvider:
     def __init__(self, credentials: Callable[[Deployment], Credentials] | None = None) -> None:
         self._source = credentials or _service_account
         self._cache: dict[str, Credentials] = {}  # keyed by a digest, never by the secret
+        self._refreshes = Refreshes()
 
     def validate(self, req: CleanRequest) -> Refusal | None:
         """Chat completions only; field refusals come from `translate`, after the ceiling."""
@@ -249,6 +255,18 @@ class GoogleProvider:
                 ErrorCode.INVALID_REQUEST, "Google supports chat completions only.", "endpoint"
             )
         return None
+
+    async def prepare(self, deployment: Deployment) -> None:
+        """Vertex: load and refresh the service-account token in a worker thread when stale."""
+        if deployment.auth is not AuthMode.BEARER_TOKEN:
+            return  # a Gemini API key never expires
+        key = _digest(deployment)
+
+        def stale() -> bool:
+            creds = self._cache.get(key)
+            return creds is None or not creds.valid
+
+        await self._refreshes.ensure(key, stale, lambda: self._credentials(deployment))
 
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         if (refusal := self.validate(req)) is not None:
@@ -272,7 +290,7 @@ class GoogleProvider:
             return url, headers | {"x-goog-api-key": d.credential}
         if d.auth is not AuthMode.BEARER_TOKEN:
             raise ValueError(f"google does not support auth mode {d.auth.value}")
-        creds = self._credentials(d)
+        creds = self._readied(d)
         if not d.region or not _SAFE.fullmatch(d.region) or not creds.project_id:
             raise ValueError("a Vertex deployment needs a region and a credential project")
         where = f"projects/{creds.project_id}/locations/{d.region}/publishers/google/models"
@@ -280,10 +298,18 @@ class GoogleProvider:
             "authorization": f"Bearer {creds.token}"
         }
 
+    def _readied(self, d: Deployment) -> Credentials:
+        """What `prepare` readied, without asking `valid` again: a token google-auth marks
+        invalid is still minutes from expiry (its refresh threshold), so it is safe to sign
+        with, and a refresh here would block the loop. A direct caller without `prepare` has
+        nothing cached and loads inline."""
+        creds = self._cache.get(_digest(d))
+        return creds if creds is not None and creds.token else self._credentials(d)
+
     def _credentials(self, d: Deployment) -> Credentials:
-        key = hashlib.sha256(d.credential.encode()).hexdigest()
+        key = _digest(d)
         creds = self._cache.get(key) or self._cache.setdefault(key, self._source(d))
-        if not creds.valid:  # google-auth treats a token near expiry as invalid
+        if not creds.valid:  # google-auth treats a token near expiry as invalid (network refresh)
             from google.auth.transport import requests  # noqa: PLC0415 - optional extra
 
             creds.refresh(requests.Request())

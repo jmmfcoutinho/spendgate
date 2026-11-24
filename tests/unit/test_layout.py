@@ -38,10 +38,12 @@ def test_top_level_packages_match_the_architecture() -> None:
 
 def test_every_provider_adapter_exists_with_a_port() -> None:
     names = {m.name.rsplit(".", 1)[1] for m in _walk() if m.name.startswith("spendgate.providers.")}
-    assert PROVIDERS | {"port", "sse"} <= names
+    shared = {"port", "sse", "refresh"}
+    assert PROVIDERS | shared <= names
     # Helper modules belong to one adapter and say which by their prefix (bedrock_stream, ...);
-    # `sse` is the one provider-neutral codec every SSE adapter shares.
-    helpers = names - PROVIDERS - {"port", "sse"}
+    # `sse` is the provider-neutral codec every SSE adapter shares, `refresh` the off-loop
+    # credential refresh every token-based adapter shares.
+    helpers = names - PROVIDERS - shared
     orphans = {h for h in helpers if not any(h.startswith(f"{p}_") for p in PROVIDERS)}
     assert not orphans
 

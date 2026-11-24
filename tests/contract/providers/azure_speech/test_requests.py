@@ -3,6 +3,7 @@
 import json
 import logging
 from collections.abc import Callable
+from dataclasses import dataclass
 
 import pytest
 
@@ -77,20 +78,36 @@ def test_api_version_comes_from_the_deployment_and_must_be_well_formed() -> None
         AzureSpeech().translate(request(), bad)
 
 
-def test_entra_bearer_token_is_used_when_the_deployment_asks_for_it() -> None:
+@dataclass(frozen=True)
+class Token:
+    token: str
+    expires_on: int  # Unix seconds
+
+
+def test_entra_bearer_token_is_used_and_cached_until_near_expiry() -> None:
     calls: list[int] = []
 
-    def source() -> str:
+    def source() -> Token:
         calls.append(1)
-        return TOKEN
+        return Token(TOKEN, 10_000)
 
-    adapter = AzureSpeech(source)
+    now = [1_000.0]
+    adapter = AzureSpeech(source, clock=lambda: now[0])
     out = adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
     assert out.headers["Authorization"] == f"Bearer {TOKEN}"
     assert "Ocp-Apim-Subscription-Key" not in out.headers
-    assert TOKEN not in out.url
+    assert TOKEN not in out.url and TOKEN not in repr(adapter)
     adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
-    assert len(calls) == 2  # asked per request: the SDK caches and refreshes, we never do
+    assert len(calls) == 1  # cached
+    now[0] = 10_000  # expired and not prepared: a direct caller fetches inline
+    adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
+    assert len(calls) == 2
+
+
+def test_an_empty_entra_token_fails_closed() -> None:
+    adapter = AzureSpeech(lambda: Token("", 10_000), clock=lambda: 1_000.0)
+    with pytest.raises(ValueError, match="empty token"):
+        adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
 
 
 def test_azure_identity_is_loaded_lazily_and_only_for_entra(
@@ -98,9 +115,9 @@ def test_azure_identity_is_loaded_lazily_and_only_for_entra(
 ) -> None:
     loads: list[int] = []
 
-    def fake_default() -> Callable[[], str]:
+    def fake_default() -> Callable[[], Token]:
         loads.append(1)
-        return lambda: TOKEN
+        return lambda: Token(TOKEN, 2**40)
 
     monkeypatch.setattr(azure_speech, "_default_token", fake_default)
     adapter = AzureSpeech()

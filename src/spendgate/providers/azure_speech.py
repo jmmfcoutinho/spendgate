@@ -6,8 +6,10 @@ larger of the two is billed, so a short provider figure can never under-bill. Au
 resource key (`Ocp-Apim-Subscription-Key`) or an Entra bearer token (lazy `azure-identity`).
 """
 
+import time
 from collections.abc import Callable
 from http import HTTPStatus
+from typing import Protocol
 
 from spendgate.core.audio import AudioError, measure
 from spendgate.core.cost import Usage
@@ -28,23 +30,49 @@ from spendgate.providers.port import (
     never_raises_response,
     never_raises_usage,
 )
+from spendgate.providers.refresh import Refreshes
 
 TRANSCRIPTIONS = "/v1/audio/transcriptions"
 
 
-def _default_token() -> Callable[[], str]:
-    """Entra token source from `azure-identity` (optional extra); tokens are cached by the SDK."""
+_REFRESH_MARGIN_SECONDS = 300  # renew this long before expiry: never send a token about to lapse
+_ENTRA = "entra"  # one token source per adapter: one refresh key
+
+
+class AccessToken(Protocol):
+    """The shape of `azure.core.credentials.AccessToken`; tests pass a plain fake."""
+
+    @property
+    def token(self) -> str: ...
+
+    @property
+    def expires_on(self) -> int: ...  # Unix seconds
+
+
+type TokenSource = Callable[[], AccessToken]
+
+
+def _default_token() -> TokenSource:
+    """Entra token source from `azure-identity` (optional extra): a blocking network call."""
     from azure.identity import DefaultAzureCredential  # noqa: PLC0415 - optional extra
 
     credential = DefaultAzureCredential()
-    return lambda: credential.get_token(shapes.SCOPE).token
+    return lambda: credential.get_token(shapes.SCOPE)
 
 
 class AzureSpeech:
     name = "azure_speech"
 
-    def __init__(self, token_source: Callable[[], str] | None = None) -> None:
+    def __init__(
+        self, token_source: TokenSource | None = None, *, clock: Callable[[], float] = time.time
+    ) -> None:
         self._token_source = token_source  # injectable so tests never touch Entra
+        self._clock = clock
+        self._token: tuple[str, int] | None = None  # (token, expires_on); never printed
+        self._refreshes = Refreshes()
+
+    def __repr__(self) -> str:
+        return "AzureSpeech()"
 
     def validate(self, req: CleanRequest) -> Refusal | None:
         try:
@@ -52,6 +80,29 @@ class AzureSpeech:
         except Untranslatable as refused:
             return refused.refusal
         return None
+
+    async def prepare(self, deployment: Deployment) -> None:
+        """Entra: fetch the token in a worker thread when none is cached outside the margin."""
+        if deployment.auth is AuthMode.BEARER_TOKEN:
+            await self._refreshes.ensure(_ENTRA, self._stale, self._fetch)
+
+    def _stale(self) -> bool:
+        return self._token is None or self._token[1] - self._clock() <= _REFRESH_MARGIN_SECONDS
+
+    def _fetch(self) -> str:
+        """A token from the source (blocking: Entra is a network call)."""
+        if self._token_source is None:
+            self._token_source = _default_token()  # first use only: no Azure SDK until needed
+        fetched = self._token_source()
+        if not fetched.token:
+            raise ValueError("the Entra credential returned an empty token")
+        self._token = (fetched.token, fetched.expires_on)
+        return fetched.token
+
+    def _bearer(self) -> str:
+        """What `prepare` readied, while unexpired; a direct caller without it fetches inline."""
+        cached = self._token
+        return cached[0] if cached is not None and cached[1] > self._clock() else self._fetch()
 
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request Azure cannot carry."""
@@ -102,9 +153,7 @@ class AzureSpeech:
 
     def _auth(self, deployment: Deployment) -> dict[str, str]:
         if deployment.auth is AuthMode.BEARER_TOKEN:
-            if self._token_source is None:
-                self._token_source = _default_token()  # first use only: no Azure SDK until needed
-            return {"Authorization": f"Bearer {self._token_source()}"}
+            return {"Authorization": f"Bearer {self._bearer()}"}
         if deployment.auth is not AuthMode.API_KEY or not deployment.credential:
             raise ValueError("an Azure Speech deployment needs a key or Entra auth")
         return {"Ocp-Apim-Subscription-Key": deployment.credential}

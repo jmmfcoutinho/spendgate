@@ -40,6 +40,9 @@ class OpenAIProvider:
     def validate(self, req: CleanRequest) -> Refusal | None:
         return shapes.validate(req.endpoint, req.body, req.files, remote_ok=self._remote_ok)
 
+    async def prepare(self, deployment: Deployment) -> None:
+        """A static API key: nothing to refresh."""
+
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request that cannot be carried."""
         if not deployment.credential:
