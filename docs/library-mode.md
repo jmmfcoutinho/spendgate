@@ -13,6 +13,21 @@ skip the guard. It protects honest code from mistakes: a runaway loop, a wrong m
 batch job. For anything that must be enforced (shared keys, untrusted code, several teams), run
 the proxy, which holds the keys so callers cannot bypass it ([threat model](threat-model.md)).
 
+An autonomous agent that can run shell commands in the same account is code in that process for
+this purpose, and it can undo the guard in three ways:
+
+- **The ledger is its file.** The ledger is a SQLite file the process owns (0600, but owned by
+  the same user), so the agent can delete it, edit balances in it, or point `ledger_path=` at a
+  fresh one. Any of these undoes the cap.
+- **The provider key is in its environment.** `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` or the
+  config's credential can be read with one command and used to call the provider directly.
+- **There is no kill switch.** Library mode has no admin API and no kill switch; killing the
+  process is the only way to stop it.
+
+Do not give an autonomous agent with shell access a library-mode setup. Use the proxy with the
+perimeter ([Running locally](deploy/local.md)): the agent then holds only a virtual key, the ledger
+and provider keys live in another container, and an operator can stop it with the kill switch.
+
 ## Quick start
 
 ```python
