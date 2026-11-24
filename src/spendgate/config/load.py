@@ -293,9 +293,7 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
 
 def _base_url_issue(url: str) -> str | None:
     scheme = url.partition("://")[0]
-    # The host as the HTTP client parses it: a `?` or `#` ends the authority, so an `@` after
-    # one belongs to the query or fragment, not to a userinfo part.
-    try:
+    try:  # the host as the HTTP client parses it: an `@` after a `?` or `#` is not userinfo
         host = urlsplit(url).hostname or ""
     except ValueError:  # e.g. an unclosed `[` in an IPv6 literal
         host = ""
@@ -304,16 +302,6 @@ def _base_url_issue(url: str) -> str | None:
     if scheme == "http" and host in _LOOPBACK:
         return None  # plain HTTP only to this machine (tests, sidecars)
     return "must be an https:// URL (http:// only for localhost)"
-
-
-def _utf8(text: str) -> bool:
-    # An environment value that was not valid UTF-8 arrives with surrogate escapes; it would
-    # fail only when the first warning is signed, so it is refused here instead.
-    try:
-        text.encode()
-    except UnicodeEncodeError:
-        return False
-    return True
 
 
 def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
@@ -326,7 +314,10 @@ def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
     if url is not None and (problem := _base_url_issue(url.reveal())) is not None:
         ctx.issues.append(("alerts.webhook.url", problem))
         return None
-    if key is not None and not _utf8(key.reveal()):  # the HMAC key is its UTF-8 bytes
+    # The HMAC key is the secret's UTF-8 bytes. An environment value that is not valid UTF-8
+    # arrives with surrogate escapes (the only text UTF-8 cannot encode) and would fail only
+    # when the first warning is signed, so it is refused here.
+    if key is not None and any("\ud800" <= c <= "\udfff" for c in key.reveal()):
         ctx.issues.append(("alerts.webhook.signing_secret", "must be UTF-8 text"))
         return None
     if url is None or key is None:
