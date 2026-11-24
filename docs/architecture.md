@@ -35,7 +35,7 @@ Every component above is exactly one package. Rows show the one-line job and the
 
 | Package | Responsibility | May import |
 |---|---|---|
-| `spendgate.core` | Pure rules: money, catalog (`catalog.parse(dicts, sha)`), cost, estimate, audio, media (which inline media is priceable), policy, limits, `DeploymentHealth` (one tracker merging cooldown and circuit breaker), outcomes (including `not_processed`), errors. No I/O, never reads files. | nothing internal |
+| `spendgate.core` | Pure rules: money, catalog (`catalog.parse(dicts, sha)`), cost, estimate, audio, media (which inline media is priceable), policy, limits, `DeploymentHealth` (one tracker merging cooldown and circuit breaker), outcomes (including `not_processed`), errors, and `litellm` (LiteLLM's price file mapped to draft catalog entries, for `spendgate catalog import` only). No I/O, never reads files. | nothing internal |
 | `spendgate.ledger` | Ledger port, SQLite and Postgres adapters over one shared `sql.py`, keys, usage queries, SQL migrations. | `core` |
 | `spendgate.providers` | Provider port plus one adapter per provider; slug = module name: `openai`, `azure_openai`, `anthropic`, `bedrock`, `google`, `azure_speech`, `elevenlabs`. | `core` |
 | `spendgate.config` | Reads `spendgate.yaml` and catalog YAML files, computes their sha256, produces typed settings and the dicts for `core.catalog.parse`. | `core` |
@@ -43,11 +43,11 @@ Every component above is exactly one package. Rows show the one-line job and the
 | `spendgate.pipeline` | The 10 steps, routing (ordered deployments plus `DeploymentHealth`), streaming relay, key verification. No HTTP framework. Also the composition helper `pipeline/adapters.py` (`build_providers`): the one module that imports the concrete provider adapters, because it builds them from `Settings` and `providers` and `config` may not meet. It is the only place that does, and the gateway and library mode both call it. | `core`, `ledger.port`, `providers.port`, `config`; `providers.*` and `ledger.ids`/`ledger.key_types` from `adapters.py` and the type imports of `pipeline.py` only |
 | `spendgate.gateway` | Starlette app, admin API, observability. Wires ledger, providers and config. | `pipeline` and below |
 | `spendgate.local` | In-process library mode: `spendgate.local.guard(cap="5 USD", catalog=None)` builds the same pipeline with a `LocalPrincipal`; the ledger currency follows the cap's currency (bundled catalog is USD; another currency needs `fx=` and otherwise fails with a clear message); sync transport runs its own loop thread (safe in notebooks) plus an async transport. Never imports `gateway`. | `pipeline` and below |
-| `spendgate.cli` | Command line: serve, keys, budgets, usage, kill switch, migrate. Thin layer over the same ledger functions as the admin API. | everything |
+| `spendgate.cli` | Command line: serve, keys, budgets, usage, kill switch, migrate. Thin layer over the same ledger functions as the admin API. Also `catalog import` (`cli/catalog.py`), the only code that downloads anything, by operator action and never while serving ([ADR-0014](adr/0014-catalog-import-command.md)). | everything |
 
 Notes:
 - `catalog/prices.yaml` and `catalog/schema.json` are data, not a package. `config` reads them; `core.catalog.parse` validates and resolves.
-- Only `spendgate.gateway` imports Starlette: today `gateway.app`, `gateway.admin`, `gateway.admin_http`, `gateway.admin_budgets`, `gateway.admin_scopes`, `gateway.admin_reports` and `gateway.observability`. `cli.serve` imports uvicorn to run the gateway apps, and nothing else imports uvicorn. `pipeline` stays framework free so `local` can reuse it. Three import-linter contracts check this ("pipeline has no HTTP framework", "only the gateway imports Starlette", "only cli.serve imports uvicorn").
+- Only `spendgate.gateway` imports Starlette: today `gateway.app`, `gateway.admin`, `gateway.admin_http`, `gateway.admin_budgets`, `gateway.admin_scopes`, `gateway.admin_reports` and `gateway.observability`. `cli.serve` imports uvicorn to run the gateway apps, and nothing else imports uvicorn. `pipeline` stays framework free so `local` can reuse it. Three import-linter contracts check this ("pipeline has no HTTP framework", "only the gateway imports Starlette", "only cli.serve imports uvicorn"). A fourth, "only the catalog command uses the LiteLLM mapper", keeps `core.litellm` and `cli.catalog` out of reach of everything that serves calls.
 - No package is named `utils` or `common`. Shared code goes to `core` if pure, or to its owner package.
 - Sibling adapters never import each other: `ledger.sqlite` vs `ledger.postgres`, and each provider module vs the others.
 - Limits (RPM, TPM, concurrency) are per process in v0.1; budgets are exact in the ledger. A shared limiter store is on the [roadmap](../ROADMAP.md).
@@ -142,6 +142,15 @@ source_modules = ["spendgate"]
 forbidden_modules = ["starlette"]
 ignore_imports = ["spendgate.gateway.** -> starlette"]
 allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only the catalog command uses the LiteLLM mapper"
+type = "forbidden"
+source_modules = [
+  "spendgate.gateway", "spendgate.local", "spendgate.pipeline", "spendgate.ledger",
+  "spendgate.providers", "spendgate.config", "spendgate.client", "spendgate.cli.serve",
+]
+forbidden_modules = ["spendgate.core.litellm", "spendgate.cli.catalog"]
 
 [[tool.importlinter.contracts]]
 name = "only cli.serve imports uvicorn"

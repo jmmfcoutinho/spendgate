@@ -13,7 +13,8 @@ any other host exits with code 3: pass `--url` or set `SPENDGATE_URL` for a remo
 proxy, add `--local` instead: it opens the ledger from `--config` directly and needs no key (in
 Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output. These
 three flags belong to the admin commands; `serve`, `migrate` and `check-config` take only
-`--config`. `spendgate --version` prints the installed version.
+`--config`, and `catalog import` (drafting an override file from LiteLLM's price file,
+[catalog how-to section 6](catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)) takes neither. `spendgate --version` prints the installed version.
 Exit codes: 0 ok, 1 refused by the server, 2 bad command line, 3 bad configuration, 4 no or wrong
 admin key, 5 cannot reach the API or the ledger.
 

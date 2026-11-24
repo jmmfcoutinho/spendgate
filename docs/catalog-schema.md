@@ -5,7 +5,8 @@ Prices and model metadata are validated data, never code. Files: `catalog/prices
 optional local override file. [catalog-example.yaml](catalog-example.yaml) is the example and holds every
 price of a private tool that predates spendgate, except Realtime (on the roadmap). Consumers: `core/catalog.py`, `core/cost.py`.
 `spendgate.config` reads the YAML files and computes their sha256; `core.catalog.parse(dicts, sha)` validates and
-resolves them (core never reads files). No remote fetch in v0.1.
+resolves them (core never reads files). No remote fetch at serve time: `spendgate catalog import` downloads
+LiteLLM's price file only when an operator runs it, to draft an override file ([ADR-0014](adr/0014-catalog-import-command.md)).
 
 ```
 uvx check-jsonschema --schemafile src/spendgate/catalog/schema.json docs/catalog-example.yaml   # from the repository root
