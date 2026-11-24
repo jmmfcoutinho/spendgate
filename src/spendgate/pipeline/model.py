@@ -101,7 +101,7 @@ class RefusedEvent:
     request_id: str
     code: ErrorCode
     endpoint: str
-    model: str | None = None
+    model: str | None = None  # the routed catalog id; None when the body names no routed model
     key_id: str | None = None
 
 

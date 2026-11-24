@@ -68,6 +68,17 @@ def find_route(routes: Mapping[str, Route], name: str) -> Route | None:
     return next((r for r in routes.values() if r.catalog_id == name), None)
 
 
+def routed_model(routes: Mapping[str, Route], body: Mapping[str, Json]) -> str | None:
+    """The catalog id the body's model routes to, else None.
+
+    Observability uses this instead of the raw body value: a client could otherwise mint one
+    metric series per string it sends. Catalog id, not alias, to match settled calls' events.
+    """
+    name = body.get("model")
+    route = find_route(routes, name) if isinstance(name, str) else None
+    return route.catalog_id if route else None
+
+
 def labels_of(
     headers: Mapping[str, str], body: Mapping[str, Json]
 ) -> tuple[Labels, str | None, dict[str, str]]:

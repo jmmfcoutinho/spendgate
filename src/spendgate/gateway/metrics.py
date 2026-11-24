@@ -3,10 +3,13 @@
 Why hand-rolled: the base install has a fixed dependency budget and we need only counters,
 gauges and fixed-bucket histograms.
 
-Label cardinality is bounded by design: only model, deployment, scope, outcome and token
-kind. Never key secrets or prefixes, user labels, session ids, tags or request ids: each
-distinct value would mint a new time series forever (memory growth on the scraper) and
-would leak identifiers into a system with weaker access control than the ledger.
+Label cardinality is bounded by design: only model, deployment, scope, outcome, token kind
+and catalog sha, and every value comes from config, the ledger or a fixed enum, never from
+the request. `model` is a routed catalog id, or `unknown` for a refusal that names no routed
+model; `deployment` is the config label `<alias>/<index>`; `scope` is an admin-made scope
+path. Never the raw body model, key secrets or prefixes, user labels, session ids, tags or
+request ids: each distinct value would mint a new time series forever (memory growth on the
+scraper) and would leak identifiers into a system with weaker access control than the ledger.
 """
 
 import math
