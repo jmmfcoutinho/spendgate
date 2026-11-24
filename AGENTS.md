@@ -23,7 +23,8 @@ Planned work is in [ROADMAP.md](ROADMAP.md).
 - **Every money rule has a test named for it** (rule ids `M-NN` in CONTRIBUTING.md section 7).
 - **Run `make check` before declaring work done.** All gates must pass.
 - **Never commit secrets,** real API keys or personal data. Use obviously fake values in tests.
-- **Commits:** Conventional Commits, small logical blocks.
+- **Commits:** Conventional Commits, small logical blocks, authored and committed as the contributor,
+  never under an assistant's own git identity (CI rejects it).
 
 ## Issues and pull requests
 

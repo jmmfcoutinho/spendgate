@@ -294,7 +294,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Commit messages and pull request text carry no assistant trailers
+      - name: Commit messages, identities and pull request text carry no assistant traces
         env:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -307,9 +307,11 @@ jobs:
             printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" | scripts/check-commit-message.sh -
             while read -r sha; do
               git log -1 --format=%B "$sha" | scripts/check-commit-message.sh -
+              git log -1 --format='%an <%ae>%n%cn <%ce>' "$sha" | scripts/check-commit-identity.sh -
             done < <(git rev-list "$BASE_SHA..$HEAD_SHA")
           else
             git log -1 --format=%B | scripts/check-commit-message.sh -
+            git log -1 --format='%an <%ae>%n%cn <%ce>' | scripts/check-commit-identity.sh -
           fi
 
   no-ai-traces:

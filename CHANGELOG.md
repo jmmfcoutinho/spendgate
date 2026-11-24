@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- CI and the commit-msg hook also reject a commit whose author or committer is a coding
+  assistant's own git identity (`scripts/check-commit-identity.sh`), next to the existing check on
+  commit messages and pull request text.
+
 ## [0.1.1] - 2026-11-20
 
 ### Fixed
