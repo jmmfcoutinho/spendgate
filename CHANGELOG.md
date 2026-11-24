@@ -104,6 +104,16 @@ All notable changes to this project are documented here. The format follows
 - The `http://`-only-for-localhost rule for a provider `base_url` reads the host the way the HTTP
   client does: a `?` or `#` ends the host part, so text after one is never taken for it, and a
   URL with whitespace or a non-printable character is refused.
+- Provider throttling no longer turns into an outage (issue #36). A 429 without `Retry-After`
+  cooled its deployment for the full `routing.cooldown_seconds` and then let one probe through,
+  so in the load test's clean scenario (3% injected 429s) a fifth to a third of all calls were
+  refused with `503 upstream_unavailable`; now none are. A busy 429 cools for its `Retry-After` as given
+  (capped by `max_cooldown_seconds`) or, without one, for a random 250 to 500 ms, and the
+  deployment is open to every caller once that ends. A quota 429 still cools for
+  `cooldown_seconds`. A call that finds every deployment cooling waits up to 1 s, inside its
+  request deadline and its one hold, for the soonest to come back. A result that arrives while its
+  deployment cools no longer turns an `upstream_throttled` refusal into `upstream_unavailable`.
+  See [ADR-0021](docs/adr/0021-short-throttle-cooldown.md).
 
 ## [0.1.3] - 2026-11-24
 
