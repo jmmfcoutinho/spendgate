@@ -8,15 +8,19 @@ may therefore be called from any loop (or none: `asyncio.run(PostgresLedger.open
 The sweeper may run on every instance: each expiry is a state-guarded UPDATE (`WHERE state =
 'pending'`), so a second sweeper finds nothing to do. No advisory lock is needed for
 correctness; it would only save duplicate scans, so it is not used.
+
+Every pooled connection is bounded (`SESSION_DEFAULTS`, `KEEPALIVES`) so that a locked row or a
+silent server ends in `LedgerUnavailable` instead of holding a call; what the operator set wins.
 """
 
 import asyncio
 import time
 from collections.abc import Callable
-from typing import Self
+from typing import Final, Self
 
 import psycopg
 from psycopg import AsyncConnection
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -30,6 +34,27 @@ from spendgate.ledger.postgres_driver import Conn, Pool, RetryStats, run_flow, r
 from spendgate.ledger.sql import Flow, q
 
 _CONNECT_TIMEOUT_S = 10
+# Server-side bounds for each pooled connection. lock_timeout stays above deadlock_timeout (1 s by
+# default) so a deadlock is still reported as one and retried; a lock or statement timeout is not
+# retried (postgres_driver). Set only where the server reports the built-in default, so a value from
+# the DSN `options`, PGOPTIONS, ALTER ROLE/DATABASE or postgresql.conf wins.
+SESSION_DEFAULTS: Final = {
+    "lock_timeout": "2s",
+    "statement_timeout": "5s",
+    "idle_in_transaction_session_timeout": "10s",
+}
+# A dead server or a dropped network is noticed in about 30 s; a DSN that names any of these wins.
+KEEPALIVES: Final = {
+    "keepalives": "1",
+    "keepalives_idle": "15",
+    "keepalives_interval": "5",
+    "keepalives_count": "3",
+}
+_SET_DEFAULTS = (
+    "SELECT set_config(s.name, d.value, false) FROM pg_settings AS s"
+    " JOIN unnest(%s::text[], %s::text[]) AS d(name, value) ON d.name = s.name"
+    " WHERE s.source = 'default'"
+)
 # One migrator at a time per schema; the key is stable across processes (hashtext is).
 _MIGRATE_LOCK = "SELECT pg_advisory_xact_lock(hashtext('spendgate-migrate:' || current_schema()))"
 
@@ -63,6 +88,17 @@ async def _migrate(conn: Conn, clock: Callable[[], int]) -> None:
             )
 
 
+def keepalives_for(dsn: str) -> dict[str, str]:
+    """The keepalive options the DSN does not set itself (libpq options it names are kept)."""
+    named = conninfo_to_dict(dsn)
+    return {k: v for k, v in KEEPALIVES.items() if k not in named}
+
+
+async def bound_session(conn: Conn) -> None:
+    """Pool `configure` hook: apply `SESSION_DEFAULTS` wherever nothing else set a value."""
+    await conn.execute(_SET_DEFAULTS, (list(SESSION_DEFAULTS), list(SESSION_DEFAULTS.values())))
+
+
 def _now_flow() -> Flow[int]:
     rows = yield q("SELECT CAST(EXTRACT(EPOCH FROM clock_timestamp()) * 1000 AS BIGINT) AS ms")
     return i(rows[0], "ms")
@@ -81,6 +117,7 @@ class PostgresLedger(LedgerEngine):
     ) -> None:
         super().__init__(currency, new_id)
         self._dsn = dsn
+        self._keepalives = keepalives_for(dsn)
         self._sizes = (min_size, max_size)
         self._pool_timeout = pool_timeout
         self._pool: Pool | None = None
@@ -101,8 +138,12 @@ class PostgresLedger(LedgerEngine):
     ) -> Self:
         """Migrate and check the ledger currency. Never touches a reservation."""
         try:
+            # No session bounds here: a migration may wait for a peer's lock or run long.
             async with await AsyncConnection.connect(
-                dsn, autocommit=True, row_factory=dict_row, connect_timeout=_CONNECT_TIMEOUT_S
+                make_conninfo(dsn, **keepalives_for(dsn)),
+                autocommit=True,
+                row_factory=dict_row,
+                connect_timeout=_CONNECT_TIMEOUT_S,
             ) as conn:
                 await _migrate(conn, clock)
                 await run_flow(conn, currency_flow(currency))
@@ -145,7 +186,9 @@ class PostgresLedger(LedgerEngine):
                     "autocommit": True,  # transactions are explicit, as the flows ask for them
                     "row_factory": dict_row,
                     "connect_timeout": _CONNECT_TIMEOUT_S,
+                    **self._keepalives,
                 },
+                configure=bound_session,
                 check=AsyncConnectionPool.check_connection,
             )
         pool = self._pool

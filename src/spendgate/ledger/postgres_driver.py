@@ -4,6 +4,9 @@ The flows take their row locks themselves (`$LOCK` becomes `FOR UPDATE`, budgets
 order), so two holds that share budgets queue instead of deadlocking. Deadlocks can still arise
 (an admin change, a future flow with another order), so the whole flow is re-created from its
 factory and run again, at most `MAX_RETRIES` times, then the ledger is reported unavailable.
+
+A lock timeout (55P03) or a cancelled statement (57014) is not retried: the session bounds exist to
+answer quickly, and a budget row held that long will most likely still be held on a retry.
 """
 
 import asyncio
