@@ -1,5 +1,6 @@
 # Same commands as CONTRIBUTING.md section 3; CI calls these targets.
-.PHONY: check lint format-check format type arch test test-postgres load fuzz secrets audit size
+.PHONY: check lint format-check format type arch test coverage-gates test-postgres load fuzz \
+	secrets audit size
 
 check: lint format-check type arch test secrets audit size
 
@@ -18,9 +19,28 @@ type:
 arch:
 	uv run lint-imports
 
+# Coverage (CONTRIBUTING.md section 2): `make test` measures all of src/spendgate (line and branch)
+# and fails below 90% overall, then `coverage-gates` holds each money package to its own floor, so
+# well-covered code elsewhere cannot hide a gap in one of them. Without a Postgres server the
+# ledger floor counts the Postgres backend at what the SQLite run reaches; `make test-postgres`
+# gates that backend on its own run (CI runs both).
+COVERAGE_GATES := core:95 ledger:90 pipeline:90
+COVERAGE_POSTGRES_FLOOR := 90
+# Not `.coverage.*`: pytest-cov combines those into `.coverage`, which would mix the two runs.
+COVERAGE_POSTGRES_FILE := .coverage-postgres
+
 test:
-	uv run pytest -m "not live and not load and not fuzz" --cov=spendgate.core --cov=spendgate.ledger \
-		--cov=spendgate.pipeline --cov-fail-under=90
+	uv run pytest -m "not live and not load and not fuzz" --cov --cov-fail-under=90
+	@$(MAKE) --no-print-directory coverage-gates
+
+# Reads the `.coverage` file the last `make test` wrote.
+coverage-gates:
+	@set -e; for gate in $(COVERAGE_GATES); do \
+		pkg=$${gate%:*}; floor=$${gate#*:}; \
+		echo "coverage gate: spendgate.$$pkg >= $$floor%"; \
+		uv run coverage report --include="src/spendgate/$$pkg/*" --format=total \
+			--fail-under=$$floor; \
+	done
 
 load:
 	uv run pytest -m load tests/load -q
@@ -31,8 +51,14 @@ load:
 fuzz:
 	uv run pytest -m fuzz tests/fuzz -q -s
 
+# Needs SPENDGATE_TEST_POSTGRES_URL: without it every test skips and the gate would fail on an
+# empty run. Its coverage file is separate from the one `make test` writes.
 test-postgres:
-	uv run pytest -m postgres -q
+	@test -n "$$SPENDGATE_TEST_POSTGRES_URL" || { echo "set SPENDGATE_TEST_POSTGRES_URL" >&2; exit 2; }
+	COVERAGE_FILE=$(COVERAGE_POSTGRES_FILE) uv run pytest -m postgres -q --cov --cov-report=
+	@echo "coverage gate: spendgate.ledger.postgres* >= $(COVERAGE_POSTGRES_FLOOR)% (Postgres run)"
+	uv run coverage report --data-file=$(COVERAGE_POSTGRES_FILE) \
+		--include="src/spendgate/ledger/postgres*" --fail-under=$(COVERAGE_POSTGRES_FLOOR)
 
 secrets:
 	git ls-files -z | xargs -0 uv run detect-secrets-hook --baseline .secrets.baseline  # pragma: allowlist secret

@@ -12,6 +12,7 @@ wheels/
 # Tools
 .coverage
 .coverage.*
+.coverage-*
 htmlcov/
 coverage.xml
 .pytest_cache/
