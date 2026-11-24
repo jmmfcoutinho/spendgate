@@ -423,9 +423,11 @@ error, a timeout (`timeout_seconds` for the whole attempt), a 429 or a 5xx is re
 4, ... seconds (at most 30) up to `max_attempts`; a 2xx is delivered; any other status is final.
 A warning that gives up writes one `alert_webhook_failed` line on `spendgate.call` (`reason`: the
 error class or `status`, and `http_status`). When `queue_size` warnings are waiting, a new one is
-dropped; warnings still queued when the server stops are dropped too. Both count as
-`spendgate_alert_webhooks_total{result="dropped"}`: alert on any increase, and on `failed`.
+dropped; warnings still queued when the server stops, or raised by the calls it settles while
+stopping, are dropped too. Both count as `spendgate_alert_webhooks_total{result="dropped"}`: alert
+on any increase, and on `failed`.
 
-The webhook is a notice, like the log line: at most once per warning, never the record. A lost or
-dropped post changes nothing in the ledger; `spendgate status` and the admin API still show the
+The webhook is a notice, like the log line, never the record. A warning may be delivered more than
+once (a retry after the receiver processed a post but its answer was lost) or not at all: dedupe on
+`event_id`. A lost or dropped post changes nothing in the ledger; `spendgate status` and the admin API still show the
 threshold and the block.

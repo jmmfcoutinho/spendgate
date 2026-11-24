@@ -293,8 +293,8 @@ D: dict[str, str] = {
         "`http` for loopback; redirects are not followed."
     ),
     "AlertWebhook.signing_secret": (
-        "Secret reference to the HMAC-SHA256 key. Each post carries `X-Spendgate-Signature: "
-        "sha256=<hex>` over the exact body bytes."
+        "Secret reference to the HMAC-SHA256 key (UTF-8 text; its UTF-8 bytes are the key). Each "
+        "post carries `X-Spendgate-Signature: sha256=<hex>` over the exact body bytes."
     ),
     "AlertWebhook.timeout_seconds": "Longest one delivery attempt may take, end to end.",
     "AlertWebhook.max_attempts": (

@@ -26,7 +26,7 @@ the receiver is slow or down.
 - The handler only queues, in a bounded in-memory `asyncio.Queue`. A full queue drops the new
   warning; drops, failures and deliveries are counted in
   `spendgate_alert_webhooks_total{result}`. One background task, run beside the sweeper, posts in
-  order. A network error, a timeout (bounding the whole attempt), a 429 or a 5xx is retried with
+  order; a failure in either never stops the other. A network error, a timeout (bounding the whole attempt), a 429 or a 5xx is retried with
   backoff 1, 2, 4, ... s capped at 30 s, through an injected sleeper; any other status is final.
   A give-up writes one `alert_webhook_failed` line with the error class or status, never the URL.
 - `X-Spendgate-Signature: sha256=<hex>` is HMAC-SHA256 of the exact body bytes with
@@ -37,8 +37,9 @@ the receiver is slow or down.
 
 ## Consequences
 
-- Warnings are delivered at most once and may be lost: a full queue, a receiver down for longer
-  than the retries, or a stop with warnings queued. The ledger (`soft_alerted_at`,
+- A warning may be delivered more than once (a retry after the receiver processed a post whose
+  answer was lost) or lost (a full queue, a receiver down for longer than the retries, or a stop
+  with warnings queued); a receiver dedupes on `event_id`. The ledger (`soft_alerted_at`,
   `review_required_at`) stays the record, as for the log line.
 - A slow or failing receiver delays only later warnings, never a call: nothing on the request
   path awaits the network, and the handler never raises.

@@ -238,7 +238,7 @@ Used at `alerts.webhook`.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `url` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the receiver URL (it often carries a token). `https` only, or `http` for loopback; redirects are not followed. |
-| `signing_secret` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the HMAC-SHA256 key. Each post carries `X-Spendgate-Signature: sha256=<hex>` over the exact body bytes. |
+| `signing_secret` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the HMAC-SHA256 key (UTF-8 text; its UTF-8 bytes are the key). Each post carries `X-Spendgate-Signature: sha256=<hex>` over the exact body bytes. |
 | `timeout_seconds` | positive integer | `5` | Longest one delivery attempt may take, end to end. |
 | `max_attempts` | integer 1 to 10 | `5` | Tries per warning. A network error, a timeout, a 429 or a 5xx is retried after 1, 2, 4, ... seconds (at most 30); any other answer outside 2xx is final. |
 | `queue_size` | integer 1 to 100000 | `1000` | Warnings waiting to be posted. When full, a new warning is dropped and counted in `spendgate_alert_webhooks_total{result="dropped"}`; calls are never delayed. |
