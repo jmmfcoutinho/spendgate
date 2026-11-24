@@ -46,7 +46,8 @@ migration only added a nullable column.
   column or one with a default, a table without foreign keys, or a non-unique index.
 - A lint test (`tests/unit/test_migration_lint.py`) checks every migration after 0004: a Postgres
   `CHECK` added to an existing table (named or not, also inside `ADD COLUMN`) needs a name,
-  `NOT VALID` and its `VALIDATE` in a later file; a migration marked compatible may not drop anything
+  `NOT VALID` and its `VALIDATE` in a later file, and every constraint added `NOT VALID` must be
+  validated by a later packaged migration; a migration marked compatible may not drop anything
   but a constraint, an index or `NOT NULL` (a table, view, column, default, type, function,
   trigger...), rename, change a column type, set `NOT NULL`, delete or truncate rows, add a
   `NOT NULL` column without a default, add a constraint or foreign key, or create a unique index.

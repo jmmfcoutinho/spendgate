@@ -35,6 +35,7 @@ _ADD_COLUMN = re.compile(
     _I,
 )
 _NAMED_CHECK = re.compile(r"ADD\s+CONSTRAINT\s+\"?(\w+)\"?\s+CHECK\b", _I)
+_NAMED_CONSTRAINT = re.compile(r"ADD\s+CONSTRAINT\s+\"?(\w+)", _I)
 _NOT_VALID = re.compile(r"\bNOT\s+VALID\b", _I)
 _VALIDATE = re.compile(r"\bVALIDATE\s+CONSTRAINT\s+\"?(\w+)", _I)
 # Anywhere in a migration marked compatible: the previous release reads, writes or relies on what
@@ -96,6 +97,25 @@ def _validated(code: str) -> set[str]:
     return {m[1].lower() for m in _VALIDATE.finditer(code)}
 
 
+def _added_not_valid(code: str) -> set[str]:
+    named = (_NAMED_CONSTRAINT.match(a) for a in _actions(code) if _NOT_VALID.search(a))
+    return {m[1].lower() for m in named if m is not None}
+
+
+def unvalidated(found: list[Migration]) -> list[str]:
+    """Constraints added NOT VALID and never validated by a later migration: rows written before
+    them would stay unchecked for good."""
+    missing: list[str] = []
+    for migration in found:
+        later: set[str] = set()
+        for other in found:
+            if other.version > migration.version:
+                later |= _validated(_code(other.sql))
+        added = _added_not_valid(_code(migration.sql))
+        missing += [f"{migration.version:04d}: {name}" for name in sorted(added - later)]
+    return missing
+
+
 def _check_problems(code: str) -> list[str]:
     """Postgres: a CHECK is added NOT VALID, by name, and validated by a later migration."""
     validated = _validated(code)
@@ -147,6 +167,47 @@ def test_new_migrations_follow_the_migration_rules(dialect: str) -> None:
     new = [m for m in migrations.load(dialect) if m.version > GRANDFATHERED]
     found = {f"{m.version:04d}_{m.name}": lint(dialect, m) for m in new}
     assert {name: problems for name, problems in found.items() if problems} == {}
+    assert unvalidated(new) == []
+
+
+def _numbered(*sql: str) -> list[Migration]:
+    return [Migration(GRANDFATHERED + n, f"m{n}", text, "x") for n, text in enumerate(sql, 1)]
+
+
+_ADD_C_OK = "ALTER TABLE calls ADD CONSTRAINT c_ok CHECK (n >= 0) NOT VALID;"
+_VALIDATE_C_OK = "ALTER TABLE calls VALIDATE CONSTRAINT c_ok;"
+
+
+@pytest.mark.parametrize(
+    ("sql", "missing"),
+    [
+        pytest.param((_ADD_C_OK,), ["0005: c_ok"], id="never-validated"),
+        pytest.param((_ADD_C_OK, _VALIDATE_C_OK), [], id="validated-later"),
+        pytest.param((_VALIDATE_C_OK, _ADD_C_OK), ["0006: c_ok"], id="validated-before"),
+        pytest.param(
+            (
+                'ALTER TABLE calls ADD CONSTRAINT "c_k" FOREIGN KEY (k) REFERENCES k NOT VALID;',
+                "SELECT 1;",
+            ),
+            ["0005: c_k"],
+            id="foreign-key",
+        ),
+        pytest.param(
+            ("-- ADD CONSTRAINT c_ok CHECK (n >= 0) NOT VALID\nSELECT 1;",), [], id="comment"
+        ),
+    ],
+)
+def test_a_not_valid_constraint_is_validated_by_a_later_migration(
+    sql: tuple[str, ...], missing: list[str]
+) -> None:
+    assert unvalidated(_numbered(*sql)) == missing
+
+
+def test_both_dialects_have_the_same_versions_and_markers() -> None:
+    """Compatibility is a property of the release, not of one backend."""
+    postgres = [(m.version, m.name, m.compatible) for m in migrations.load("postgres")]
+    sqlite = [(m.version, m.name, m.compatible) for m in migrations.load("sqlite")]
+    assert postgres == sqlite
 
 
 @pytest.mark.parametrize(
