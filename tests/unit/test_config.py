@@ -374,6 +374,13 @@ def test_the_alert_webhook_needs_references_not_values(tmp_path: Path) -> None:
     assert "alerts.webhook.signing_secret: environment variable HOOK_SECRET" in unset
 
 
+def test_the_alert_webhook_signing_secret_must_be_utf8_text(tmp_path: Path) -> None:
+    env = HOOK_ENV | {"HOOK_SECRET": "fake\udcff"}  # an undecodable environment byte, escaped
+    message = failure(write(tmp_path, BASE + HOOK), env)
+    assert "alerts.webhook.signing_secret: must be UTF-8 text" in message
+    assert "fake" not in message
+
+
 @pytest.mark.parametrize("knob", ["max_attempts: 0", "max_attempts: 11", "queue_size: 0"])
 def test_alert_webhook_bounds(tmp_path: Path, knob: str) -> None:
     text = BASE + HOOK.replace("signing_secret:", f"{knob}, signing_secret:")

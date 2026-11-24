@@ -306,6 +306,16 @@ def _base_url_issue(url: str) -> str | None:
     return "must be an https:// URL (http:// only for localhost)"
 
 
+def _utf8(text: str) -> bool:
+    # An environment value that was not valid UTF-8 arrives with surrogate escapes; it would
+    # fail only when the first warning is signed, so it is refused here instead.
+    try:
+        text.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
     hook = cfg.alerts.webhook
     if hook is None:
@@ -315,6 +325,9 @@ def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
     # The same rule as a provider base_url; the message never quotes the URL.
     if url is not None and (problem := _base_url_issue(url.reveal())) is not None:
         ctx.issues.append(("alerts.webhook.url", problem))
+        return None
+    if key is not None and not _utf8(key.reveal()):  # the HMAC key is its UTF-8 bytes
+        ctx.issues.append(("alerts.webhook.signing_secret", "must be UTF-8 text"))
         return None
     if url is None or key is None:
         return None
