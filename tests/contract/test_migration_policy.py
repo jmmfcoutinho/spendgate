@@ -7,12 +7,15 @@ marked `compatible_with_previous`, or by writing its row the way that release wo
 
 import asyncio
 import hashlib
+import secrets
 import sqlite3
 from collections.abc import Callable
 from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import errors
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 from spendgate.ledger import migrations
 from spendgate.ledger.migrations import Migration, SchemaBehind
@@ -173,3 +176,31 @@ def test_each_postgres_migration_commits_on_its_own(
     with pytest.raises(LedgerUnavailable, match="no_such_table"):
         open_and_close("postgres", location, migrate=True)
     assert recorded("postgres", location) == [(1, False), (2, False)]
+
+
+@pytest.mark.postgres
+def test_a_migrating_open_with_nothing_to_do_needs_no_table_ownership(
+    postgres_url: str, tmp_path: Path
+) -> None:
+    """`serve --migrate` (or `migrate`) on a current schema changes nothing, so an app role that
+    may only read and write the tables starts: no DDL, which needs the owner and a strong lock."""
+    location = workdir_location("postgres", tmp_path)
+    open_and_close("postgres", location, migrate=True)  # the owner migrates
+    schema = str(execute("postgres", location, "SELECT current_schema()")[0][0])
+    role = f"sg_app_{secrets.token_hex(4)}"
+    try:
+        execute("postgres", location, f'CREATE ROLE "{role}" NOLOGIN')
+    except errors.InsufficientPrivilege:
+        pytest.skip("the test database user may not create roles")
+    try:
+        execute("postgres", location, f'GRANT USAGE ON SCHEMA "{schema}" TO "{role}"')
+        execute(
+            "postgres",
+            location,
+            f'GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "{schema}" TO "{role}"',
+        )
+        options = f"{conninfo_to_dict(location)['options']} -c role={role}"
+        open_and_close("postgres", make_conninfo(location, options=options), migrate=True)
+    finally:
+        execute("postgres", location, f'DROP OWNED BY "{role}"')
+        execute("postgres", location, f'DROP ROLE "{role}"')

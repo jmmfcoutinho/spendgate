@@ -63,14 +63,30 @@ _SET_DEFAULTS = (
 _MIGRATE_LOCK = "SELECT pg_advisory_xact_lock(hashtext('spendgate-migrate:' || current_schema()))"
 
 
-_BOOKKEEPING = (
-    "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, "
+_CREATE_BOOKKEEPING = (
+    "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, "
     "name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL, "
-    "compatible BOOLEAN NOT NULL DEFAULT false)",
-    # A table created before ADR-0018 lacks the flag; its rows are all contract steps.
-    "ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS compatible BOOLEAN NOT NULL "
-    "DEFAULT false",
+    "compatible BOOLEAN NOT NULL DEFAULT false)"
 )
+# A table created before ADR-0018 lacks the flag; its rows are all contract steps.
+_ADD_FLAG = "ALTER TABLE schema_migrations ADD COLUMN compatible BOOLEAN NOT NULL DEFAULT false"
+_BOOKKEEPING_STATE = (
+    "SELECT to_regclass('schema_migrations') IS NOT NULL AS found, EXISTS (SELECT 1 FROM "
+    "pg_attribute WHERE attrelid = to_regclass('schema_migrations') AND attname = 'compatible' "
+    "AND NOT attisdropped) AS flagged"
+)
+
+
+async def _ensure_bookkeeping(conn: Conn) -> None:
+    """Create `schema_migrations` or add its flag, only when missing: even with IF NOT EXISTS,
+    CREATE TABLE needs CREATE on the schema and ALTER TABLE ownership plus an ACCESS EXCLUSIVE
+    lock, so an app role that only reads and writes could not start on a current schema."""
+    cursor = await conn.execute(_BOOKKEEPING_STATE)
+    row = await cursor.fetchone()
+    if row is None or not row["found"]:
+        await conn.execute(_CREATE_BOOKKEEPING)
+    elif not row["flagged"]:
+        await conn.execute(_ADD_FLAG)
 
 
 async def _applied(conn: Conn) -> dict[int, migrations.Applied]:
@@ -103,8 +119,7 @@ async def _migrate(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None
             if not apply:
                 migrations.require_current(todo, applied)
                 return
-            for statement in _BOOKKEEPING:
-                await conn.execute(statement)
+            await _ensure_bookkeeping(conn)  # a no-op on a current, flagged table
             if not todo:
                 return
             migration = todo[0]
