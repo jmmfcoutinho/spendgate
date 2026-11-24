@@ -74,12 +74,16 @@ BEGIN                                  -- SQLite: BEGIN IMMEDIATE
     started_at = now) after checking max_new_sessions_per_hour. A new session also creates
     its session budget (budget_nano) if set. Session scopes are per key: the path includes the key id.
  3. chain = budgets of the leaf scope and all ancestors, active, model_filter matches (a case-sensitive glob over the catalog id, such as `openai/gpt-6-*`, never the alias; [ADR-0011](adr/0011-model-filter-validation-and-late-settle-reservation.md)), sorted by id ascending
- 4. for each budget: lock row; INSERT budget_periods(period_start(now)) ON CONFLICT DO NOTHING;
+ 4. one batch (one round trip on Postgres) locks every budget row in ascending id order and, for each,
+    reads its grants, INSERTs budget_periods(period_start(now)) ON CONFLICT DO NOTHING and reads that
+    period (its start comes from the budget's period, which never changes; a locked row whose period
+    row does not match fails closed); then, per budget in id order:
     eff = cap + active grants; normalise (may record excess);
     refuse if review_required_at IS NOT NULL            -> budget_exhausted (details.reason overrun_review)
     refuse if S + H + worst > eff                       -> budget_exhausted (period budgets: budget_period_exhausted);
                                                            a session's OWN budget -> session_limit_reached, details.limit = "budget"
  5. INSERT reservation(pending, owner, lease, meta), items; H += worst on every period row; step_count += 1
+    (one batch, sent with the COMMIT)
 COMMIT
 ```
 
