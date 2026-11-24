@@ -126,6 +126,8 @@ All notable changes to this project are documented here. The format follows
   probes, and `Pipeline.drain()` waits for background settlements (`aclose` uses it), so tests
   no longer read private attributes. The stalled-upload tests wait on an event set by the fake
   body instead of sleeping 10 ms, and the settlement tests await `drain()` instead of polling.
+- `BudgetExhausted.hold` in the Python SDK: the refused call's worst-case hold from
+  `details.hold`, parsed like `remaining`.
 
 ### Fixed
 
@@ -145,12 +147,12 @@ All notable changes to this project are documented here. The format follows
   responses and charges are unchanged. An independent fix was also proposed in #42; thank you.
   responses and charges are unchanged.
 - A `budget_exhausted` or `budget_period_exhausted` refusal from a budget that still has room no
-  longer says the budget is exhausted. The message now says the call's worst-case hold exceeds the
-  remaining budget and suggests setting `max_tokens` (or `max_output_tokens`) or raising the cap;
-  without `max_tokens` the hold uses the catalog's output ceiling, so a 5 USD cap could refuse a
-  flagship call with 4.99 USD left. The code and status are unchanged, and `details.hold` now carries
-  the hold in the same format as `details.remaining`. A budget with nothing left keeps the old
-  message.
+  longer says the budget is exhausted. The message now says the call's worst-case hold exceeds
+  the remaining budget and suggests setting or lowering `max_tokens` (or `max_output_tokens`) or
+  raising the cap; without `max_tokens` the hold uses the catalog's output ceiling, so a 5 USD cap
+  could refuse a flagship call with 4.99 USD left. The code and status are unchanged, and
+  `details.hold` now carries the hold in the same format as `details.remaining`. A budget with
+  nothing left keeps the old message.
 
 ## [0.1.1] - 2026-11-20
 
