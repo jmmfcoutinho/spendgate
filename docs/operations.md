@@ -196,10 +196,16 @@ Each instance also runs one heartbeat every `ledger.heartbeat_seconds`: it renew
 the calls it owns and stops open streams a kill switch or session limit now forbids. Library mode
 runs the same heartbeat and sweeps at each beat. A step that fails is logged on the
 `spendgate.pipeline` logger with the step name and the error type, and runs again at the next
-beat; the heartbeat never stops on its own. Scope chains (a key's scope and its ancestors, used for
-the budget headers, logs and the stream watch) are cached for 30 seconds, so a scope moved to a new
-parent is seen within that time. Holds never use this cache: they read the chain in their own
-transaction.
+beat; the heartbeat only stops when the process stops it. These lines are plain text, not JSON
+events: spendgate does not configure that logger, so they reach stderr through Python's default
+handler (or whatever logging your application sets up in library mode). Alert on
+`heartbeat step failed`.
+
+Scope chains (a key's scope and its ancestors, used for the budget headers, the settled call's
+`scope_path` and the stream watch) are cached for 30 seconds. A scope moved to a new parent shows
+in the headers and settled calls after that time, and in streams opened after it; a stream already
+open keeps the chain it started with until it ends. Holds never use this cache: they read the
+chain in their own transaction.
 
 ## Draining on restart
 

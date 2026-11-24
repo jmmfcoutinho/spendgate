@@ -253,13 +253,17 @@ All notable changes to this project are documented here. The format follows
   [Postgres connections](docs/operations.md#postgres-connections) and
   [ADR-0012](docs/adr/0012-bounded-ledger-waits.md).
 - The pipeline verifies a request's key once. It verified it a second time after reading the
-  body, with a later clock reading.
-- Cached scope chains expire after 30 seconds, so a scope that was moved to a new parent reaches the
-  budget headers, the settled event and the stream watch without a restart.
+  body, with a later clock reading. After the body is read it now only re-checks, through the key
+  cache, that the same key is still unrevoked and unexpired; a key revoked or expired during the
+  upload is refused with `unauthorized` before anything is held.
+- Cached scope chains expire after 30 seconds, so a scope moved to a new parent reaches the budget
+  headers and settled events after that time, and streams opened after it, without a restart. A
+  stream already open keeps its chain until it ends.
 - The heartbeat is supervised in the gateway and in library mode: a step that raises (lease
-  renewal, the stream watch, the library-mode sweep) is logged on the `spendgate.pipeline` logger
-  and retried at the next beat. In the gateway one error ended the heartbeat for good; library
-  mode swallowed errors without a trace and skipped the stream watch when renewal failed.
+  renewal, the stream watch, the library-mode sweep) is logged as plain text on the
+  `spendgate.pipeline` logger and retried at the next beat. In the gateway one error ended the
+  heartbeat for good; library mode swallowed errors without a trace and skipped the stream watch
+  when renewal failed.
 
 ## [0.1.1] - 2026-11-20
 
