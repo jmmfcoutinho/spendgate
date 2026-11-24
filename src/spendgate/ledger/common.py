@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Final
 
 from spendgate.core.budgets import (
+    AlertKind,
     Budget,
+    BudgetAlert,
     Grant,
     Period,
     PeriodState,
@@ -102,6 +104,17 @@ def lock_budget(
             Grant(i(g, "amount_nano"), i(g, "valid_from"), i(g, "valid_until")) for g in grants
         ),
     )
+
+
+def budget_alert(
+    kind: AlertKind, budget: Budget, start: int, spent: int, cap: int
+) -> Flow[BudgetAlert]:
+    """An alert for one budget period; reads the scope path when the lock was given none."""
+    path = budget.scope_path
+    if not path:  # settle locks budgets without their scope; alerts are rare, so read it here
+        rows = yield q(sql.SCOPE_REF, ref=budget.scope_id)
+        path = s(rows[0], "path") if rows else budget.scope_id
+    return BudgetAlert(kind, budget.id, path, budget.period, start, spent, cap)
 
 
 def period_state(row: Row) -> PeriodState:
