@@ -7,7 +7,9 @@ the [configuration reference](configuration.md).
 Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
 address is `--url`, else `SPENDGATE_URL`, else the listener in `--config` (`server.admin.listen`,
 or `server.listen` when the admin API shares the data port; a `0.0.0.0` listener is reached on
-loopback), else `http://127.0.0.1:8080` when there is no config file. On the host that runs the
+loopback), else `http://127.0.0.1:8080` when there is no config file. An address is taken from the
+config only when it is on this machine (`127.0.0.0/8`, `::1`, `localhost` or a bind-all listener);
+any other host exits with code 3: pass `--url` or set `SPENDGATE_URL` for a remote admin API. On the host that runs the
 proxy, add `--local` instead: it opens the ledger from `--config` directly and needs no key (in
 Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output. These
 three flags belong to the admin commands; `serve`, `migrate` and `check-config` take only

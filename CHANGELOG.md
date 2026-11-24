@@ -172,7 +172,8 @@ All notable changes to this project are documented here. The format follows
 - `spendgate --version` prints the installed version.
 - Admin commands without `--local` or `--url` now find the admin API from `--config`
   (`server.admin.listen`, else `server.listen`) instead of assuming `127.0.0.1:8081`, which the
-  README config does not use. `SPENDGATE_URL` and `--url` still take precedence.
+  README config does not use. `SPENDGATE_URL` and `--url` still take precedence. An address from
+  the config is used only when it is on loopback; for any other host pass `--url`.
 - `spendgate status --local` and the admin API report the installed version, not `0.0.0`.
 - `spendgate keys list` (and `keys create`) show the key's scope path, such as `org:demo`, not
   the scope's id. `--json` output is unchanged.
@@ -182,7 +183,8 @@ All notable changes to this project are documented here. The format follows
   provider credential no longer repeat it, and an unpriced routed model is no longer reported
   again as a warning.
 - The hint after `kill on` repeats the `--local`, `--config` and `--url` flags the command was
-  given, so `kill off` reaches the same ledger or API.
+  given (without any user name or password in the URL), so `kill off` reaches the same ledger or
+  API.
 
 ## [0.1.1] - 2026-11-20
 
