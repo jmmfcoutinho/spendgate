@@ -69,3 +69,7 @@ class LocalPrincipal:
             session_defaults(current_session(), self.currency),
         )  # fmt: skip
         return Principal(self.key_id, KeyKind.API, self.scope_id, policy)
+
+    async def still_active(self, principal: Principal, now: int) -> bool:
+        """Always: the script's principal has no key that could be revoked or expire."""
+        return True

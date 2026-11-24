@@ -1,9 +1,49 @@
-"""Background upkeep of one pipeline: lease renewal and the stream watch (protocol 2.8)."""
+"""Background upkeep of one pipeline: lease renewal, the stream watch (protocol 2.8) and the loop.
+
+`heartbeat` is the one supervised loop both the gateway and library mode run. A step that raises
+is logged and the loop goes on: a heartbeat that dies quietly would let every owned lease run out,
+so the sweeper would charge calls still in flight in full and open streams would stop.
+"""
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable, Sequence
 
 from spendgate.ledger.port import LedgerPort
 from spendgate.pipeline.closing import Closer
 from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import Clock
+
+_log = logging.getLogger("spendgate.pipeline")
+type Step = tuple[str, Callable[[], Awaitable[object]]]
+
+
+async def heartbeat(
+    interval: float, steps: Sequence[Step],
+    sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+) -> None:  # fmt: skip
+    """Run `steps` in order every `interval` seconds until cancelled; one failing never stops it."""
+    while True:
+        await sleep(interval)
+        for name, step in steps:
+            try:
+                await step()
+            except asyncio.CancelledError:
+                if _stopping():
+                    raise  # the loop itself was cancelled: stop
+                _failed(name, "CancelledError")  # a step's own inner await was cancelled
+            except Exception as exc:
+                _failed(name, type(exc).__name__)
+
+
+def _stopping() -> bool:
+    task = asyncio.current_task()
+    return task is None or task.cancelling() > 0
+
+
+def _failed(step: str, reason: str) -> None:
+    """The next beat retries. Only the type is logged: messages may hold URLs or ids."""
+    _log.error("heartbeat step failed step=%s reason=%s", step, reason)
 
 
 class Upkeep:

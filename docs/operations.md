@@ -192,6 +192,21 @@ that may have reached the provider is paid for. After a crash, a budget therefor
 for up to `ledger.lease_seconds` (default 60) plus one sweep interval, then it settles. Nothing to schedule: every instance sweeps, any of them may settle an expired hold, and a hold
 still being renewed by a live instance is left alone. A failing pass is logged as `sweep_failed` and retried on the next tick, never fatal.
 
+Each instance also runs one heartbeat every `ledger.heartbeat_seconds`: it renews the leases of
+the calls it owns and stops open streams a kill switch or session limit now forbids. Library mode
+runs the same heartbeat and sweeps at each beat. A step that fails is logged on the
+`spendgate.pipeline` logger with the step name and the error type, and runs again at the next
+beat; the heartbeat only stops when the process stops it. These lines are plain text, not JSON
+events: spendgate does not configure that logger, so they reach stderr through Python's default
+handler (or whatever logging your application sets up in library mode). Alert on
+`heartbeat step failed`.
+
+Scope chains (a key's scope and its ancestors, used for the budget headers, the settled call's
+`scope_path` and the stream watch) are cached for 30 seconds. A scope moved to a new parent shows
+in the headers and settled calls after that time, and in streams opened after it; a stream already
+open keeps the chain it started with until it ends. Holds never use this cache: they read the
+chain in their own transaction.
+
 ## Draining on restart
 
 On `SIGTERM`, `serve` closes its listener at once and waits for every call in flight, streams

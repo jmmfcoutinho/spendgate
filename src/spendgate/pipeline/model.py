@@ -92,6 +92,14 @@ class KeyVerifier(Protocol):
 
     async def verify_api(self, raw: str, now: int) -> Principal | Refusal: ...
 
+    async def still_active(self, principal: Principal, now: int) -> bool:
+        """Whether the key `principal` was verified from may still be used at `now`.
+
+        A cheap re-check by key id after a slow step (the body upload), not a second
+        authentication: no secret is compared and no new principal is made.
+        """
+        ...
+
 
 # --- observer ---------------------------------------------------------------------------------
 

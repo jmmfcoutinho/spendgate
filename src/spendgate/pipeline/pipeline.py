@@ -1,11 +1,12 @@
 """The request pipeline: ten steps, one entry point, ports injected (no globals).
 
-`Pipeline.serve` is what the HTTP adapter calls with raw request parts; `Pipeline.handle` takes an
-already-parsed `Inbound` (library mode). A refusal is a `Refusal` value turned into a `Reply`; it
-never reaches a provider. After the hold, `_forward_and_settle` guarantees exactly one money
-transition (`release` or `settle`) even when the client cancels: the transition runs in a task
-that a cancel cannot interrupt (T-MON-11, M-13). A streamed answer returns a live `StreamBody`
-instead; it makes the same one transition when the stream ends (`pipeline.streaming`).
+`Pipeline.serve` is the one entry point for a call, from the HTTP adapter and from library mode
+alike: it authenticates once and passes the principal on (after the upload it only re-checks
+that the same key is still active). A refusal is a `Refusal` value turned
+into a `Reply`; it never reaches a provider. After the hold, `_forward_and_settle` guarantees
+exactly one money transition (`release` or `settle`) even when the client cancels: the transition
+runs in a task that a cancel cannot interrupt (T-MON-11, M-13). A streamed answer returns a live
+`StreamBody` instead; it makes the same one transition when the stream ends (`pipeline.streaming`).
 """
 
 import asyncio
@@ -13,7 +14,7 @@ import contextlib
 import os
 import socket
 import time
-from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
 
 from spendgate.config import Settings
@@ -27,7 +28,7 @@ from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
 from spendgate.pipeline import answers, intake, replies, steps
 from spendgate.pipeline.alerts import log_alerts
-from spendgate.pipeline.auth import authenticate
+from spendgate.pipeline.auth import authenticate, recheck
 from spendgate.pipeline.closing import Call, Closer, Sleeper
 from spendgate.pipeline.faults import InternalEvent, fault_of
 from spendgate.pipeline.leases import Leases
@@ -49,7 +50,7 @@ from spendgate.pipeline.model import (
 from spendgate.pipeline.routing import Answered, Failed, Forwarder, Job, Router, unavailable
 from spendgate.pipeline.settle import Book, Closed
 from spendgate.pipeline.streaming import PING_SECONDS, STREAM_LIMITS, Live, StreamBody, StreamEnv
-from spendgate.pipeline.upkeep import Upkeep
+from spendgate.pipeline.upkeep import Step, Upkeep, heartbeat
 from spendgate.pipeline.watch import StreamFacts, session_ends_at
 from spendgate.providers.port import Provider, SseLimits
 
@@ -185,18 +186,16 @@ class Pipeline:
             if isinstance(inbound, Refusal):
                 status = intake.status_of(inbound)
                 return self._refuse(rid, endpoint, inbound, who, status=status)
-            return await self.handle(inbound, rid)
+            if (gone := await recheck(self._keys, who, self._now())) is not None:
+                return self._refuse(rid, endpoint, gone, who)  # revoked or expired during upload
+            return await self._handle(inbound, rid, who)
         finally:
             slot.release()
 
-    async def handle(self, inbound: Inbound, rid: str | None = None) -> Reply:
-        """Steps 2 to 10 for a parsed request."""
-        rid = rid or self._new_id()
+    async def _handle(self, inbound: Inbound, rid: str, who: Principal) -> Reply:
+        """Steps 3 to 10 for a parsed request whose key `serve` already verified (step 2)."""
         endpoint = inbound.endpoint
         now = self._now()
-        who = await authenticate(self._keys, inbound.headers, now)
-        if isinstance(who, Refusal):
-            return self._refuse(rid, endpoint, who)
         context = steps.Context(
             self.settings, self._providers, inbound, who.policy, rid, now, self._observer
         )
@@ -432,13 +431,18 @@ class Pipeline:
             await asyncio.gather(*list(self._tasks), return_exceptions=True)
             await asyncio.sleep(0)  # done tasks leave `_tasks` by callback; gather never yields
 
-    async def heartbeat(self, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep) -> None:
-        """Renew this instance's leases forever (cancel to stop); a failed renewal is retried."""
-        interval = self.settings.heartbeat_ms / _MS
-        while True:
-            await sleep(interval)
-            await self.renew_leases()
-            await self.watch_streams()
+    async def heartbeat(
+        self, sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, also: Sequence[Step] = ()
+    ) -> None:
+        """Renew leases and watch streams forever (cancel to stop), then the `also` steps.
+
+        Supervised: a step that raises is logged and retried at the next beat (`upkeep.heartbeat`).
+        """
+        own: list[Step] = [
+            ("renew_leases", self.renew_leases),
+            ("watch_streams", self.watch_streams),
+        ]
+        await heartbeat(self.settings.heartbeat_ms / _MS, [*own, *also], sleep)
 
     async def watch_streams(self) -> None:
         """Stop open streams a kill switch or their session's time limit now forbids (2.8)."""

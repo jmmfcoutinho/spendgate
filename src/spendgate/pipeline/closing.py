@@ -26,6 +26,10 @@ from spendgate.pipeline.steps import Prepared
 _SETTLE_TRIES = 3
 _BACKOFF_SECONDS = (0.05, 0.25)  # waits between the tries of one close
 _GIVE_UP_LEASES = 10  # an unsettled close is dropped this many leases after it failed
+# How long a scope chain is reused. Re-parenting a scope or closing one must reach headers, the
+# settled event and the stream watch's kill-switch check without a restart; half a minute keeps
+# the ledger reads per request near zero under load and bounds how stale a chain can be.
+CHAIN_TTL_MS = 30_000
 type Sleeper = Callable[[float], Awaitable[None]]
 
 
@@ -51,7 +55,7 @@ class Closer:
         # Closes the ledger did not take: (decision, when it first failed). Each heartbeat retries
         # them; their holds are no longer renewed, so the sweeper charges them in full (CR-02).
         self._unsettled: dict[str, tuple[Decision, int]] = {}
-        self._chains: dict[str, tuple[tuple[str, str], ...]] = {}
+        self._chains: dict[str, tuple[int, tuple[tuple[str, str], ...]]] = {}  # (read at, links)
 
     async def close(
         self, call: Call, book: Book, interrupted: Outcome | None, ttft_ms: int | None = None
@@ -128,7 +132,8 @@ class Closer:
         ttft_ms: int | None,
     ) -> None:  # fmt: skip
         now = self._now()
-        chain = self._chains.get(call.principal.scope_id)
+        cached = self._chains.get(call.principal.scope_id)  # just refreshed by `remaining`
+        chain = cached[1] if cached else None
         event = SettledEvent(
             call.id, call.principal.key_id, call.principal.scope_id, call.inbound.endpoint.path,
             call.prepared.route.catalog_id, decision.deployment, decision.outcome,
@@ -168,14 +173,18 @@ class Closer:
         return tuple(sid for sid, _ in await self._chain(scope_id))
 
     async def _chain(self, scope_id: str) -> tuple[tuple[str, str], ...]:
-        if scope_id not in self._chains:
-            links: list[tuple[str, str]] = []
-            current: str | None = scope_id
-            while current is not None:
-                row = await self._ledger.get_scope(current)
-                if row is None:
-                    break
-                links.append((row.id, row.path))
-                current = row.parent_id
-            self._chains[scope_id] = tuple(links)
-        return self._chains[scope_id]
+        """The (id, path) links from the scope up to its root, read again after `CHAIN_TTL_MS`."""
+        now = self._now()
+        cached = self._chains.get(scope_id)
+        if cached is not None and now - cached[0] < CHAIN_TTL_MS:
+            return cached[1]
+        links: list[tuple[str, str]] = []
+        current: str | None = scope_id
+        while current is not None:
+            row = await self._ledger.get_scope(current)
+            if row is None:
+                break
+            links.append((row.id, row.path))
+            current = row.parent_id
+        self._chains[scope_id] = (now, tuple(links))
+        return self._chains[scope_id][1]

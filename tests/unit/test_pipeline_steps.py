@@ -114,6 +114,9 @@ async def test_authenticate_fails_closed_when_the_ledger_is_down() -> None:
         async def verify_api(self, raw: str, now: int) -> Principal | Refusal:
             raise LedgerUnavailable("gone")
 
+        async def still_active(self, principal: Principal, now: int) -> bool:
+            raise LedgerUnavailable("gone")
+
     result = await authenticate(Down(), {"authorization": "Bearer sg-x"}, 0)
     assert isinstance(result, Refusal) and result.code is ErrorCode.LEDGER_UNAVAILABLE
 
