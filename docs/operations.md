@@ -203,7 +203,7 @@ call and for events such as `sweep_failed`. Only an allowlist of fields can appe
 `request_id`, `key_prefix`, `scope_path`, `model`, `deployment`, `outcome`, token counts, `cost`,
 `currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`, for internal errors
 `where`, `error_class`, `frames`, `charged`, and the budget-warning fields below (`budget_id`,
-`period`, `period_start`, `spent`, `cap`). Prompts, response bodies, headers and secrets are
+`scope_kind`, `period`, `period_start`, `spent`, `cap`). Prompts, response bodies, headers and secrets are
 never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
 Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
 start.
@@ -241,19 +241,26 @@ the same facts (never the message) go to the `spendgate.local` logger at level `
 any `spendgate.internal` line and report it as a bug.
 
 **Budget warnings** are WARNING lines on the `spendgate.budget` logger, in the same JSON format
-and through the same allowlist. Each is written once per budget, per period, per transition, in
-the transaction that caused it, so a repeat call or a retried settle never writes it again:
+and through the same allowlist. Each comes from the transaction that caused it, so a repeat call
+or a retried settle never writes it again. How often each can appear:
 
 | `event` | When |
 |---|---|
 | `soft_threshold` | An admitted hold takes `spent + held` to `soft_pct` of the effective cap or above (once per period, recorded as `soft_alerted_at`) |
-| `cap_breached` | A settlement above its hold takes `spent + held` above the effective cap. Only the settlement that crosses the cap writes it |
+| `cap_breached` | A settlement above its hold takes `spent + held` above the effective cap. Once per crossing: only the settlement that crosses writes it, and later overruns while above the cap do not. If `spent + held` drops back within the cap (in-flight holds settle low or are released) and a later overrun crosses again, that is a new crossing and a new line, so a period can have more than one |
 | `blocked` | That breach flagged a `strict_overrun` budget for review: it refuses calls until `ack-overrun`. Written again only after an ack and a new breach |
 
 Fields: `event`, `logger`, `budget_id`, `scope_path` (the scope that owns the budget), `period`
 (`day`, `month` or `none`), `period_start` (RFC 3339 UTC; absent for `none`), `spent` (`spent +
-held` at the transition), `cap` (the effective cap), both decimal strings, and `currency`. Nothing
-about the request, the key or the user is included. A budget that was already above its cap (a
-lowered cap or an expired grant) when an overrun is booked logs `blocked` without `cap_breached`.
+held` at the transition), `cap` (the effective cap), both decimal strings, and `currency`. A
+session budget is named by the key's scope plus `scope_kind: session`: a session path would carry
+the key id and the caller's session id, so neither is logged. Nothing about the request, the key
+or the user is included. A budget that was already above its cap (a lowered cap or an expired
+grant) when an overrun is booked logs `blocked` without `cap_breached`.
 In library mode the same records go to the `spendgate.budget` standard-library logger, with the
 fields also in the message text.
+
+The lines are notices, not the record. A line can be lost when a settlement commits but its reply
+never reaches the gateway: the retry finds the reservation already settled, does nothing and
+reports nothing. The ledger stays authoritative: `review_required_at` (`spendgate status`, the
+admin API) for a block, `soft_alerted_at` for the threshold, and the metrics above.
