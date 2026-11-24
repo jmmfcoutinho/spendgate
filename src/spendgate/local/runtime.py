@@ -51,8 +51,12 @@ class LocalObserver(NoopObserver):
         fault = event.fault
         _log.error(
             "internal error: where=%s error_class=%s request_id=%s charged=%s frames=%s",
-            fault.where, fault.error_class, event.request_id, event.charged, fault.frames_text,
-        )  # fmt: skip
+            fault.where,
+            fault.error_class,
+            event.request_id,
+            event.charged,
+            fault.frames_text,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,15 +78,21 @@ class Runtime:
     """Ledger plus pipeline for one transport; `start` is idempotent and lazy."""
 
     def __init__(
-        self, settings: Settings, ledger_path: Path | None, cap: Money | None, *,
-        client: httpx.AsyncClient | None = None, now_ms: Clock = system_ms,
-    ) -> None:  # fmt: skip
+        self,
+        settings: Settings,
+        ledger_path: Path | None,
+        cap: Money | None,
+        *,
+        client: httpx.AsyncClient | None = None,
+        now_ms: Clock = system_ms,
+    ) -> None:
         path = ledger_path or settings.ledger_path
         if path is None:
             raise ValueError("library mode uses a SQLite ledger; the config selects postgres")
         if cap is not None and cap.currency != settings.ledger_currency:
-            raise ValueError(f"cap {cap.format()} is not in the ledger currency "
-                             f"{settings.ledger_currency}")  # fmt: skip
+            raise ValueError(
+                f"cap {cap.format()} is not in the ledger currency {settings.ledger_currency}"
+            )
         self.settings = settings
         self._path, self._cap, self._now = path, cap, now_ms
         prepare_directory(path)
@@ -108,10 +118,15 @@ class Runtime:
         principal = LocalPrincipal(scope_id, settings.ledger_currency)
         instance = f"local-{os.getpid()}-{new_id()[:8]}"
         pipeline = Pipeline(
-            settings=settings, ledger=self._ledger, keys=principal,
-            providers=build_providers(settings), sender=self._client, now_ms=self._now,
-            instance=instance, observer=LocalObserver(),
-        )  # fmt: skip
+            settings=settings,
+            ledger=self._ledger,
+            keys=principal,
+            providers=build_providers(settings),
+            sender=self._client,
+            now_ms=self._now,
+            instance=instance,
+            observer=LocalObserver(),
+        )
         # Every fail-open option is logged at start (CR-09, ADR-0003); loudly when one is on.
         level = logging.WARNING if settings.config.fail_open.allow_remote_media else logging.INFO
         for line in settings.fail_open_summary():

@@ -174,9 +174,10 @@ def refusal_for(exc: Exception) -> Refusal | None:
         return Refusal(ErrorCode.INVALID_REQUEST, message, "since" if ranged else "by")
     if isinstance(exc, LedgerUnavailable):
         return Refusal(
-            ErrorCode.LEDGER_UNAVAILABLE, "The ledger is unavailable; try again.",
+            ErrorCode.LEDGER_UNAVAILABLE,
+            "The ledger is unavailable; try again.",
             retry_after_seconds=_LEDGER_RETRY_SECONDS,
-        )  # fmt: skip
+        )
     if isinstance(exc, NotFoundError):
         return Refusal(ErrorCode.NOT_FOUND, "That object does not exist.")
     if isinstance(exc, ConflictError):
@@ -198,9 +199,10 @@ async def authenticate(
         return await ctx.keys.verify_admin(raw, ctx.now(), scope)
     except LedgerError:
         return Refusal(
-            ErrorCode.LEDGER_UNAVAILABLE, "The ledger is unavailable; try again.",
+            ErrorCode.LEDGER_UNAVAILABLE,
+            "The ledger is unavailable; try again.",
             retry_after_seconds=_LEDGER_RETRY_SECONDS,
-        )  # fmt: skip
+        )
 
 
 def _trusted(ctx: AdminContext) -> Principal:
@@ -261,9 +263,10 @@ def money_json(nano: int, currency: str) -> dict[str, str]:
 def nano_of(ctx: AdminContext, value: MoneyIn, param: str) -> int:
     if value.currency != ctx.currency:
         raise ApiError(
-            ErrorCode.INVALID_REQUEST, f"Money must be in the ledger currency {ctx.currency}.",
+            ErrorCode.INVALID_REQUEST,
+            f"Money must be in the ledger currency {ctx.currency}.",
             f"{param}.currency",
-        )  # fmt: skip
+        )
     return Money.from_amount(value.amount, value.currency).nano
 
 

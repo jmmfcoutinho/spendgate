@@ -20,9 +20,13 @@ def finished_reply(call: Call, result: Answered | Failed | None, closed: Closed)
     charged = closed.decision.charge if closed.booked else None
     if isinstance(result, Failed):
         return replies.error_reply(
-            result.refusal, call.inbound.endpoint.shape, call.id, status=result.status,
-            charged=charged, should_retry=result.should_retry,
-        )  # fmt: skip
+            result.refusal,
+            call.inbound.endpoint.shape,
+            call.id,
+            status=result.status,
+            charged=charged,
+            should_retry=result.should_retry,
+        )
     left = closed.remaining
     return replies.success_reply(
         result.response, call.id, charged, left[0] if left else None, left[1] if left else None

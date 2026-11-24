@@ -102,9 +102,13 @@ class Gate:
         return self._bytes
 
     def enter(
-        self, content_length: int | None, *, max_body: int | None = None,
-        copies: int = COPIES, owner: str = "",
-    ) -> Slot | Refusal:  # fmt: skip
+        self,
+        content_length: int | None,
+        *,
+        max_body: int | None = None,
+        copies: int = COPIES,
+        owner: str = "",
+    ) -> Slot | Refusal:
         """Take a place or refuse; a declared length is charged now, an absent one as it arrives.
 
         `max_body` is this request's own cap (JSON has a smaller one than an upload), `copies`
@@ -170,10 +174,12 @@ class BodyTimeout(Refusal):
 
 
 async def read_capped(
-    chunks: AsyncIterator[bytes], limit: int, timeout_s: float | None = None,
+    chunks: AsyncIterator[bytes],
+    limit: int,
+    timeout_s: float | None = None,
     now: Callable[[], float] | None = None,
     reserve: Callable[[int], Refusal | None] | None = None,
-) -> bytearray | Refusal:  # fmt: skip
+) -> bytearray | Refusal:
     """Read the body, stopping the moment it passes `limit` (a lying or absent Content-Length).
 
     `timeout_s` bounds the whole read and the body must keep arriving (`PROGRESS_MIN_BYTES` per

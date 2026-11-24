@@ -78,9 +78,11 @@ class SecretReload:
                 self._apply(await _in_daemon_thread(self._read, self._settings))
             except Exception as exc:  # the server keeps the secrets it has
                 log_event(
-                    self._logger, "secret_reload_failed", logging.ERROR,
+                    self._logger,
+                    "secret_reload_failed",
+                    logging.ERROR,
                     error_class=type(exc).__name__,
-                )  # fmt: skip
+                )
             if not self._again:
                 return
 
@@ -99,9 +101,11 @@ class SecretReload:
                 self._logger, "secret_reload_failed", logging.WARNING, where=where, reason=reason
             )
         log_event(
-            self._logger, "secrets_reloaded",
-            reloaded=",".join(result.reloaded), changed=",".join(changed),
-        )  # fmt: skip
+            self._logger,
+            "secrets_reloaded",
+            reloaded=",".join(result.reloaded),
+            changed=",".join(changed),
+        )
 
     def _rotate(self, new: Settings) -> str | None:
         """Hand the new DSN to the ledger; why it was refused, or None."""

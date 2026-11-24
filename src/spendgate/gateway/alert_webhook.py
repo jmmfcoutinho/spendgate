@@ -59,10 +59,16 @@ class WebhookAlerts(logging.Handler):
     """Queue budget warnings as signed JSON bodies; `run` posts them until cancelled."""
 
     def __init__(  # noqa: PLR0913 - the deliverer's collaborators, injected for tests
-        self, target: WebhookTarget, client: httpx.AsyncClient, metrics: Metrics,
-        logger: logging.Logger, *, now: Clock, sleep: Sleeper = asyncio.sleep,
+        self,
+        target: WebhookTarget,
+        client: httpx.AsyncClient,
+        metrics: Metrics,
+        logger: logging.Logger,
+        *,
+        now: Clock,
+        sleep: Sleeper = asyncio.sleep,
         new_event_id: Callable[[], str] = event_id,
-    ) -> None:  # fmt: skip
+    ) -> None:
         super().__init__(logging.WARNING)
         self._target, self._client, self._metrics, self._logger = target, client, metrics, logger
         self._now, self._sleep, self._new_id = now, sleep, new_event_id
@@ -131,9 +137,12 @@ class WebhookAlerts(logging.Handler):
                 except Exception as exc:
                     self._metrics.alert_webhooks.inc(result="failed")
                     log_event(
-                        self._logger, "alert_webhook_failed", logging.WARNING,
-                        reason=type(exc).__name__, http_status=None,
-                    )  # fmt: skip
+                        self._logger,
+                        "alert_webhook_failed",
+                        logging.WARNING,
+                        reason=type(exc).__name__,
+                        http_status=None,
+                    )
                 body = None
         finally:
             self._closed = True  # later warnings are counted as dropped, not left in a dead queue
@@ -166,9 +175,12 @@ class WebhookAlerts(logging.Handler):
                 break  # a redirect or another 4xx will not change on retry
         self._metrics.alert_webhooks.inc(result="failed")
         log_event(
-            self._logger, "alert_webhook_failed", logging.WARNING, reason=reason,
+            self._logger,
+            "alert_webhook_failed",
+            logging.WARNING,
+            reason=reason,
             http_status=status,
-        )  # fmt: skip
+        )
         return False
 
     async def _post(self, body: bytes, headers: Mapping[str, str]) -> int:
@@ -183,9 +195,12 @@ class WebhookAlerts(logging.Handler):
 
 @contextlib.asynccontextmanager
 async def webhook_alerts(
-    target: WebhookTarget | None, metrics: Metrics, logger: logging.Logger, now: Clock,
+    target: WebhookTarget | None,
+    metrics: Metrics,
+    logger: logging.Logger,
+    now: Clock,
     transport: httpx.AsyncBaseTransport | None = None,
-) -> AsyncIterator[WebhookAlerts | None]:  # fmt: skip
+) -> AsyncIterator[WebhookAlerts | None]:
     """The handler attached to `spendgate.budget` for the block, or None when none is set up."""
     if target is None:
         yield None

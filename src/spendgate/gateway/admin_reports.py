@@ -38,10 +38,14 @@ async def query_usage(call: Call) -> Response:
     cursor = decode_cursor(call.query("cursor"), (int,))
     offset, limit = (int(cursor[0]) if cursor else 0), call.limit()
     query = UsageQuery(
-        by, call.time_query("since"), call.time_query("until"),
+        by,
+        call.time_query("since"),
+        call.time_query("until"),
         UsageFilters(call.query("scope_id"), model=call.query("model"), tag=call.query("tag")),
-        basis, limit, offset,
-    )  # fmt: skip
+        basis,
+        limit,
+        offset,
+    )
     result = await call.ctx.ledger.usage(
         query, now=call.now, retention_days=call.ctx.settings.config.ledger.retention_days
     )
@@ -59,10 +63,13 @@ async def list_calls(call: Call) -> Response:
         return None if raw is None else (await need_scope(call, raw)).id
 
     filters = CallFilters(
-        scope_id=await ref("scope_id"), key_id=call.query("key_id"),
-        session_id=await ref("session_id"), outcome=outcome,
-        since=call.time_query("since") or 0, until=call.time_query("until"),
-    )  # fmt: skip
+        scope_id=await ref("scope_id"),
+        key_id=call.query("key_id"),
+        session_id=await ref("session_id"),
+        outcome=outcome,
+        since=call.time_query("since") or 0,
+        until=call.time_query("until"),
+    )
     raw_cursor = decode_cursor(call.query("cursor"), (int, str, int))
     before = None if raw_cursor is None else CallCursor(*raw_cursor)  # type: ignore[arg-type]
     limit = call.limit()
@@ -90,9 +97,12 @@ async def list_audit(call: Call) -> Response:
     before = None if raw_cursor is None else (int(raw_cursor[0]), str(raw_cursor[1]))
     limit = call.limit()
     rows = await call.ctx.ledger.list_audit(
-        since=call.time_query("since") or 0, until=call.time_query("until"),
-        actor=call.query("actor"), before=before, limit=limit + 1,
-    )  # fmt: skip
+        since=call.time_query("since") or 0,
+        until=call.time_query("until"),
+        actor=call.query("actor"),
+        before=before,
+        limit=limit + 1,
+    )
     shown = rows[:limit]
     cursor = encode_cursor(shown[-1].at, shown[-1].id) if len(rows) > limit else None
     return respond(page([audit_entry_json(r) for r in shown], cursor))
@@ -144,8 +154,9 @@ async def readiness(call: Call) -> Response:
 async def status(call: Call) -> Response:
     ledger = call.ctx.ledger
     ledger_info: dict[str, object] = {
-        "backend": call.ctx.settings.config.ledger.backend.kind, "healthy": True,
-    }  # fmt: skip
+        "backend": call.ctx.settings.config.ledger.backend.kind,
+        "healthy": True,
+    }
     alerts: list[dict[str, str]] = []
     kills: tuple[KillSwitchRow, ...] = ()
     try:
@@ -163,4 +174,4 @@ async def status(call: Call) -> Response:
             "kill_switches": [kill_json(k) for k in kills],
             "budget_alerts": alerts,
         }
-    )  # fmt: skip
+    )

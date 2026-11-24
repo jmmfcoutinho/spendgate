@@ -26,9 +26,11 @@ class StrictLoader(_BaseLoader):  # type: ignore[misc,valid-type]  # base picked
                 continue
             if duplicate:
                 raise ConstructorError(
-                    "while constructing a mapping", node.start_mark,
-                    f"found duplicate key {key!r}", key_node.start_mark,
-                )  # fmt: skip
+                    "while constructing a mapping",
+                    node.start_mark,
+                    f"found duplicate key {key!r}",
+                    key_node.start_mark,
+                )
         return super().construct_mapping(node, deep)  # type: ignore[no-any-return]
 
 

@@ -114,10 +114,13 @@ class OtelTracer:
             # An empty context, not the current one: an untraced call starts its own trace.
             base = holder.context if holder.context is not None else Context()
             started = self._tracer.start_span(
-                name, context=base, kind=_KINDS.get(name, SpanKind.INTERNAL),
-                attributes=allowed(attributes), record_exception=False,
+                name,
+                context=base,
+                kind=_KINDS.get(name, SpanKind.INTERNAL),
+                attributes=allowed(attributes),
+                record_exception=False,
                 set_status_on_exception=False,
-            )  # fmt: skip
+            )
             current = trace.set_span_in_context(started, base)
             if holder.context is None:
                 holder.context = current  # later spans of this call become its children

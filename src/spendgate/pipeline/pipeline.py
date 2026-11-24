@@ -79,15 +79,27 @@ class Pipeline:
     """Steps 1 to 10 over injected ports."""
 
     def __init__(  # noqa: PLR0913 - the ports are the point of the design
-        self, *, settings: Settings, ledger: MoneyLedger, keys: KeyVerifier,
-        providers: Mapping[str, Provider], sender: Sender, limits: LimitStore | None = None,
-        now_ms: Clock = system_ms, new_request_id: IdGenerator = request_id,
-        observer: Observer | None = None, instance: str | None = None,
-        gate: intake.Gate | None = None, stream_limits: SseLimits = STREAM_LIMITS,
-        ping_seconds: float = PING_SECONDS, sleep: Sleeper = asyncio.sleep,
-        max_request_seconds: float | None = None, body_timeout_seconds: float | None = None,
-        hold_seconds: float = HOLD_SECONDS, tracer: tracing.Tracer | None = None,
-    ) -> None:  # fmt: skip
+        self,
+        *,
+        settings: Settings,
+        ledger: MoneyLedger,
+        keys: KeyVerifier,
+        providers: Mapping[str, Provider],
+        sender: Sender,
+        limits: LimitStore | None = None,
+        now_ms: Clock = system_ms,
+        new_request_id: IdGenerator = request_id,
+        observer: Observer | None = None,
+        instance: str | None = None,
+        gate: intake.Gate | None = None,
+        stream_limits: SseLimits = STREAM_LIMITS,
+        ping_seconds: float = PING_SECONDS,
+        sleep: Sleeper = asyncio.sleep,
+        max_request_seconds: float | None = None,
+        body_timeout_seconds: float | None = None,
+        hold_seconds: float = HOLD_SECONDS,
+        tracer: tracing.Tracer | None = None,
+    ) -> None:
         missing = {r.catalog_id.partition("/")[0] for r in settings.routes.values()} - set(
             providers
         )
@@ -95,12 +107,15 @@ class Pipeline:
             raise ValueError(f"no provider adapter for {sorted(missing)}")
         self.settings = settings
         server = settings.config.server
-        biggest = max(server.max_body_bytes * intake.COPIES,
-                      server.max_json_body_bytes * intake.JSON_AMPLIFICATION)  # fmt: skip
+        biggest = max(
+            server.max_body_bytes * intake.COPIES,
+            server.max_json_body_bytes * intake.JSON_AMPLIFICATION,
+        )
         self.gate = gate or intake.Gate(
-            server.max_concurrent_requests, max(server.max_body_bytes, server.max_json_body_bytes),
+            server.max_concurrent_requests,
+            max(server.max_body_bytes, server.max_json_body_bytes),
             max(intake.DEFAULT_MEMORY_BYTES, biggest),
-        )  # fmt: skip
+        )
         self._max_request_s = max_request_seconds or server.max_request_seconds
         self._body_timeout_s = body_timeout_seconds or server.body_read_timeout_seconds
         self._ledger, self._keys, self._providers = ledger, keys, providers
@@ -111,17 +126,30 @@ class Pipeline:
         self._instance = instance or instance_id()
         self._router = candidates.Router(settings.routes, settings.health)
         self._forwarder = Forwarder(
-            sender, self._router, settings.catalog, now_ms, self._observer,
-            settings.config.routing.max_attempts, stream_limits, sleep, self._max_request_s * _MS,
-        )  # fmt: skip
+            sender,
+            self._router,
+            settings.catalog,
+            now_ms,
+            self._observer,
+            settings.config.routing.max_attempts,
+            stream_limits,
+            sleep,
+            self._max_request_s * _MS,
+        )
         obs, tracer_ = self._observer, self._tracer
         self._closer = Closer(settings, ledger, self._limits, obs, now_ms, sleep, tracer_)
         self._owned: set[str] = set()  # holds this pipeline is still responsible for closing
         self._leases = Leases(settings.lease_ms, settings.heartbeat_ms)
         self._upkeep = Upkeep(
-            ledger, self._closer, self._leases, self._owned, now_ms, self._instance,
-            settings.lease_ms, self._observer,
-        )  # fmt: skip
+            ledger,
+            self._closer,
+            self._leases,
+            self._owned,
+            now_ms,
+            self._instance,
+            settings.lease_ms,
+            self._observer,
+        )
         self._holder = Holder(ledger, self._closer, obs, tracer_, now_ms, self._spawn, hold_seconds)
         self._ping_seconds = ping_seconds
         self._tasks: set[asyncio.Future[object]] = set()
@@ -153,9 +181,15 @@ class Pipeline:
             await self._closer.free_limits(taken)
 
     async def _admitted(  # noqa: PLR0913, PLR0917 - the facts serve already settled
-        self, rid: str, endpoint: Endpoint, lowered: Mapping[str, str], length: int | None,
-        chunks: AsyncIterator[bytes], who: Principal, taken: Admit | None,
-    ) -> Reply:  # fmt: skip
+        self,
+        rid: str,
+        endpoint: Endpoint,
+        lowered: Mapping[str, str],
+        length: int | None,
+        chunks: AsyncIterator[bytes],
+        who: Principal,
+        taken: Admit | None,
+    ) -> Reply:
         """Gate, read, parse, then the rest; the gate place is kept while the call runs."""
         server = self.settings.config.server
         cap = server.max_body_bytes if endpoint.multipart else server.max_json_body_bytes
@@ -214,9 +248,15 @@ class Pipeline:
         prepared = call.prepared
         targets = self._router.targets(prepared.route.alias)
         request = steps.hold_request(
-            self.settings, prepared, targets, call.principal.policy, call.inbound.endpoint.path,
-            call.id, self._instance, call.started,
-        )  # fmt: skip
+            self.settings,
+            prepared,
+            targets,
+            call.principal.policy,
+            call.inbound.endpoint.path,
+            call.id,
+            self._instance,
+            call.started,
+        )
         book = Book(prepared.pricing, targets[0].label)
         held = await self._holder.hold(request, call, book)
         if not isinstance(held, Held):
@@ -230,9 +270,13 @@ class Pipeline:
                 HeldEvent(call.id, prepared.route.catalog_id, prepared.pricing.worst)
             )
         job = Job(
-            call.id, prepared.request, prepared.provider, targets, prepared.free_statuses,
+            call.id,
+            prepared.request,
+            prepared.provider,
+            targets,
+            prepared.free_statuses,
             prepared.route.catalog_id,
-        )  # fmt: skip
+        )
         return await self._forward_and_settle(call, job, book, held)
 
     # --- step 8 and 9 -------------------------------------------------------------------------
@@ -279,15 +323,24 @@ class Pipeline:
             self._owned.discard(call.id)
 
     def _stream_reply(
-        self, call: Call, book: Book, live: Live, pre: tuple[Money, str] | None,
+        self,
+        call: Call,
+        book: Book,
+        live: Live,
+        pre: tuple[Money, str] | None,
         standing: StreamFacts | None,
-    ) -> Reply:  # fmt: skip
+    ) -> Reply:
         """Protocol 2.8: event stream headers at once; the cost comes later as an SSE comment."""
         env = StreamEnv(
-            self.settings.catalog, self._now, self._observer, self._leases,
+            self.settings.catalog,
+            self._now,
+            self._observer,
+            self._leases,
             lambda b, ttft: self._close(call, b, None, ttft),
-            self._spawn, self._ping_seconds, int(self._max_request_s * _MS),
-        )  # fmt: skip
+            self._spawn,
+            self._ping_seconds,
+            int(self._max_request_s * _MS),
+        )
         body = StreamBody(env, call.id, call.inbound.endpoint, book, live, call.started)
         if standing is not None:
             self._leases.watch(call.id, replace(standing, provider=live.provider))
@@ -307,9 +360,14 @@ class Pipeline:
     # --- step 10: records, headers --------------------------------------------------------------
 
     def _refuse(  # noqa: PLR0913, PLR0917 - one refusal's independent facts
-        self, rid: str, endpoint: Endpoint, refusal: Refusal, who: Principal | None = None,
-        inbound: Inbound | None = None, status: int | None = None,
-    ) -> Reply:  # fmt: skip
+        self,
+        rid: str,
+        endpoint: Endpoint,
+        refusal: Refusal,
+        who: Principal | None = None,
+        inbound: Inbound | None = None,
+        status: int | None = None,
+    ) -> Reply:
         """A refusal as a reply; nothing was held or sent. Cost header: zero, in ledger money."""
         model = steps.routed_model(self.settings.routes, inbound.body) if inbound else None
         event = RefusedEvent(rid, refusal.code, endpoint.path, model, who.key_id if who else None)

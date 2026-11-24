@@ -93,16 +93,27 @@ class GatewayObserver:
         if event.review_required:
             m.review_required.inc(model=event.model)
             log_event(
-                self._logger, "usage_review_required", logging.WARNING,
-                request_id=event.request_id, model=event.model, scope_path=scope,
-            )  # fmt: skip
+                self._logger,
+                "usage_review_required",
+                logging.WARNING,
+                request_id=event.request_id,
+                model=event.model,
+                scope_path=scope,
+            )
         log_call(
-            self._logger, request_id=event.request_id, key_prefix_=event.key_id[:8],
-            scope_path=scope, model=event.model, deployment=event.deployment,
-            outcome=event.outcome, input_tokens=usage.input_tokens if usage else 0,
-            output_tokens=usage.output_tokens if usage else 0, cost=event.charged,
-            latency_ms=event.latency_ms, http_status=event.http_status,
-        )  # fmt: skip
+            self._logger,
+            request_id=event.request_id,
+            key_prefix_=event.key_id[:8],
+            scope_path=scope,
+            model=event.model,
+            deployment=event.deployment,
+            outcome=event.outcome,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            cost=event.charged,
+            latency_ms=event.latency_ms,
+            http_status=event.http_status,
+        )
 
     def on_internal(self, event: InternalEvent) -> None:
         log_internal(self._logger, event)
@@ -236,10 +247,15 @@ class PipelineKnobs(TypedDict, total=False):
 
 
 def build_pipeline(  # noqa: PLR0913 - the ports plus metrics and logs
-    settings: Settings, ledger: MoneyLedger, keys: KeyVerifier, sender: Sender, *,
-    metrics: Metrics | None = None, logger: logging.Logger | None = None,
+    settings: Settings,
+    ledger: MoneyLedger,
+    keys: KeyVerifier,
+    sender: Sender,
+    *,
+    metrics: Metrics | None = None,
+    logger: logging.Logger | None = None,
     **knobs: Unpack[PipelineKnobs],
-) -> Pipeline:  # fmt: skip
+) -> Pipeline:
     """A `Pipeline` with the default adapters, and metrics and logs when both are given."""
     if not knobs.get("providers"):
         knobs["providers"] = build_providers(settings)

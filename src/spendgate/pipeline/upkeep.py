@@ -20,10 +20,11 @@ type Step = tuple[str, Callable[[], Awaitable[object]]]
 
 
 async def heartbeat(
-    interval: float, steps: Sequence[Step],
+    interval: float,
+    steps: Sequence[Step],
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     on_failure: Callable[[str], None] | None = None,
-) -> None:  # fmt: skip
+) -> None:
     """Run `steps` in order every `interval` seconds until cancelled; one failing never stops it.
 
     `on_failure` gets the failed step's name (a metric); if it raises, that is ignored.
@@ -58,9 +59,16 @@ class Upkeep:
     """What the heartbeat does, over the ledger, leases and closer the pipeline owns."""
 
     def __init__(  # noqa: PLR0913, PLR0917 - the pipeline's own collaborators, passed through
-        self, ledger: MoneyLedger, closer: Closer, leases: Leases, owned: set[str],
-        now: Clock, instance: str, lease_ms: int, observer: Observer | None = None,
-    ) -> None:  # fmt: skip
+        self,
+        ledger: MoneyLedger,
+        closer: Closer,
+        leases: Leases,
+        owned: set[str],
+        now: Clock,
+        instance: str,
+        lease_ms: int,
+        observer: Observer | None = None,
+    ) -> None:
         self._ledger, self._closer, self._leases, self._owned = ledger, closer, leases, owned
         self._now, self._instance, self._lease_ms = now, instance, lease_ms
         self._observer = observer or NoopObserver()

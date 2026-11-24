@@ -15,13 +15,17 @@ from spendgate.pipeline.model import Clock
 
 
 def make_runtime(
-    settings_or_path: Settings | str | Path, ledger_path: str | Path | None, cap: str | None,
-    client: httpx.AsyncClient | None, now_ms: Clock,
-) -> Runtime:  # fmt: skip
+    settings_or_path: Settings | str | Path,
+    ledger_path: str | Path | None,
+    cap: str | None,
+    client: httpx.AsyncClient | None,
+    now_ms: Clock,
+) -> Runtime:
     settings = (
-        settings_or_path if isinstance(settings_or_path, Settings)
+        settings_or_path
+        if isinstance(settings_or_path, Settings)
         else load(settings_or_path, env=local_env())
-    )  # fmt: skip
+    )
     amount: Money | None = parse_amount(cap) if cap is not None else None
     path = Path(ledger_path) if ledger_path is not None else None
     return Runtime(settings, path, amount, client=client, now_ms=now_ms)

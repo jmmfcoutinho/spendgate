@@ -73,10 +73,16 @@ async def create_budget(call: Call) -> Response:
     if strict is None:
         strict = call.ctx.settings.config.defaults.strict_overrun
     made = await call.ctx.ledger.create_budget(
-        scope.id, Period(body.period), nano_of(call.ctx, body.cap, "cap"), now=call.now,
-        soft_pct=body.soft_pct, model_filter=body.model_filter, strict_overrun=strict,
-        note=body.note, actor=call.actor,
-    )  # fmt: skip
+        scope.id,
+        Period(body.period),
+        nano_of(call.ctx, body.cap, "cap"),
+        now=call.now,
+        soft_pct=body.soft_pct,
+        model_filter=body.model_filter,
+        strict_overrun=strict,
+        note=body.note,
+        actor=call.actor,
+    )
     return respond(await _shown(call, made.id), 201)
 
 
@@ -86,9 +92,14 @@ async def update_budget(call: Call) -> Response:
     body = await call.body(BudgetUpdateIn)
     cap = None if body.cap is None else nano_of(call.ctx, body.cap, "cap")
     await call.ctx.ledger.update_budget(
-        budget_id, actor=call.actor, now=call.now, cap_nano=cap, soft_pct=body.soft_pct,
-        strict_overrun=body.strict_overrun, note=body.note,
-    )  # fmt: skip
+        budget_id,
+        actor=call.actor,
+        now=call.now,
+        cap_nano=cap,
+        soft_pct=body.soft_pct,
+        strict_overrun=body.strict_overrun,
+        note=body.note,
+    )
     return respond(await _shown(call, budget_id))
 
 
@@ -114,18 +125,27 @@ async def create_grant(call: Call) -> Response:
             "valid_until",
         ) from None
     grant_id = await call.ctx.ledger.create_grant(
-        budget_id, amount_nano=amount, valid_from=start, valid_until=body.valid_until,
-        actor=call.actor, reason=body.reason, now=call.now,
-    )  # fmt: skip
+        budget_id,
+        amount_nano=amount,
+        valid_from=start,
+        valid_until=body.valid_until,
+        actor=call.actor,
+        reason=body.reason,
+        now=call.now,
+    )
     return respond(
         {
-            "id": grant_id, "budget_id": budget_id,
+            "id": grant_id,
+            "budget_id": budget_id,
             "amount": money_json(amount, call.ctx.currency),
-            "valid_from": iso(start), "valid_until": iso(body.valid_until),
-            "reason": body.reason, "created_by": call.actor, "created_at": iso(call.now),
+            "valid_from": iso(start),
+            "valid_until": iso(body.valid_until),
+            "reason": body.reason,
+            "created_by": call.actor,
+            "created_at": iso(call.now),
         },
         201,
-    )  # fmt: skip
+    )
 
 
 async def ack_overrun(call: Call) -> Response:
@@ -178,9 +198,13 @@ async def engage_kill_switch(call: Call) -> Response:
         switch, actor=call.actor, reason=body.reason, now=call.now
     )
     out: dict[str, object] = {
-        "id": switch_id, "target_kind": kind.value, "reason": body.reason,
-        "created_by": call.actor, "created_at": iso(call.now), "cleared_at": None,
-    }  # fmt: skip
+        "id": switch_id,
+        "target_kind": kind.value,
+        "reason": body.reason,
+        "created_by": call.actor,
+        "created_at": iso(call.now),
+        "cleared_at": None,
+    }
     if kind is not KillTarget.GLOBAL:
         out["target_ref"] = switch.target_ref
     return respond(out, 201)

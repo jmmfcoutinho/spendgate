@@ -110,10 +110,12 @@ class Settings:
     def health(self) -> HealthConfig:
         r = self.config.routing
         return HealthConfig(
-            cooldown_ms=r.cooldown_seconds * _MS, failure_threshold_pct=r.failure_threshold_pct,
-            min_requests=r.min_requests, window_ms=r.window_seconds * _MS,
+            cooldown_ms=r.cooldown_seconds * _MS,
+            failure_threshold_pct=r.failure_threshold_pct,
+            min_requests=r.min_requests,
+            window_ms=r.window_seconds * _MS,
             max_cooldown_ms=r.max_cooldown_seconds * _MS,
-        )  # fmt: skip
+        )
 
     def fail_open_summary(self) -> list[str]:
         """Lines the gateway logs (as warnings) at start: every enabled opt-out, or none."""
@@ -354,9 +356,15 @@ def _deployment(
     if base_url is None:
         return None
     return ResolvedDeployment(
-        spec.provider, base_url, spec.model or model_part, auth,
-        spec.region or prov.region, spec.api_version or prov.api_version, credential, ref == ADC,
-    )  # fmt: skip
+        spec.provider,
+        base_url,
+        spec.model or model_part,
+        auth,
+        spec.region or prov.region,
+        spec.api_version or prov.api_version,
+        credential,
+        ref == ADC,
+    )
 
 
 def credential_path(spec: DeploymentSpec, at: str) -> str:
@@ -495,6 +503,9 @@ def check_config(
         errors = tuple(f"{p}: {m}" if p else m for p, m in exc.issues)
         return CheckReport(errors, tuple(sorted(set(unpriced))))
     return CheckReport(
-        (), (), settings.unverified_summary(), tuple(settings.unmatched_filters()),
+        (),
+        (),
+        settings.unverified_summary(),
+        tuple(settings.unmatched_filters()),
         settings.superseded_summary(),
-    )  # fmt: skip
+    )

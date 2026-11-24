@@ -176,9 +176,14 @@ def _lent(use: PoolUse | None) -> Iterator[None]:
 
 
 async def run_with_retry[T](  # noqa: PLR0913 - the metrics hooks are optional keywords
-    pool: Pool, make_flow: Callable[[], Flow[T]], stats: RetryStats, *, slow: bool = False,
-    on_wait: WaitHook | None = None, use: PoolUse | None = None,
-) -> T:  # fmt: skip
+    pool: Pool,
+    make_flow: Callable[[], Flow[T]],
+    stats: RetryStats,
+    *,
+    slow: bool = False,
+    on_wait: WaitHook | None = None,
+    use: PoolUse | None = None,
+) -> T:
     """`on_wait` gets how long each attempt queued for a connection, in ms; `use` counts the
     connections lent out (both are metrics)."""
     for attempt in range(MAX_RETRIES + 1):

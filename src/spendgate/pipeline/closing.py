@@ -54,9 +54,15 @@ class Call:
 
 class Closer:
     def __init__(  # noqa: PLR0913, PLR0917 - the closer's collaborators
-        self, settings: Settings, ledger: MoneyLedger, limits: LimitStore, observer: Observer,
-        now: Clock, sleep: Sleeper = asyncio.sleep, tracer: tracing.Tracer | None = None,
-    ) -> None:  # fmt: skip
+        self,
+        settings: Settings,
+        ledger: MoneyLedger,
+        limits: LimitStore,
+        observer: Observer,
+        now: Clock,
+        sleep: Sleeper = asyncio.sleep,
+        tracer: tracing.Tracer | None = None,
+    ) -> None:
         self._settings, self._ledger, self._limits = settings, ledger, limits
         self._observer, self._now, self._sleep = observer, now, sleep
         self._tracer = tracer or tracing.NoTracer()
@@ -150,21 +156,36 @@ class Closer:
                 await self._limits.release(admit)
 
     def _settled(
-        self, call: Call, book: Book, decision: Decision, left: tuple[Money, str] | None,
+        self,
+        call: Call,
+        book: Book,
+        decision: Decision,
+        left: tuple[Money, str] | None,
         ttft_ms: int | None,
-    ) -> None:  # fmt: skip
+    ) -> None:
         now = self._now()
         cached = self._chains.get(call.principal.scope_id)  # just refreshed by `remaining`
         chain = cached[1] if cached else None
         event = SettledEvent(
-            call.id, call.principal.key_id, call.principal.scope_id, call.inbound.endpoint.path,
-            call.prepared.route.catalog_id, decision.deployment, decision.outcome,
-            decision.charge, book.pricing.worst, book.usage, max(now - call.started, 0),
-            decision.release, left[0] if left else None, chain[0][1] if chain else None,
-            any(a.review_required for a in decision.attempts), ttft_ms,
+            call.id,
+            call.principal.key_id,
+            call.principal.scope_id,
+            call.inbound.endpoint.path,
+            call.prepared.route.catalog_id,
+            decision.deployment,
+            decision.outcome,
+            decision.charge,
+            book.pricing.worst,
+            book.usage,
+            max(now - call.started, 0),
+            decision.release,
+            left[0] if left else None,
+            chain[0][1] if chain else None,
+            any(a.review_required for a in decision.attempts),
+            ttft_ms,
             decision.attempts[-1].http_status if decision.attempts else None,
             sum(a.latency_ms or 0 for a in decision.attempts),
-        )  # fmt: skip
+        )
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._observer.on_settled(event)
 

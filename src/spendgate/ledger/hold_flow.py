@@ -361,10 +361,15 @@ def _hold_writes(
         )
     )
     writes += [
-        q(sql.ITEM_INSERT, id=req.request_id, budget_id=b.id, period_start=start,
-          held=req.worst_nano)
+        q(
+            sql.ITEM_INSERT,
+            id=req.request_id,
+            budget_id=b.id,
+            period_start=start,
+            held=req.worst_nano,
+        )
         for b, start, _, _ in checks
-    ]  # fmt: skip
+    ]
     if session_id is not None:
         writes.append(q(sql.SESSION_TOUCH, id=session_id, now=req.now))
     return writes

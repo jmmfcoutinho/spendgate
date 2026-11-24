@@ -109,10 +109,17 @@ class Forwarder:
     """Step 8: translate, send, classify, fail over. Records every attempt in the `Book`."""
 
     def __init__(  # noqa: PLR0913, PLR0917 - the loop's collaborators
-        self, sender: Sender, router: Router, catalog: Catalog, now: Clock, observer: Observer,
-        max_attempts: int, limits: SseLimits = SseLimits(),  # noqa: B008 - frozen default
-        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep, deadline_ms: float | None = None,
-    ) -> None:  # fmt: skip
+        self,
+        sender: Sender,
+        router: Router,
+        catalog: Catalog,
+        now: Clock,
+        observer: Observer,
+        max_attempts: int,
+        limits: SseLimits = SseLimits(),  # noqa: B008 - frozen default
+        sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        deadline_ms: float | None = None,
+    ) -> None:
         self._sender, self._router, self._catalog = sender, router, catalog
         self._now, self._observer, self._max = now, observer, max_attempts
         self._limits, self._sleep, self._deadline_ms = limits, sleep, deadline_ms
@@ -233,8 +240,16 @@ class Forwarder:
             relay = job.provider.relay(job.request, self._limits)
         except Exception as exc:
             await opened.aclose()  # the request was sent: charged at the full hold
-            self._record(job, book, target, started, Outcome.INTERNAL_ERROR, opened.status_code,
-                         not_processed=False, error_code=AttemptError.RELAY_ERROR)  # fmt: skip
+            self._record(
+                job,
+                book,
+                target,
+                started,
+                Outcome.INTERNAL_ERROR,
+                opened.status_code,
+                not_processed=False,
+                error_code=AttemptError.RELAY_ERROR,
+            )
             refusal = Refusal(ErrorCode.INTERNAL_ERROR, "The stream could not be relayed.")
             return Failed(refusal, 500, fault=fault_of("routing.relay", exc))
         self._router.succeeded(target, self._now(), started)
@@ -244,25 +259,48 @@ class Forwarder:
     # --- outcomes of one attempt ---------------------------------------------------------------
 
     def _record(  # noqa: PLR0913, PLR0917 - one attempt's facts
-        self, job: Job, book: Book, target: Target, started: int, outcome: Outcome,
-        status: int | None, *, not_processed: bool, cooldown_ms: int | None = None,
-        error_code: CallErrorCode | None = None, reading: Reading | None = None,
-    ) -> AttemptRecord:  # fmt: skip
+        self,
+        job: Job,
+        book: Book,
+        target: Target,
+        started: int,
+        outcome: Outcome,
+        status: int | None,
+        *,
+        not_processed: bool,
+        cooldown_ms: int | None = None,
+        error_code: CallErrorCode | None = None,
+        reading: Reading | None = None,
+    ) -> AttemptRecord:
         """Write the attempt's row and end its flight: the outcome is now recorded."""
         now = self._now()
         flight = Flight(book.next_number, target.provider, target.label, started)
         record = attempt_record(
-            book, flight, outcome, now, request_id=job.request_id, status=status,
-            not_processed=not_processed, error_code=error_code, reading=reading,
-        )  # fmt: skip
+            book,
+            flight,
+            outcome,
+            now,
+            request_id=job.request_id,
+            status=status,
+            not_processed=not_processed,
+            error_code=error_code,
+            reading=reading,
+        )
         book.attempts.append(record)
         book.flight = None
         self._observer_safe(
             AttemptEvent(
-                job.request_id, job.model, target.provider, target.label, outcome, status,
-                not_processed, record.latency_ms or 0, cooldown_ms,
+                job.request_id,
+                job.model,
+                target.provider,
+                target.label,
+                outcome,
+                status,
+                not_processed,
+                record.latency_ms or 0,
+                cooldown_ms,
             )
-        )  # fmt: skip
+        )
         return record
 
     def _observer_safe(self, event: AttemptEvent) -> None:
@@ -278,16 +316,28 @@ class Forwarder:
             # towards the breaker, which opens only at the failure-rate threshold.
             self._router.failed(target, now)
             self._record(
-                job, book, target, started, Outcome.UNREACHABLE, None, not_processed=True,
+                job,
+                book,
+                target,
+                started,
+                Outcome.UNREACHABLE,
+                None,
+                not_processed=True,
                 error_code=failure.code,
-            )  # fmt: skip
+            )
             return _Retry(Cause.UNREACHABLE, None)
         self._router.failed(target, now)
         outcome = Outcome.TIMEOUT if failure.timeout else Outcome.UPSTREAM_5XX
         self._record(
-            job, book, target, started, outcome, None, not_processed=False,
+            job,
+            book,
+            target,
+            started,
+            outcome,
+            None,
+            not_processed=False,
             error_code=failure.code,
-        )  # fmt: skip
+        )
         if failure.timeout:
             return unavailable(target.provider, "The provider timed out.", 504)
         return unavailable(target.provider, "The provider connection failed.", 502)
@@ -298,9 +348,15 @@ class Forwarder:
         """An adapter raised on a sent request: usage is unreadable, so the full hold (CR-01)."""
         self._router.failed(target, self._now())
         self._record(
-            job, book, target, started, Outcome.INTERNAL_ERROR, status, not_processed=False,
+            job,
+            book,
+            target,
+            started,
+            Outcome.INTERNAL_ERROR,
+            status,
+            not_processed=False,
             error_code=AttemptError.ADAPTER_ERROR,
-        )  # fmt: skip
+        )
         internal = Refusal(ErrorCode.INTERNAL_ERROR, "The provider answer could not be read.")
         return Failed(internal, 500, fault=fault)
 
@@ -319,9 +375,15 @@ class Forwarder:
         outcome = Outcome.OK if reading.cost else Outcome.OK_NO_USAGE
         self._router.succeeded(target, self._now(), started)
         self._record(
-            job, book, target, started, outcome, response.status, not_processed=False,
+            job,
+            book,
+            target,
+            started,
+            outcome,
+            response.status,
+            not_processed=False,
             reading=reading,
-        )  # fmt: skip
+        )
         try:
             converted = job.provider.response(job.request, response)
         except Exception as exc:  # recorded as answered: the call is charged, the client gets 500
@@ -355,15 +417,28 @@ class Forwarder:
             retry_s, unknown = retry_hint(err, response.headers, now)
             cooldown = self._router.cool(target, now, retry_s, cause, unknown=unknown)
             self._record(
-                job, book, target, started, err.outcome(free), status, not_processed=True,
-                cooldown_ms=cooldown, error_code=err.code,
-            )  # fmt: skip
+                job,
+                book,
+                target,
+                started,
+                err.outcome(free),
+                status,
+                not_processed=True,
+                cooldown_ms=cooldown,
+                error_code=err.code,
+            )
             return _Retry(cause, retry_s)
         self._feed_health(target, status, now, started)
         self._record(
-            job, book, target, started, err.outcome(free), status, not_processed=False,
+            job,
+            book,
+            target,
+            started,
+            err.outcome(free),
+            status,
+            not_processed=False,
             error_code=err.code,
-        )  # fmt: skip
+        )
         return _failure_for(err, target.provider)
 
     def _feed_health(self, target: Target, status: int, now: int, started: int) -> None:

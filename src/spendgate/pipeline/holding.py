@@ -31,9 +31,15 @@ type Spawn = Callable[[Awaitable[None]], object]
 
 class Holder:
     def __init__(  # noqa: PLR0913, PLR0917 - the pipeline's own collaborators, passed through
-        self, ledger: MoneyLedger, closer: Closer, observer: Observer, tracer: tracing.Tracer,
-        now: Clock, spawn: Spawn, hold_seconds: float = HOLD_SECONDS,
-    ) -> None:  # fmt: skip
+        self,
+        ledger: MoneyLedger,
+        closer: Closer,
+        observer: Observer,
+        tracer: tracing.Tracer,
+        now: Clock,
+        spawn: Spawn,
+        hold_seconds: float = HOLD_SECONDS,
+    ) -> None:
         self._ledger, self._closer, self._observer, self._tracer = ledger, closer, observer, tracer
         self._now, self._spawn, self._hold_s = now, spawn, hold_seconds
 

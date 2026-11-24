@@ -129,10 +129,17 @@ class PriceEntry(_Strict):
     note: Annotated[str, Field(strict=True, max_length=300)] | None = None
     deployment_type: (
         Literal[
-            "global", "data_zone", "regional", "standard", "batch", "flex", "priority",
+            "global",
+            "data_zone",
+            "regional",
+            "standard",
+            "batch",
+            "flex",
+            "priority",
             "provisioned",
-        ] | None
-    ) = None  # fmt: skip
+        ]
+        | None
+    ) = None
     region: Annotated[str, Field(strict=True, pattern=f"^{_REGION.pattern}$")] | None = None
     price_multiplier: Multiplier = Decimal(1)
     meters: Meters
@@ -311,6 +318,10 @@ def parse(
         for key, group in grouped.items()
     }
     return Catalog(
-        sha256, ledger_currency, tuple(fx), MappingProxyType(index_by_model),
-        MappingProxyType(free), frozenset(replaced),
-    )  # fmt: skip
+        sha256,
+        ledger_currency,
+        tuple(fx),
+        MappingProxyType(index_by_model),
+        MappingProxyType(free),
+        frozenset(replaced),
+    )

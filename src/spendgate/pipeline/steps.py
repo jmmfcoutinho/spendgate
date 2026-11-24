@@ -151,9 +151,14 @@ def _route(settings: Settings, inbound: Inbound, key: KeyPolicy, now: int) -> _R
     labels, user_label, tags = labels_of(inbound.headers, inbound.body)
     # Budgets and the session row come from the ledger inside the hold; this is only the cache.
     plan = resolve(
-        replace(key, allowed_models=None), labels, route.catalog_id, now,
-        budgets=(), chain_scope_ids=(), providers=(route.catalog_id.partition("/")[0],),
-    )  # fmt: skip
+        replace(key, allowed_models=None),
+        labels,
+        route.catalog_id,
+        now,
+        budgets=(),
+        chain_scope_ids=(),
+        providers=(route.catalog_id.partition("/")[0],),
+    )
     if isinstance(plan, Refusal):
         return plan
     return _Routed(route, name, labels, user_label, tags, plan)
@@ -218,11 +223,16 @@ def _clean_request(
         return ceiling
     held = _set_ceiling(kind, body, ceiling)
     return CleanRequest(
-        ctx.inbound.endpoint.path, routed.name, body, body.get("stream") is True,
+        ctx.inbound.endpoint.path,
+        routed.name,
+        body,
+        body.get("stream") is True,
         {k: v for k, v in ctx.inbound.headers.items() if k not in _SECRET_HEADERS},
-        ctx.inbound.files, "chatcmpl-" + ctx.request_id.removeprefix("sg_req_"),
-        ctx.now // _MS, held,
-    )  # fmt: skip
+        ctx.inbound.files,
+        "chatcmpl-" + ctx.request_id.removeprefix("sg_req_"),
+        ctx.now // _MS,
+        held,
+    )
 
 
 def _price(
@@ -252,10 +262,17 @@ def _price(
     pricing = Pricing(entry, fx_rate_nano(settings.catalog, entry.currency), worst)
     tokens = estimated.input_tokens + estimated.max_output_tokens + estimated.audio_input_tokens
     return Prepared(
-        route, ctx.providers[route.catalog_id.partition("/")[0]], clean, pricing, routed.labels,
-        routed.user_label, routed.tags, max(tokens, 1), _limits(routed.plan.limits, settings),
+        route,
+        ctx.providers[route.catalog_id.partition("/")[0]],
+        clean,
+        pricing,
+        routed.labels,
+        routed.user_label,
+        routed.tags,
+        max(tokens, 1),
+        _limits(routed.plan.limits, settings),
         settings.catalog.free_statuses(route.catalog_id.partition("/")[0]),
-    )  # fmt: skip
+    )
 
 
 def _estimate_body(inbound: Inbound, body: Mapping[str, Json]) -> Mapping[str, object]:
@@ -340,9 +357,15 @@ def _denied(deny: Deny) -> Refusal:
 
 
 def hold_request(  # noqa: PLR0913, PLR0917 - the facts the admission transaction needs
-    settings: Settings, prepared: Prepared, targets: tuple[Target, ...], key: KeyPolicy,
-    endpoint: str, request_id: str, instance: str, now: int,
-) -> HoldRequest:  # fmt: skip
+    settings: Settings,
+    prepared: Prepared,
+    targets: tuple[Target, ...],
+    key: KeyPolicy,
+    endpoint: str,
+    request_id: str,
+    instance: str,
+    now: int,
+) -> HoldRequest:
     """One hold for the request: worst = the same price for every candidate of the catalog id."""
     pricing = prepared.pricing
     meta = HoldMeta(
@@ -350,15 +373,27 @@ def hold_request(  # noqa: PLR0913, PLR0917 - the facts the admission transactio
         prepared.route.catalog_id,
         settings.catalog_sha256,
         tuple(
-            Candidate(t.provider, t.label, pricing.entry.price_id, pricing.entry.currency,
-                      pricing.fx_rate_nano)
+            Candidate(
+                t.provider,
+                t.label,
+                pricing.entry.price_id,
+                pricing.entry.currency,
+                pricing.fx_rate_nano,
+            )
             for t in targets
         ),
         prepared.user_label,
         prepared.tags,
-    )  # fmt: skip
+    )
     return HoldRequest(
-        request_id, instance, now, settings.lease_ms, pricing.worst.nano, key,
-        prepared.route.catalog_id, tuple(sorted({t.provider for t in targets})), meta,
+        request_id,
+        instance,
+        now,
+        settings.lease_ms,
+        pricing.worst.nano,
+        key,
+        prepared.route.catalog_id,
+        tuple(sorted({t.provider for t in targets})),
+        meta,
         prepared.labels.session,
-    )  # fmt: skip
+    )

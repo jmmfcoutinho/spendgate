@@ -185,9 +185,16 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         webhook_alerts(settings.alert_webhook, metrics, logger, rt.now) as alerts,
     ):
         gateway = build_gateway(
-            settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger, alerts=alerts,
-            tracer=tracer, now_ms=rt.now,
-        )  # fmt: skip
+            settings,
+            rt.ledger,
+            rt.keys,
+            sender,
+            metrics=metrics,
+            logger=logger,
+            alerts=alerts,
+            tracer=tracer,
+            now_ms=rt.now,
+        )
         # SIGHUP re-reads `file:` secrets (provider credentials, the ledger DSN) in place.
         reload = SecretReload(settings, gateway.pipeline, logger, rt.rotate_dsn)
         separate = settings.config.server.admin

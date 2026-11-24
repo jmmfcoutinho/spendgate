@@ -48,11 +48,17 @@ class Gateway:
 
 
 def build_gateway(  # noqa: PLR0913 - the ports plus the optional observability
-    settings: Settings, ledger: AdminLedger, keys: KeyService, sender: Sender, *,
-    metrics: Metrics | None = None, logger: logging.Logger | None = None,
-    alerts: WebhookAlerts | None = None, money: MoneyLedger | None = None,
+    settings: Settings,
+    ledger: AdminLedger,
+    keys: KeyService,
+    sender: Sender,
+    *,
+    metrics: Metrics | None = None,
+    logger: logging.Logger | None = None,
+    alerts: WebhookAlerts | None = None,
+    money: MoneyLedger | None = None,
     **knobs: Unpack[PipelineKnobs],
-) -> Gateway:  # fmt: skip
+) -> Gateway:
     """Everything `serve` runs, wired once.
 
     `money` is the ledger the pipeline uses when it is not `ledger` itself (a test double for the

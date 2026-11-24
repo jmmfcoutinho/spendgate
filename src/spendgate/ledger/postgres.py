@@ -158,9 +158,14 @@ async def _steps(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
             await conn.execute(
                 "INSERT INTO schema_migrations (version, name, checksum, applied_at, compatible) "
                 "VALUES (%s, %s, %s, %s, %s)",
-                (migration.version, migration.name, migration.checksum, clock(),
-                 migration.compatible),
-            )  # fmt: skip
+                (
+                    migration.version,
+                    migration.name,
+                    migration.checksum,
+                    clock(),
+                    migration.compatible,
+                ),
+            )
 
 
 def same_but_password(old: str, new: str) -> bool:
@@ -193,8 +198,10 @@ async def _connect_once(dsn: str, login: Login | None) -> Conn:
     try:
         return await connection_class(login).connect(
             make_conninfo(dsn, **tcp, **token),
-            autocommit=True, row_factory=dict_row, connect_timeout=_CONNECT_TIMEOUT_S,
-        )  # fmt: skip
+            autocommit=True,
+            row_factory=dict_row,
+            connect_timeout=_CONNECT_TIMEOUT_S,
+        )
     except psycopg.Error as exc:  # already `connect_failure` text from the connection class
         failed = str(exc)
     raise LedgerUnavailable(f"cannot open ledger: {failed}")

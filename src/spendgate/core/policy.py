@@ -172,9 +172,10 @@ def _session_header_refusal(key: KeyPolicy, labels: Labels) -> Refusal | None:
         )
     if labels.session is None and defaults is not None and defaults.required:
         return Refusal(
-            ErrorCode.INVALID_REQUEST, f"This key requires the {SESSION_HEADER} header.",
+            ErrorCode.INVALID_REQUEST,
+            f"This key requires the {SESSION_HEADER} header.",
             SESSION_HEADER,
-        )  # fmt: skip
+        )
     return None
 
 
