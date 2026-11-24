@@ -148,10 +148,12 @@ server ends quickly instead of holding the call:
 | `keepalives`, `keepalives_idle`, `keepalives_interval`, `keepalives_count` | `1`, `15`, `5`, `3` | TCP keepalives: a dead server or a dropped network is noticed in about 30 s |
 | `tcp_user_timeout` | `30000` (ms) | Data the server never acknowledges (a `COMMIT` to a silent host) is given up after 30 s instead of the kernel's ~15 min of retransmission |
 
-The pool also lets at most 2 callers per connection (20 with the default 10 connections) queue for
-a free connection; one more is refused with `ledger_unavailable` at once instead of queueing
-behind a stalled server. Lease renewal skips a hold whose row another transaction has locked (it
-is being settled, released or expired), so a long lock never fails the heartbeat or stops a stream.
+Lease renewal skips a hold whose row another transaction has locked instead of waiting for it, so
+one long lock does not fail the heartbeat and stop every open stream. Such a row is being closed by
+its owner, or a sweeper is expiring a lease that is already overdue (that stream is stopped as
+`lease_lost`); if the sweep rolls back, the hold stays pending and a later sweep expires it.
+Callers waiting for a pooled connection queue for up to 10 s; none is refused just for queueing,
+so a burst of new calls cannot block settlements or renewals of calls already running.
 
 
 A lock timeout (SQLSTATE 55P03) or a cancelled statement (57014) is refused as
