@@ -36,8 +36,13 @@ Issue #33 asks for deployments that hold no long-lived cloud secret. Three gaps 
   cancelled caller cannot start a second one), and reused until 5 minutes before it expires or
   until a connect fails. libpq reports a rejected login (28P01, 28000) as an `OperationalError`
   that often carries no SQLSTATE, so any failed connect forgets the cached token. A failed fetch is
-  `ledger_unavailable`, naming the kind and the exception class only. A DSN that is not a valid
-  connection string is refused without quoting it.
+  `ledger_unavailable`, naming the kind and the exception class only. A kind whose extra is not
+  installed is refused at start (exit code 3), naming the extra.
+- **Connection errors are fixed text.** A DSN that is not a valid connection string is refused
+  without quoting it, and a failed connect, at start or in the pool, is reported as `cannot
+  connect to the ledger database (<class>)` plus the SQLSTATE when there is one, with no chained
+  exception: libpq's message quotes host, port and option values from the URL. When the host
+  contains `@` (an unencoded `@` in the password), a fixed hint says to percent-encode it.
 - **The token libraries are imported by the ledger.** `ledger.postgres_auth` imports botocore,
   azure-identity and google-auth, each lazily and only for its kind. This is an exception to the
   rule that provider SDKs are imported only inside their own adapter (architecture.md section
@@ -46,16 +51,17 @@ Issue #33 asks for deployments that hold no long-lived cloud secret. Three gaps 
 - The pool reads its login per connection: psycopg_pool 3.3 accepts a callable `conninfo` and an
   async callable `kwargs`, so the DSN is read from the ledger and the token source is awaited each
   time a connection opens. The migration connection asks the token source too.
-- **SIGHUP** in `serve` re-reads every `file:` secret in a worker thread, so a slow mount never
-  blocks the event loop; signals during a reload coalesce into one more read after it. The
+- **SIGHUP** in `serve` re-reads every `file:` secret in a daemon thread of its own, so a slow mount
+  never blocks the event loop, and shutdown removes the handler and abandons a read still under way
+  instead of waiting for it; signals during a reload coalesce into one more read after it. The
   results are applied on the loop: provider credentials (the new router targets are built first,
-  then swapped in with one assignment, so a call in flight keeps the credential it started with)
-  and the ledger DSN (handed to connections opened from then on). A DSN may change only in its password; a
-  new host, port, database, user or option is refused and the old DSN kept, because a silent move
+  then swapped in with one assignment, so a call in flight keeps the credential it started with) and
+  the ledger DSN (handed to connections opened from then on). A DSN may change only in its password;
+  a new host, port, database, user or option is refused and the old DSN kept, because a silent move
   to another ledger with holds open would break the hold/settle pairing. `env:` secrets, the key
   pepper and every non-secret setting are not reloaded. A file that cannot be read keeps its old
-  value. Each reload logs `secrets_reloaded` with the config paths read and changed (new log
-  fields `reloaded` and `changed`), and `secret_reload_failed` per failure; values never.
+  value. Each reload logs `secrets_reloaded` with the config paths read and changed (new log fields
+  `reloaded` and `changed`), and `secret_reload_failed` per failure; values never.
 - **`ledger.pool_min`** (default 1, may be 0), **`ledger.pool_max`** (default 10) and
   **`ledger.pool_timeout_seconds`** (default 10) replace the constants, with the same defaults.
   `pool_min` above `pool_max` is a config error. SQLite ignores them.

@@ -269,6 +269,12 @@ certificate, and the libpq default (`prefer`) falls back to plaintext. The DSN i
 reference (`env:NAME` or `file:/path`), so the whole URL, password included, lives in a secret and
 never in `spendgate.yaml`.
 
+**Connection errors.** A connection that fails is reported as `cannot connect to the ledger
+database (<error class>)`, with the SQLSTATE when there is one, at start and in the pool's retry
+warnings. libpq's own message is left out because it quotes host, port and option values from the
+URL. The usual cause of a host name with an `@` in it is an `@` in the password: percent-encode it
+as `%40` (the message says so when it sees one).
+
 **Pool size.** Each instance keeps `ledger.pool_min` connections open (default 1) and opens at
 most `ledger.pool_max` (default 10); a call that finds none free waits
 `ledger.pool_timeout_seconds` (default 10) and is then refused with `ledger_unavailable`. Size the
@@ -309,8 +315,8 @@ needed.
 ### Cloud identity for the database
 
 With `ledger.backend.auth`, every new Postgres connection logs in with a short-lived token from
-the host's identity instead of a password. The DSN names the user and carries no password (start
-is refused, exit code 3, if it has one or names no user):
+the host's identity instead of a password. The DSN names the user and carries no password. Start
+is refused with exit code 3 if it has one, names no user, or the kind's extra is not installed:
 
 ```yaml
 ledger:
@@ -448,22 +454,22 @@ no restart and no drain:
   names another host, port, database, user or option is refused and the old one stays in use:
   moving to another ledger is a restart.
 
-The files are read in a worker thread, so a slow or hung mount delays only the reload, never the
-calls being served; a `SIGHUP` that arrives during a reload makes it read once more when it ends,
-however many arrive. A DSN that is not a valid connection string is refused the same way as one
-that names another database, and the other secrets are still applied.
+The files are read in a thread of its own, so a slow or hung mount delays only the reload, never the
+calls being served, and shutdown does not wait for it; a `SIGHUP` that arrives during a reload makes
+it read once more when it ends, however many arrive. A DSN that is not a valid connection string is
+refused the same way as one that names another database, and the other secrets are still applied.
 
 `env:` secrets are not read again (a process's environment cannot change), nor is anything else in
 `spendgate.yaml`: routes, budgets and limits change with a restart. The key pepper is never
-reloaded, because a new pepper would void every key at once. A file that cannot be read or is
-empty keeps its old value, so a rotation caught half-written does not take a deployment down. Each reload logs one
-`secrets_reloaded` event with the config paths it read (`reloaded`) and the ones whose value is
-new (`changed`), comma-separated, never a value; a path that failed is logged as
-`secret_reload_failed` at level `WARNING` with `where` and `reason`. Keep the old key valid at
-the provider until the log shows the path in `changed`. A Kubernetes secret volume swaps its files
-at once, after the kubelet's sync delay, so send the signal once the pod sees the new value. A
-Docker Compose file secret is a bind mount of one host file: overwrite that file in place
-(`printf ... > file`), because a file renamed over it is not seen inside the container.
+reloaded, because a new pepper would void every key at once. A file that cannot be read or is empty
+keeps its old value, so a rotation caught half-written does not take a deployment down. Each reload
+logs one `secrets_reloaded` event with the config paths it read (`reloaded`) and the ones whose
+value is new (`changed`), comma-separated, never a value; a path that failed is logged as
+`secret_reload_failed` at level `WARNING` with `where` and `reason`. Keep the old key valid at the
+provider until the log shows the path in `changed`. A Kubernetes secret volume swaps its files at
+once, after the kubelet's sync delay, so send the signal once the pod sees the new value. A Docker
+Compose file secret is a bind mount of one host file: overwrite that file in place (`printf ... >
+file`), because a file renamed over it is not seen inside the container.
 
 ## Metrics and logs
 

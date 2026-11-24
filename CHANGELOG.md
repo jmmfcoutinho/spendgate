@@ -36,11 +36,12 @@ All notable changes to this project are documented here. The format follows
   extra of its cloud (`bedrock`, `azure`, `google`): no new dependency or extra. See
   [cloud identity](docs/operations.md#cloud-identity) and
   [ADR-0017](docs/adr/0017-cloud-identity.md).
-- `SIGHUP` re-reads `file:` secrets in a running `serve`, in a worker thread (signals during a
-  reload coalesce): provider credentials take effect for the next call, and a new database password for the next pooled connection (a DSN that changes
-  anything but its password is refused and the old one kept). One `secrets_reloaded` log event
-  names the config paths read and changed, never a value. See
-  [rotating secrets](docs/operations.md#rotating-secrets).
+- `SIGHUP` re-reads `file:` secrets in a running `serve`, in a thread of its own (signals during a
+  reload coalesce, and shutdown does not wait for a read stuck on a mount): provider credentials
+  take effect for the next call, and a new database password for the next pooled connection (a DSN
+  that changes anything but its password is refused and the old one kept). One `secrets_reloaded`
+  log event names the config paths read and changed, never a value. See [rotating
+  secrets](docs/operations.md#rotating-secrets).
 - `ledger.pool_min`, `ledger.pool_max` and `ledger.pool_timeout_seconds` size the Postgres pool
   (defaults 1, 10 and 10 s, as before).
 - `server.keep_alive_seconds` (default 75) and `server.graceful_shutdown_seconds` (default 30),
