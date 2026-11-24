@@ -133,7 +133,7 @@ and `{"status"}` only. The reasons and warnings (clock skew, a catalog older tha
 
 | Metric | Meaning |
 |---|---|
-| `spendgate_requests_total{outcome,model}` | Requests by outcome |
+| `spendgate_requests_total{outcome,model}` | Requests by outcome; `model` is the routed catalog id, `unknown` for a refusal that names no routed model |
 | `spendgate_spend_nano_total{model,scope}` | Settled spend in nano-units of the ledger currency |
 | `spendgate_budget_remaining_nano{scope}` | Remaining budget |
 | `spendgate_holds_in_flight` | Pending holds right now |
