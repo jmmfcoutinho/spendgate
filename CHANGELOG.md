@@ -35,9 +35,9 @@ All notable changes to this project are documented here. The format follows
 - Key option `session_required` (`bootstrap.keys[].session_required` in the config,
   `session_required` on `POST` and `PATCH /admin/v1/keys`, shown on every key): a call on such a
   key without `X-Spendgate-Session` is refused with `invalid_request`
-  (`param: X-Spendgate-Session`) before any hold, so an agent cannot leave its session limits
-  behind by dropping the header. It needs `session_defaults`
-  ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
+  (`param: X-Spendgate-Session`) before the rate limits are counted and before any hold, so an
+  agent cannot leave its session limits behind by dropping the header. It needs
+  `session_defaults` ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
 - `spendgate.local.guard(concurrency=...)`: the most calls each client admits at once (16 by
   default, `None` for no bound). With `config=`, the file's `defaults.limits.concurrency` sets it.
 - `spendgate migrate --bootstrap` warns when a configured key already exists with other

@@ -68,9 +68,12 @@ the cap only when calls already admitted settle above their holds. Once a budget
 no new hold fits, so the overrun past the cap at a crossing is at most the sum, over the calls in
 flight at that moment, of `actual - hold` (counting only calls that settle above their hold). The
 number of calls in flight is what bounds it: each key admits at most its concurrency limit (its
-own, else `defaults.limits.concurrency`, 16 unless configured; per gateway process in v0.1), so a
+own, else `defaults.limits.concurrency`, 16 unless configured; counted per process in v0.1), so a
 budget has at most the sum of the limits of the keys that spend from it, times the number of
-gateway processes, in flight. Setting `defaults.limits.concurrency: null` removes that bound.
+processes (gateways and library-mode scripts) using the ledger, in flight. Setting
+`defaults.limits.concurrency: null` removes that bound. The bound covers usage above the hold
+only: lowering a cap below what is already spent and held (M-08) puts the budget over its cap
+by that difference, recorded as `excess`, whatever the concurrency.
 
 **5. Every hold settles exactly once.** The owner and the sweeper can race on one hold; exactly one
 money transition happens. A hold whose owner died is charged in full when its lease expires

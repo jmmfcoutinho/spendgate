@@ -22,7 +22,8 @@ Issue #29: the defaults left an agent more room than the session design suggests
   (absent keeps the stored value), and `session_required` on every key the admin API returns.
   A call on such a key without `X-Spendgate-Session` is refused with the existing
   `invalid_request` code (400), `param: X-Spendgate-Session`, in `core.policy.resolve`, before
-  the RPM, TPM and concurrency counters and before any hold. No new error code.
+  the rate limits are counted and before any hold (only the per-key intake slot is held while
+  the body is read). No new error code.
 - `session_required` needs `session_defaults`: the config refuses to load without them, and the
   admin API answers `invalid_request` with `param: session_required`. The flag is stored as
   `"required": true` inside the `keys.session_defaults` JSON object (`core.sessions.SessionDefaults.required`),
