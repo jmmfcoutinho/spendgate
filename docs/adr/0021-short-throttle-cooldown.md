@@ -26,12 +26,15 @@ a third of all calls (712 of 2,098 in the report, 545 of 2,620 on a rerun) were 
   deployments of one model from coming back at the same instant. `Retry-After: 0` gets the short
   draw, never zero.
 - The short draw escalates: each busy 429 that starts a new cooldown (the deployment had come back
-  and is throttled again) doubles it, up to `cooldown_seconds`, until a success resets it. A 429
-  that lands while the deployment is already cooling extends that cooldown without doubling.
+  and is throttled again) doubles it, up to `cooldown_seconds`, until a success resets it. Only a
+  call sent at or after the latest busy trip resets it: one sent before the provider began
+  throttling proves nothing. A 429 that lands while the deployment is already cooling extends
+  that cooldown without doubling.
 - `Retry-After` as an HTTP-date (RFC 9110) is read against the pipeline's injected clock: the
   seconds until that date, rounded up, with the same caps; a date in the past counts as 0, so the
-  short draw. A hint header that is present but unreadable (garbage) may have asked for anything,
-  so it cools for the full `cooldown_seconds`.
+  short draw. A valid `retry-after-ms` is honoured (rounded up to whole seconds) even on adapters
+  that do not read it themselves. A hint header that is present but unreadable (garbage) may
+  have asked for anything, so it cools for the full `cooldown_seconds`.
 - A 429 that means quota or billing (`insufficient_quota` and the like) still cools for the full
   `cooldown_seconds`: it will not clear in a moment.
 - A cooldown that started from a closed breaker ends closed: the provider was busy, not broken, so
@@ -46,9 +49,11 @@ a third of all calls (712 of 2,098 in the report, 545 of 2,620 on a rerun) were 
   all wake and send together; at most 1 s per call in total, and only if a full 1 s is still left
   before the request deadline (`server.max_request_seconds`) once the wait ends, so a call is
   never sent with no time left. Then it tries it. A longer cooldown is refused at once, as
-  before. Only a deployment cooling on a busy 429 is waited for: never a quota fault, and never a
-  breaker opened on failures or a connect failure (waiting for it would hand the waiting call the
-  half-open probe, a new way to be charged a 5xx).
+  before. Only a deployment cooling on a first busy 429 is waited for: never a quota fault, never
+  a breaker opened on failures or a connect failure (waiting for it would hand the waiting call
+  the half-open probe, a new way to be charged a 5xx), and never an escalated cooldown (it was
+  throttled again on its return; only calls that arrive after it ends try it, so no herd of
+  waiters meets it at once).
 - The wait sends nothing and happens inside the call's one hold: failover stays free (M-01,
   M-13), and no money rule changes.
 
