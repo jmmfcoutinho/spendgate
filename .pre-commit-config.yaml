@@ -34,6 +34,11 @@ repos:
         entry: scripts/check-commit-message.sh
         language: system
         stages: [commit-msg]
+      - id: commit-identity-check
+        name: commit identity check
+        entry: scripts/check-commit-identity.sh
+        language: system
+        stages: [commit-msg]
       - id: no-ai-traces
         name: no assistant traces
         entry: scripts/check-no-ai-traces.sh
