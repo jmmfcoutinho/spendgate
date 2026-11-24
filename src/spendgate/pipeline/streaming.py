@@ -10,9 +10,9 @@ cancel cannot interrupt:
 
 | Ending                                 | Outcome         | Charge                         |
 |----------------------------------------|-----------------|--------------------------------|
-| upstream ends, usage seen and priced   | `ok`            | actual usage                   |
+| upstream ends, final usage and priced  | `ok`            | actual usage                   |
 | upstream ends, no usage / unpriced     | `ok_no_usage`   | full hold                      |
-| cut, bad framing, SSE limit, timeout   | `stream_broken` | actual if usage seen, else hold|
+| cut, bad framing, SSE limit, timeout   | `stream_broken` | final usage if seen, else hold |
 | lease lost or about to expire          | `stream_broken` | same                           |
 | kill switch engaged, session time over | `stream_broken` | same                           |
 | longer than `max_request_seconds`      | `stream_broken` | same                           |
@@ -302,7 +302,12 @@ class StreamBody:
         return closed
 
     def _record(self, outcome: Outcome | None, code: str | None) -> None:
-        """A stream's attempt row is written at its end, when usage is finally known."""
+        """A stream's attempt row is written at its end, when usage is finally known.
+
+        `relay.usage()` is the stream's FINAL usage or None (the `StreamRelay` contract): a cut,
+        cancel or gateway stop before the end-of-stream usage arrived is charged the full hold
+        (M-13), and usage above the hold is still booked as reported (M-03).
+        """
         book, live, now = self._book, self._live, self._env.now()
         usage = None
         with contextlib.suppress(Exception):  # an adapter that raises is unreadable usage

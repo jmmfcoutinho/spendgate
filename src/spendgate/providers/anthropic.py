@@ -13,6 +13,7 @@ from dataclasses import dataclass
 
 from spendgate.core.cost import Usage
 from spendgate.core.errors import ErrorCode, Refusal
+from spendgate.core.media import IMAGE_MIME_TYPES, is_base64
 from spendgate.providers.port import (
     AuthMode,
     CleanRequest,
@@ -26,6 +27,7 @@ from spendgate.providers.port import (
     UpstreamRequest,
     UpstreamResponse,
     count_of,
+    held_ceiling,
     load_json,
     never_raises_error,
     never_raises_response,
@@ -147,6 +149,13 @@ def _block(value: Json, path: str, *, kinds: frozenset[str]) -> None:
         _only(source, frozenset({"type", "media_type", "data"}), f"{path}.source")
         if source.get("type") != "base64":
             raise Untranslatable("only base64 image sources are supported", f"{path}.source.type")
+        media = source.get("media_type")  # only images are priced (M-14); fail closed on others
+        if not isinstance(media, str) or media not in IMAGE_MIME_TYPES:
+            where = f"{path}.source.media_type"
+            raise Untranslatable(f"{where} must be image/png, jpeg, webp or gif", where)
+        if not is_base64(source.get("data")):  # the same payload rule as the data URLs
+            where = f"{path}.source.data"
+            raise Untranslatable(f"{where} must be base64 on one line", where)
     if kind == "tool_result" and isinstance(block.get("content"), list):
         _blocks(block["content"], f"{path}.content", frozenset({"text", "image"}))
 
@@ -333,7 +342,11 @@ class AnthropicProvider:
         }
         if beta := _betas(req.headers, self._config):
             headers[BETA_HEADER] = beta
-        body = {**req.body, "model": deployment.model}
+        # Rebuilt from the allowlist, never copied: any other ceiling spelling is dropped and
+        # `max_tokens` is the ceiling the hold was sized with, not a client value (M-15).
+        body: dict[str, Json] = {k: v for k, v in req.body.items() if k in _TOP}
+        body["model"] = deployment.model
+        body["max_tokens"] = held_ceiling(req, "max_tokens")
         return UpstreamRequest(
             method="POST",
             url=deployment.base_url.rstrip("/") + PATH,  # base from config, path fixed

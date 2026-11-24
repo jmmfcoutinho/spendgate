@@ -134,6 +134,10 @@ class CleanRequest:
     # only adapters that convert shapes read them (`response`, `relay`).
     response_id: str = ""
     created: int = 0  # Unix seconds
+    # The output-token ceiling the hold was sized with (set by the pipeline from the estimate).
+    # Adapters forward exactly this value in one field and drop the client's ceiling fields, so a
+    # second, larger field can never reach the provider (M-15). None on endpoints without one.
+    output_ceiling: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +224,14 @@ class Untranslatable(Exception):
         self.refusal = Refusal(ErrorCode.INVALID_REQUEST, message, param)
 
 
+def held_ceiling(req: CleanRequest, param: str) -> int:
+    """The ceiling to forward; a ceiling endpoint without one is refused, never sent unbounded."""
+    ceiling = req.output_ceiling
+    if isinstance(ceiling, bool) or not isinstance(ceiling, int) or ceiling <= 0:
+        raise Untranslatable("An output token ceiling is required.", param)
+    return ceiling
+
+
 class StreamBroken(Exception):
     """The upstream stream is malformed (framing, CRC, JSON): settled as `stream_broken`."""
 
@@ -244,7 +256,13 @@ class StreamRelay(Protocol):
         ...
 
     def usage(self) -> Usage | None:
-        """Usage seen so far, normalised; None when the stream carried none (charge the hold)."""
+        """The answer's FINAL usage, normalised, or None (the pipeline then charges the hold).
+
+        Final means end-of-stream usage (OpenAI's usage-only chunk or a terminal Responses event,
+        Anthropic's `message_delta`, Bedrock's `metadata`, Gemini's totals sent with the finish
+        reason). A running total from mid-stream is never returned: a stream cut, cancelled or
+        stopped before its final usage arrived is charged the full hold (M-13).
+        """
         ...
 
 

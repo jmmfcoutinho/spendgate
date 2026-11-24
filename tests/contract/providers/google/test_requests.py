@@ -75,6 +75,25 @@ def test_data_url_images_become_inline_data_and_remote_urls_are_refused() -> Non
     assert refused.value.refusal.param == "messages[0].content[0]"
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "data:video/mp4;base64,AAAA",
+        "data:application/pdf;base64,AAAA",
+        "data:audio/wav;base64,AAAA",
+        "data:image/svg+xml;base64,AAAA",
+        "DATA:image/png;base64,AAAA",
+        "data:image/gif;base64,AAAA",  # not a Gemini image type
+        "data:image/png;base64,AA\nAA",  # base64 on one line only, as in every adapter
+    ],
+)
+def test_m14_only_image_data_urls_become_inline_data(url: str) -> None:
+    content = [{"type": "image_url", "image_url": {"url": url}}]
+    with pytest.raises(Untranslatable) as refused:
+        body_of({"messages": [{"role": "user", "content": content}]})
+    assert refused.value.refusal.param == "messages[0].content[0]"
+
+
 def test_tools_tool_choice_and_tool_round_trip_translate_to_function_calling() -> None:
     call = {"id": "c1", "type": "function", "function": {"name": "w", "arguments": '{"q":"x"}'}}
     call["extra_content"] = {"google": {"thought_signature": "sig"}}
@@ -188,11 +207,12 @@ def test_unsupported_shapes_are_refused_with_the_offending_path(
 
 
 def test_a_missing_output_ceiling_is_refused_so_the_hold_stays_bounded() -> None:
-    req = request({"messages": [USER]})
-    bare = type(req)(req.endpoint, req.model, {"messages": req.body["messages"]})
+    # A body value is not a held ceiling: without the pipeline's, nothing is sent (M-15).
+    req = request({"messages": [USER], "max_tokens": 10})
+    bare = type(req)(req.endpoint, req.model, req.body)
     with pytest.raises(Untranslatable) as refused:
         provider().translate(bare, gemini_deployment())
-    assert refused.value.refusal.param == "max_tokens"
+    assert refused.value.refusal.param == "max_completion_tokens"
 
 
 def test_only_chat_completions_are_served_embeddings_are_deferred() -> None:

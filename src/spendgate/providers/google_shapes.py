@@ -13,6 +13,15 @@ _FINISH = {"STOP": "stop", "MAX_TOKENS": "length"} | dict.fromkeys(
     ("SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII", "LANGUAGE"),
     "content_filter",
 )
+# Gemini finish reasons that end a candidate. FINISH_REASON_UNSPECIFIED (or any reason not
+# listed) does not: usage sent with it is not trusted as final, so a cut charges the hold.
+_TERMINAL = frozenset(
+    {
+        "STOP", "MAX_TOKENS", "SAFETY", "RECITATION", "LANGUAGE", "OTHER", "BLOCKLIST",
+        "PROHIBITED_CONTENT", "SPII", "MALFORMED_FUNCTION_CALL", "IMAGE_SAFETY",
+        "UNEXPECTED_TOOL_CALL", "TOO_MANY_TOOL_CALLS",
+    }
+)  # fmt: skip
 _USAGE = ("prompt", "toolUsePrompt", "cachedContent", "candidates", "thoughts")  # + TokenCount
 
 
@@ -42,14 +51,51 @@ def load(raw: bytes | str) -> Mapping[str, Json] | None:
     return data if isinstance(data, Mapping) else None
 
 
-def read_usage(meta: Json) -> Usage | None:
-    """Normalise `usageMetadata`: Gemini's candidates exclude thoughts, our output includes them."""
-    if not isinstance(meta, Mapping):
+_COUNTERS = (*(f"{k}TokenCount" for k in _USAGE), "totalTokenCount")
+
+
+def shrinks(before: Json, after: Json) -> bool:
+    """True when a counter of `after` is below that of `before` (absent counts as 0).
+
+    Gemini's stream totals are cumulative and only grow; a drop means a counter went missing or
+    the stream is not one answer, so the totals are not trusted.
+    """
+    if not isinstance(before, Mapping) or not isinstance(after, Mapping):
+        return False
+    return any((as_int(after.get(k, 0)) or 0) < (as_int(before.get(k, 0)) or 0) for k in _COUNTERS)
+
+
+def has_output(chunk: Mapping[str, Json]) -> bool:
+    """True when any candidate carries content parts (text, tool calls, thoughts, anything).
+
+    Deliberately broad: any part, even a thought or an empty text, makes a missing candidates
+    count unreadable (the full hold). That over-charges a thoughts-only reply without the count,
+    but never under-charges a part kind this adapter does not list (images, code results).
+    """
+    return any(as_list(dig(c, "content", "parts")) for c in as_list(chunk.get("candidates")))
+
+
+def read_usage(meta: Json, *, output_seen: bool) -> Usage | None:
+    """Normalise `usageMetadata`: Gemini's candidates exclude thoughts, our output includes them.
+
+    `promptTokenCount` is required. Gemini leaves `candidatesTokenCount` out when it is zero, so
+    it may be absent only when no candidate carried content (`output_seen` False: a blocked
+    prompt, a reply cut while thinking); after content an absent count is unreadable, never 0.
+    The other counters are optional but must be counts when present. A present
+    `totalTokenCount` larger than its parts means a part is missing: unreadable too.
+    """
+    if not isinstance(meta, Mapping) or "promptTokenCount" not in meta:
+        return None
+    if output_seen and "candidatesTokenCount" not in meta:
         return None
     counts = [as_int(meta.get(f"{k}TokenCount", 0)) for k in _USAGE]
     if any(c is None for c in counts):
         return None
     prompt, tool_prompt, cached, candidates, thoughts = (c or 0 for c in counts)
+    if "totalTokenCount" in meta:
+        total = as_int(meta["totalTokenCount"])
+        if total is None or total > prompt + tool_prompt + candidates + thoughts:
+            return None
     # Tool-use prompt tokens are input (never under-state); thoughts also feed the reasoning meter.
     return bounded(
         Usage(
@@ -103,6 +149,14 @@ def candidate(chunk: Mapping[str, Json]) -> tuple[str, list[dict[str, Json]], st
     return text, calls, "tool_calls" if calls and reason == "STOP" else _FINISH.get(reason, "stop")
 
 
+def finishes(chunk: Mapping[str, Json]) -> bool:
+    """True when this chunk ends the answer: a known terminal finish reason or a blocked prompt."""
+    first = next(iter(as_list(chunk.get("candidates"))), None)
+    if as_text(dig(first, "finishReason")) in _TERMINAL:
+        return True
+    return bool(as_text(dig(chunk, "promptFeedback", "blockReason")))
+
+
 def completion(chunk: Mapping[str, Json], model: str, response_id: str, created: int) -> Json:
     """A complete `generateContent` answer as an OpenAI `chat.completion` body."""
     text, calls, finish = candidate(chunk)
@@ -116,6 +170,6 @@ def completion(chunk: Mapping[str, Json], model: str, response_id: str, created:
         "model": model,
         "choices": [{"index": 0, "message": message, "finish_reason": finish or "stop"}],
     }
-    if (usage := read_usage(chunk.get("usageMetadata"))) is not None:
+    if (usage := read_usage(chunk.get("usageMetadata"), output_seen=has_output(chunk))) is not None:
         body["usage"] = chat_usage(usage)
     return body

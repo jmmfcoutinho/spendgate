@@ -112,6 +112,8 @@ class LongContext(_Strict):
 class Limits(_Strict):
     max_output_tokens: PosInt | None = None
     context_window: PosInt | None = None
+    # Input tokens held per image part; unset means the estimator's conservative default.
+    max_image_tokens: PosInt | None = None
 
 
 class PriceEntry(_Strict):

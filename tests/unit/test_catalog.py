@@ -19,6 +19,7 @@ from spendgate.core.catalog import (
 )
 from spendgate.core.cost import Usage, actual_cost
 from spendgate.core.errors import ErrorCode
+from spendgate.core.estimate import DEFAULT_IMAGE_TOKENS, image_tokens
 from spendgate.core.money import FxSnapshot, MissingFxRate, Money
 
 SHA = "ab" * 32
@@ -90,6 +91,27 @@ def test_bundled_prices_cover_only_known_providers_and_every_chat_entry_has_a_ce
         assert e.provider in PROVIDERS
         if e.mode in ("chat", "responses", "messages"):
             assert e.limits is not None and e.limits.max_output_tokens
+
+
+# The most one image can bill, per provider, from each provider's vision docs (read 2026-11-22).
+# A bundled entry may lower its image ceiling below the estimator default, never below this.
+IMAGE_TOKEN_MINIMUM = {
+    "openai": 36_000,  # developers.openai.com/api/docs/guides/images-vision: gpt-6-astra original
+    "azure_openai": 36_000,  # the same OpenAI models
+    "anthropic": 4_784,  # platform.claude.com/docs/en/build-with-claude/vision: high-res tier
+    "bedrock": 4_784,  # the same Claude models on Bedrock
+    "google": 1_120,  # aistudio.google.com/docs/media-resolution: Gemini 4 and 3 default
+}
+LARGEST_DOCUMENTED_IMAGE_TOKENS = 48_169  # OpenAI vision guide: gpt-4o-mini, high detail
+
+
+def test_m14_every_bundled_entry_holds_at_least_the_documented_image_cost() -> None:
+    catalog = parse([yaml.safe_load(bundled_text())], SHA, ledger_currency="USD")
+    for e in catalog.entries():
+        if e.mode in ("chat", "responses", "messages"):
+            assert image_tokens(e) >= IMAGE_TOKEN_MINIMUM[e.provider], e.id
+    assert DEFAULT_IMAGE_TOKENS >= LARGEST_DOCUMENTED_IMAGE_TOKENS
+    assert max(IMAGE_TOKEN_MINIMUM.values()) <= DEFAULT_IMAGE_TOKENS
 
 
 def test_bundled_free_statuses_follow_the_seed_blocks() -> None:

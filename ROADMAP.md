@@ -11,6 +11,8 @@ would change public behaviour gets an ADR first (see [CONTRIBUTING.md](CONTRIBUT
 - Batch APIs and image-generation pricing.
 - Cross-model fallback (hold on the union of budgets at the dearest price). v0.1 fails over only
   between deployments of the same catalog id.
+- Image ceilings per `detail` level (low, high, original), so a low-detail image is not held at
+  the highest-detail cost.
 - Opt-in, signed price-catalog updates, so prices stay current without a release. Never on by default.
 
 ## Budgets, limits and reporting

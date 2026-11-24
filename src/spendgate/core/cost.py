@@ -19,6 +19,10 @@ _SECONDS_PER_MINUTE = 60
 # Ceiling inside the context: an intermediate that runs out of digits can only round up.
 _CTX = Context(prec=80, rounding=ROUND_CEILING, traps=[InvalidOperation, DivisionByZero, Overflow])
 _ZERO = Decimal(0)
+# The estimate is a count without the provider's tokenizer, so a real count can sit above it. A
+# long-context tier bills the whole call at its multiplier once the real count crosses the
+# threshold, so the worst case takes that tier as soon as the estimate is within this margin of it.
+LONG_CONTEXT_MARGIN_PERCENT = 25
 
 
 class UnpricedUsage(ValueError):
@@ -54,9 +58,14 @@ class Estimate:
     """Upper bounds for one request: what it may consume before it is sent.
 
     `max_output_tokens` bounds `output_tokens + audio_output_tokens` of the reply.
+    `input_tokens` is the estimate the hold is priced at. `input_tokens_bound` is the ceiling used
+    only to choose a long-context tier: the UTF-8 bytes of the text (tool JSON and opaque inputs
+    included), which no byte-level tokenizer exceeds, plus overheads and image tokens, which are
+    assumptions (hidden prompts fit the documented overheads, an image the catalog's ceiling).
     """
 
     input_tokens: int = 0
+    input_tokens_bound: int = 0
     max_output_tokens: int = 0
     audio_input_tokens: int = 0
     audio_seconds: Decimal = _ZERO
@@ -234,7 +243,17 @@ def _worst_lines(entry: PriceEntry, est: Estimate) -> list[_Line]:
 
 
 def worst_case(entry: PriceEntry, estimate: Estimate) -> Money:
-    """Most the request can cost: dearest meters, no cache discount, dearer long-context tier."""
+    """Most the request can cost: dearest meters, no cache discount, dearer long-context tier.
+
+    The long tier applies when the input estimate plus `LONG_CONTEXT_MARGIN_PERCENT` reaches the
+    threshold, or when the byte bound does: chosen text can beat the estimate but not the bytes,
+    so a tier is never missed while hidden prompts and images stay within their assumed sizes
+    (M-14).
+    """
     lc = entry.long_context
-    long_tier = lc is not None and estimate.input_tokens > lc.threshold_input_tokens
+    long_tier = lc is not None and (
+        estimate.input_tokens * (100 + LONG_CONTEXT_MARGIN_PERCENT)
+        >= lc.threshold_input_tokens * 100
+        or estimate.input_tokens_bound >= lc.threshold_input_tokens
+    )
     return _total(entry, _worst_lines(entry, estimate), long_tier=long_tier, worst=True)

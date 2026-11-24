@@ -32,6 +32,7 @@ from spendgate.providers.port import (
     UpstreamResponse,
 )
 from spendgate.providers.sse import serialise
+from tests.contract.providers.ceiling import ceiling_of
 from tests.fakes import BASE_URL, FakeUpstream, FakeUsage, Script
 
 pytestmark = pytest.mark.anyio
@@ -59,8 +60,9 @@ def sdk(name: str) -> tuple[dict[str, Json], dict[str, str]]:
 
 def request(body: Mapping[str, Json], headers: Mapping[str, str] | None = None) -> CleanRequest:
     return CleanRequest(
-        "/v1/messages", str(body.get("model", "")), body, body.get("stream") is True, headers or {}
-    )
+        "/v1/messages", str(body.get("model", "")), body, body.get("stream") is True, headers or {},
+        output_ceiling=ceiling_of(body),
+    )  # fmt: skip
 
 
 def clean(

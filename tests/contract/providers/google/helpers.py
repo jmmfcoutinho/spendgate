@@ -13,6 +13,7 @@ from spendgate.core.catalog import Catalog, parse
 from spendgate.providers.google import GoogleProvider
 from spendgate.providers.port import AuthMode, CleanRequest, Deployment, Json, SseEvent
 from spendgate.providers.sse import SseParser
+from tests.contract.providers.ceiling import ceiling_of
 from tests.fakes import BASE_URL
 
 CHAT = "/v1/chat/completions"
@@ -59,8 +60,8 @@ def provider(creds: FakeCredentials | None = None) -> GoogleProvider:
 
 
 def request(body: dict[str, object], *, stream: bool = False, endpoint: str = CHAT) -> CleanRequest:
-    full = {"max_tokens": 100} | body  # the pipeline always injects a ceiling
-    return CleanRequest(endpoint, "gateway-name", full, stream=stream)  # type: ignore[arg-type]
+    held = ceiling_of(body)  # the pipeline always resolves and holds one ceiling
+    return CleanRequest(endpoint, "gateway-name", body, stream=stream, output_ceiling=held)  # type: ignore[arg-type]
 
 
 def converting(body: Mapping[str, object] | None = None, *, stream: bool = False) -> CleanRequest:

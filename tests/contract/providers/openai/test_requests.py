@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Mapping
+from dataclasses import replace
 
 import pytest
 
@@ -10,6 +11,7 @@ from spendgate.providers import openai_shapes as shapes
 from spendgate.providers.openai import OpenAIProvider, endpoint_url
 from spendgate.providers.port import CleanRequest, Deployment, Json, SseEvent, Untranslatable
 from spendgate.providers.sse import serialise
+from tests.contract.providers.ceiling import DEFAULT_CEILING, ceiling_of
 from tests.contract.providers.openai.conftest import SECRET
 from tests.unit.audio_builders import wav
 
@@ -36,7 +38,9 @@ def validate(
 
 def chat(**extra: Json) -> CleanRequest:
     body: dict[str, Json] = {"model": "m", "messages": MSG, **extra}
-    return CleanRequest(CHAT, "m", body, stream=body.get("stream") is True)
+    return CleanRequest(
+        CHAT, "m", body, stream=body.get("stream") is True, output_ceiling=ceiling_of(body)
+    )
 
 
 def test_unknown_body_fields_are_refused_naming_the_param() -> None:
@@ -163,10 +167,13 @@ def test_translate_rebuilds_the_body_and_forces_store_false(
     provider: OpenAIProvider, deployment: Deployment
 ) -> None:
     body = sent_body(provider, chat(temperature=0.2), deployment)
-    assert body == {"model": "gpt-upstream", "messages": MSG, "temperature": 0.2, "store": False}
-    resp = CleanRequest(shapes.RESPONSES, "m", {"model": "m", "input": "hi"})
+    assert body == {
+        "model": "gpt-upstream", "messages": MSG, "temperature": 0.2, "store": False,
+        "max_completion_tokens": DEFAULT_CEILING,
+    }  # fmt: skip
+    resp = CleanRequest(shapes.RESPONSES, "m", {"model": "m", "input": "hi"}, output_ceiling=64)
     assert sent_body(provider, resp, deployment)["store"] is False
-    resp = CleanRequest(shapes.RESPONSES, "m", {"input": "hi", "store": False})
+    resp = CleanRequest(shapes.RESPONSES, "m", {"input": "hi", "store": False}, output_ceiling=64)
     assert sent_body(provider, resp, deployment)["store"] is False
 
 
@@ -184,13 +191,15 @@ def test_include_usage_is_forced_on_chat_streams_and_the_injected_chunk_is_strip
     req = chat(stream=True)
     assert sent_body(provider, req, deployment)["stream_options"] == {"include_usage": True}
     assert provider.translate(req, deployment).stream is True
-    usage_chunk = SseEvent(None, json.dumps({"choices": [], "usage": {"prompt_tokens": 1}}))
+    usage_chunk = SseEvent(
+        None, json.dumps({"choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    )
     text_chunk = SseEvent(
         None, json.dumps({"choices": [{"delta": {"content": "a"}}], "usage": None})
     )
     relay = provider.relay(req)
-    assert relay.feed(serialise(usage_chunk)) == b""
     assert relay.feed(serialise(text_chunk)) == serialise(text_chunk)
+    assert relay.feed(serialise(usage_chunk)) == b""  # the usage-only chunk comes last
     assert relay.feed(serialise(SseEvent(None, "[DONE]"))) == b"data: [DONE]\n\n"
     assert relay.usage() is not None  # stripped from the client, still read for settlement
 
@@ -200,7 +209,9 @@ def test_include_usage_the_client_asked_for_passes_through_unchanged(
 ) -> None:
     req = chat(stream=True, stream_options={"include_usage": True})
     assert sent_body(provider, req, deployment)["stream_options"] == {"include_usage": True}
-    usage_chunk = SseEvent(None, json.dumps({"choices": [], "usage": {"prompt_tokens": 1}}))
+    usage_chunk = SseEvent(
+        None, json.dumps({"choices": [], "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+    )
     assert provider.relay(req).feed(serialise(usage_chunk)) == serialise(usage_chunk)
     # A non-streamed chat call has nothing to strip either.
     assert provider.relay(chat()).feed(serialise(usage_chunk)) == serialise(usage_chunk)
@@ -234,7 +245,7 @@ def test_a_client_cannot_steer_the_url_or_the_credential(
         provider.translate(req, deployment)
     clean = chat()
     sent = provider.translate(
-        CleanRequest(CHAT, "m", clean.body, headers={"Authorization": "Bearer client"}), deployment
+        replace(clean, headers={"Authorization": "Bearer client"}), deployment
     )
     assert "client" not in sent.headers["Authorization"]
     assert sent.url.startswith(deployment.base_url)

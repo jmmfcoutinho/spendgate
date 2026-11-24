@@ -17,6 +17,7 @@ from tests.contract.providers.azure_openai.conftest import (
     FakeCredential,
     deployment,
 )
+from tests.contract.providers.ceiling import ceiling_of
 from tests.unit.audio_builders import wav
 
 MSG: Json = [{"role": "user", "content": "hi"}]
@@ -24,7 +25,8 @@ MSG: Json = [{"role": "user", "content": "hi"}]
 
 def chat(**extra: Json) -> CleanRequest:
     body: dict[str, Json] = {"model": "alpha", "messages": MSG, **extra}
-    return CleanRequest(shapes.CHAT, "alpha", body, stream=body.get("stream") is True)
+    stream = body.get("stream") is True
+    return CleanRequest(shapes.CHAT, "alpha", body, stream=stream, output_ceiling=ceiling_of(body))
 
 
 def test_classic_url_uses_the_deployment_name_not_the_alias(provider: AzureOpenAIProvider) -> None:
@@ -46,7 +48,7 @@ def test_classic_url_per_endpoint(provider: AzureOpenAIProvider) -> None:
         shapes.RESPONSES: ({"input": "x"}, f"{BASE}/openai/responses"),  # model in the body
     }
     for endpoint, (body, url) in cases.items():
-        sent = provider.translate(CleanRequest(endpoint, "m", body), dep)
+        sent = provider.translate(CleanRequest(endpoint, "m", body, output_ceiling=64), dep)
         assert sent.url == f"{url}?api-version={VERSION}"
     audio = CleanRequest(shapes.TRANSCRIPTIONS, "m", {}, files={"file": wav(1)})
     sent = provider.translate(audio, dep)
@@ -58,7 +60,9 @@ def test_v1_url_when_no_api_version(provider: AzureOpenAIProvider) -> None:
     sent = provider.translate(chat(), deployment("prod-alpha"))
     assert sent.url == f"{BASE}/openai/v1/chat/completions"  # no query, no deployment in the path
     assert json.loads(sent.body)["model"] == "prod-alpha"
-    resp = provider.translate(CleanRequest(shapes.RESPONSES, "m", {"input": "x"}), deployment("d"))
+    resp = provider.translate(
+        CleanRequest(shapes.RESPONSES, "m", {"input": "x"}, output_ceiling=64), deployment("d")
+    )
     assert resp.url == f"{BASE}/openai/v1/responses"
 
 
@@ -147,7 +151,9 @@ def test_same_allowlist_forced_fields_and_refused_price_options(
     body = json.loads(provider.translate(chat(stream=True), dep).body)
     assert body["store"] is False
     assert body["stream_options"] == {"include_usage": True}
-    resp = provider.translate(CleanRequest(shapes.RESPONSES, "m", {"input": "x"}), dep)
+    resp = provider.translate(
+        CleanRequest(shapes.RESPONSES, "m", {"input": "x"}, output_ceiling=64), dep
+    )
     assert json.loads(resp.body)["store"] is False
     assert provider.validate(CleanRequest("/v1/messages", "m", {})) is not None
 

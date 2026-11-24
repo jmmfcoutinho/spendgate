@@ -14,17 +14,17 @@ from spendgate.core.cost import Estimate, UnpricedUsage, worst_case
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.estimate import (
     AUDIO_TOKENS_PER_SECOND,
+    DEFAULT_IMAGE_TOKENS,
     DEFAULT_SAFETY_PERCENT,
-    IMAGE_TOKENS,
     MESSAGE_OVERHEAD_TOKENS,
     REQUEST_OVERHEAD_TOKENS,
     Body,
     RequestKind,
     Tokenizer,
     estimate,
-    heuristic_tokens,
     resolve_output_ceiling,
 )
+from spendgate.core.heuristic import heuristic_tokens
 from tests.unit import audio_builders as fx
 
 CORPUS = Path(__file__).parent.parent / "data" / "estimate" / "corpus.json"
@@ -109,6 +109,14 @@ def test_ceiling_request_may_lower_but_never_raise() -> None:
 def test_ceiling_both_chat_fields_the_smaller_applies() -> None:
     body = chat(max_tokens=500, max_completion_tokens=300)
     assert ok(estimate(RequestKind.CHAT, body, entry=CHAT)).max_output_tokens == 300
+
+
+def test_m15_a_given_output_ceiling_is_held_as_is() -> None:
+    # The pipeline passes the ceiling it forwards; the body's fields are not read again.
+    body = chat(max_tokens=500, max_completion_tokens=9999)
+    held = ok(estimate(RequestKind.CHAT, body, entry=CHAT, output_ceiling=300))
+    assert held.max_output_tokens == 300
+    assert held.input_tokens == ok(estimate(RequestKind.CHAT, chat(), entry=CHAT)).input_tokens
 
 
 def test_ceiling_names_the_field_that_is_too_large() -> None:
@@ -242,7 +250,9 @@ def test_safety_percentage_is_applied_to_counted_text_only() -> None:
             }
         ]
     }
-    assert tokens(image, safety=100) - tokens(image, safety=0) < IMAGE_TOKENS  # no margin on pixels
+    assert (
+        tokens(image, safety=100) - tokens(image, safety=0) < DEFAULT_IMAGE_TOKENS
+    )  # no margin on pixels
 
 
 def test_numbers_and_keys_in_tool_calls_are_counted() -> None:
@@ -266,11 +276,65 @@ def test_images_count_as_tokens_and_per_image_when_priced() -> None:
     body = {"messages": [{"role": "user", "content": [part, part]}]}
     plain = ok(estimate(RequestKind.CHAT, body, entry=CHAT))
     priced = ok(estimate(RequestKind.CHAT, body, entry=VISION))
-    assert plain.input_tokens >= 2 * IMAGE_TOKENS
-    assert plain.input_tokens < 2 * IMAGE_TOKENS + 200  # the base64 payload is never read as text
+    assert plain.input_tokens >= 2 * DEFAULT_IMAGE_TOKENS
+    assert (
+        plain.input_tokens < 2 * DEFAULT_IMAGE_TOKENS + 200
+    )  # the base64 payload is never read as text
     assert (plain.images, priced.images) == (0, 2)  # only a priced meter, or worst_case would fail
     worst_case(CHAT, plain)
     worst_case(VISION, priced)
+
+
+def test_m14_each_image_is_held_at_the_entry_ceiling_or_the_conservative_default() -> None:
+    part = {"type": "image_url", "image_url": {"url": "data:image/png;base64," + "A" * 100_000}}
+    body = {"messages": [{"role": "user", "content": [part, part]}]}
+    tight = make_entry("chat", TEXT_METERS, {"max_output_tokens": 4096, "max_image_tokens": 1})
+    wide = make_entry("chat", TEXT_METERS, {"max_output_tokens": 4096, "max_image_tokens": 6_000})
+    base = ok(estimate(RequestKind.CHAT, body, entry=tight)).input_tokens - 2
+    # An entry without a ceiling gets the largest documented per-image cost plus a margin.
+    assert DEFAULT_IMAGE_TOKENS == 61_000
+    assert ok(estimate(RequestKind.CHAT, body, entry=CHAT)).input_tokens == base + 2 * 61_000
+    assert ok(estimate(RequestKind.CHAT, body, entry=wide)).input_tokens == base + 2 * 6_000
+
+
+DISGUISE_LABELS = ["image", "image_url", "input_image", "input_audio"]
+PAYLOAD = "word " * 20_000  # about 20,000 tokens of text behind an image label
+
+
+@pytest.mark.parametrize("label", DISGUISE_LABELS)
+def test_m14_an_image_label_in_anthropic_tool_use_input_is_counted_as_text(label: str) -> None:
+    call = {"type": "tool_use", "id": "t1", "name": "f", "input": {"type": label, "x": PAYLOAD}}
+    body = {
+        "messages": [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": [call]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1"}]},
+        ]
+    }
+    held = ok(estimate(RequestKind.MESSAGES, body, entry=VISION))
+    assert held.images == 0
+    assert held.input_tokens >= heuristic_tokens(PAYLOAD)
+
+
+@pytest.mark.parametrize("label", DISGUISE_LABELS)
+def test_m14_an_image_label_in_chat_tool_call_arguments_is_counted_as_text(label: str) -> None:
+    function = {"name": "f", "arguments": {"type": label, "x": PAYLOAD}}
+    call = {"id": "c1", "type": "function", "function": function}
+    body = {"messages": [{"role": "assistant", "content": None, "tool_calls": [call]}]}
+    held = ok(estimate(RequestKind.CHAT, body, entry=VISION))
+    assert held.images == 0
+    assert held.input_tokens >= heuristic_tokens(PAYLOAD)
+
+
+def test_m14_images_count_in_every_content_position() -> None:
+    image = {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "A"}}
+    result = {"type": "tool_result", "tool_use_id": "t1", "content": [image]}
+    anthropic = {"messages": [{"role": "user", "content": [image, result]}]}
+    assert ok(estimate(RequestKind.MESSAGES, anthropic, entry=VISION)).images == 2
+    picture = {"type": "input_image", "image_url": "data:image/png;base64,AAAA"}
+    output = {"type": "function_call_output", "call_id": "c", "output": [picture]}
+    responses = {"input": [{"role": "user", "content": [picture]}, output]}
+    assert ok(estimate(RequestKind.RESPONSES, responses, entry=VISION)).images == 2
 
 
 @pytest.mark.parametrize("part_type", ["input_image", "image", "image_url"])
@@ -477,13 +541,13 @@ def test_heuristic_without_a_margin_is_close_but_not_enough_alone() -> None:
 
 def test_heuristic_is_conservative_per_script() -> None:
     assert heuristic_tokens("") == 0
-    assert heuristic_tokens("word") == 2  # ceil(4/3)
+    assert heuristic_tokens("word") == 2  # ceil(4/2)
     assert heuristic_tokens("a b c") == 3  # one token per short word, spaces ride free
     assert heuristic_tokens("x" * 600) == 450  # unbroken runs look like hashes
     assert heuristic_tokens("    x") == 2  # indentation
-    assert heuristic_tokens("你好") == 4
+    assert heuristic_tokens("你好") == 5  # ceil(2 x 5/2)
     assert heuristic_tokens("😀") == 4  # never more than the UTF-8 bytes
-    assert heuristic_tokens("é") == 1
+    assert heuristic_tokens("é") == 2  # its UTF-8 bytes
 
 
 @pytest.mark.parametrize("text", ["ก" * 20, "क" * 20, "\U0001f468‍\U0001f469‍\U0001f467" * 5])

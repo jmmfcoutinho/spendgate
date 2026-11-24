@@ -9,6 +9,7 @@ from spendgate.providers.bedrock import Bedrock
 from spendgate.providers.bedrock_request import converse_body
 from spendgate.providers.port import AuthMode, CleanRequest, Deployment, Json, Untranslatable
 from tests.contract.providers.bedrock.helpers import PROFILE, adapter, deployment, request
+from tests.contract.providers.ceiling import ceiling_of
 
 PNG = "iVBORw0KGgo="  # base64 of a PNG signature, enough for the format check
 WEATHER: Json = {
@@ -39,7 +40,7 @@ TABLE: list[tuple[str, dict[str, Json], dict[str, Json]]] = [
         },
     ),
     (
-        "both token limits: the smaller applies",
+        "both token limits: only the held (smaller) one is sent",
         {"messages": [USER], "max_tokens": 50, "max_completion_tokens": 20},
         {
             "messages": [{"role": "user", "content": [{"text": "hi"}]}],
@@ -50,7 +51,7 @@ TABLE: list[tuple[str, dict[str, Json], dict[str, Json]]] = [
         "data URL image",
         {"messages": [{"role": "user", "content": [
             {"type": "text", "text": "see"},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpg;base64,{PNG}"}},
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{PNG}"}},
         ]}]},
         {"messages": [{"role": "user", "content": [
             {"text": "see"}, {"image": {"format": "jpeg", "source": {"bytes": PNG}}},
@@ -123,7 +124,11 @@ TABLE: list[tuple[str, dict[str, Json], dict[str, Json]]] = [
 def test_chat_translates_to_converse_as_listed(
     case: str, chat: dict[str, Json], converse: dict[str, Json]
 ) -> None:
-    assert converse_body({"model": "alias", **chat}) == converse
+    # Every Converse body carries the held ceiling as `maxTokens`, listed or not in the row.
+    config = converse.get("inferenceConfig")
+    listed = dict(config) if isinstance(config, dict) else {}
+    expected = {**converse, "inferenceConfig": {"maxTokens": ceiling_of(chat), **listed}}
+    assert converse_body({"model": "alias", **chat}, ceiling_of(chat)) == expected
 
 
 REFUSED: list[tuple[str, dict[str, Json]]] = [
@@ -162,7 +167,7 @@ def test_everything_else_is_refused_with_invalid_request_naming_the_param(
 ) -> None:
     body: dict[str, Json] = {"messages": [USER], **extra}
     with pytest.raises(Untranslatable) as err:
-        converse_body(body)
+        converse_body(body, ceiling_of(body))
     assert err.value.refusal.code is ErrorCode.INVALID_REQUEST
     assert err.value.refusal.param == param
 
@@ -191,3 +196,22 @@ def test_validate_refuses_other_endpoints_and_translate_raises_untranslatable() 
     with pytest.raises(Untranslatable) as err:
         adapter().translate(other, deployment())
     assert err.value.refusal == refusal
+
+
+def _image_chat(url: str) -> dict[str, Json]:
+    part: Json = {"type": "image_url", "image_url": {"url": url}}
+    return {"messages": [{"role": "user", "content": [part]}], "max_tokens": 5}
+
+
+@pytest.mark.parametrize("fmt", ["png", "jpeg", "webp", "gif"])
+def test_m14_the_four_image_types_map_to_converse_formats(fmt: str) -> None:
+    body = converse_body(_image_chat(f"data:image/{fmt};base64,{PNG}"), 5)
+    image: Json = {"image": {"format": fmt, "source": {"bytes": PNG}}}
+    assert body["messages"] == [{"role": "user", "content": [image]}]
+
+
+@pytest.mark.parametrize("mime", ["image/jpg", "image/PNG", "video/mp4", "application/pdf"])
+def test_m14_other_inline_media_is_refused(mime: str) -> None:
+    with pytest.raises(Untranslatable) as refused:
+        converse_body(_image_chat(f"data:{mime};base64,{PNG}"), 5)
+    assert refused.value.refusal.param == "messages[0].content[0].image_url"

@@ -35,6 +35,7 @@ from spendgate.providers.port import (
     UpstreamError,
     UpstreamRequest,
     UpstreamResponse,
+    held_ceiling,
     load_json,
     never_raises_error,
     never_raises_response,
@@ -153,7 +154,8 @@ class Bedrock:
             raise ValueError("a bedrock deployment needs auth sigv4 and a region")
         if (refusal := self.validate(req)) is not None:
             raise Untranslatable(refusal.message, refusal.param)
-        body = json.dumps(converse_body(req.body), separators=(",", ":")).encode()
+        converse = converse_body(req.body, held_ceiling(req, "max_completion_tokens"))
+        body = json.dumps(converse, separators=(",", ":")).encode()
         verb = "converse-stream" if req.stream else "converse"
         url = f"{deployment.base_url.rstrip('/')}/model/{quote(deployment.model, safe='')}/{verb}"
         if self._credentials is None:

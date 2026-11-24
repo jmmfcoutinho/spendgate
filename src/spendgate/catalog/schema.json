@@ -101,7 +101,8 @@
           "additionalProperties": false,
           "properties": {
             "max_output_tokens": { "type": "integer", "minimum": 1 },
-            "context_window": { "type": "integer", "minimum": 1 }
+            "context_window": { "type": "integer", "minimum": 1 },
+            "max_image_tokens": { "type": "integer", "minimum": 1, "description": "Input tokens held per image part: the most the model bills for one image, from a cited provider page. Unset means the estimator's default, 61000 (the largest documented per-image cost plus 25 percent); a value may only lower it with a source." }
           }
         },
         "deprecation_date": { "$ref": "#/$defs/date", "description": "First day the model is refused (the provider's shutdown date). Unset means no known end." }

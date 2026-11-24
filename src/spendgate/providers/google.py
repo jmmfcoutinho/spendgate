@@ -14,11 +14,13 @@ from typing import Protocol
 
 from spendgate.core.cost import Usage
 from spendgate.core.errors import ErrorCode, Refusal
+from spendgate.core.media import IMAGE_MIME_TYPES, inline_image
 from spendgate.providers.google_shapes import (
     as_list,
     as_text,
     completion,
     dig,
+    has_output,
     load,
     read_usage,
 )
@@ -34,6 +36,7 @@ from spendgate.providers.port import (
     UpstreamError,
     UpstreamRequest,
     UpstreamResponse,
+    held_ceiling,
     never_raises_error,
     never_raises_response,
     never_raises_usage,
@@ -44,7 +47,9 @@ from spendgate.providers.sse import asked_for_usage
 CHAT = "/v1/chat/completions"
 _SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 _SAFE = re.compile(r"[A-Za-z0-9._-]+")  # config values that land in the URL path
-_DATA_URL = re.compile(r"data:([\w.+/-]+);base64,(.+)", re.DOTALL)
+# Gemini's image-understanding page lists png, jpeg, webp, heic and heif, not gif: a type it does
+# not document is refused rather than sent (heic and heif are not priceable images here at all).
+_GEMINI_IMAGES = IMAGE_MIME_TYPES - {"image/gif"}
 _PASSED = frozenset(
     {"model", "messages", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop"}
     | {"tools", "tool_choice", "response_format", "stream", "user", "store", "stream_options"}
@@ -54,7 +59,6 @@ _OPERATOR_FAULTS = frozenset(
     {"UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND", "FAILED_PRECONDITION"}
 )
 _TOOL_KEYS = (("description", "description"), ("parameters", "parametersJsonSchema"))
-_CEILINGS = ("max_tokens", "max_completion_tokens")
 
 
 class Credentials(Protocol):
@@ -71,12 +75,17 @@ def _part(part: Json, where: str) -> Json:
     kind = dig(part, "type")
     if kind == "text" and isinstance(dig(part, "text"), str):
         return {"text": dig(part, "text")}
-    # Gemini would fetch a remote URL itself (SSRF), so only inline data is allowed.
+    # Gemini would fetch a remote URL itself (SSRF), so only inline data is allowed; and only an
+    # image, since Gemini bills inline video, audio or PDF by its length, not as one image (M-14).
     url = dig(part, "image_url", "url") if kind == "image_url" else None
-    match = _DATA_URL.fullmatch(as_text(url))
-    if match is None:
-        raise Untranslatable("Only text and inline (data URL) image parts are supported.", where)
-    return {"inlineData": {"mimeType": match.group(1), "data": match.group(2)}}
+    image = inline_image(url, _GEMINI_IMAGES)
+    if image is None:
+        raise Untranslatable(
+            "Only text and image parts are supported; images must be an inline base64 "
+            "data:image/png, jpeg or webp URL for Gemini.",
+            where,
+        )
+    return {"inlineData": {"mimeType": image[0], "data": image[1]}}
 
 
 def _parts(content: Json, where: str) -> list[Json]:
@@ -169,11 +178,9 @@ def _tool_config(choice: Json) -> Json:
     return {"functionCallingConfig": {"mode": "ANY", "allowedFunctionNames": [name]}}
 
 
-def _generation_config(body: Mapping[str, Json]) -> dict[str, Json]:
-    limits = [n for k in _CEILINGS if isinstance(n := body.get(k), int)]
-    if not limits:  # the pipeline injects the ceiling; without one the hold would be unbounded
-        raise Untranslatable("An output token ceiling is required.", "max_tokens")
-    config: dict[str, Json] = {"maxOutputTokens": min(limits)}
+def _generation_config(body: Mapping[str, Json], ceiling: int) -> dict[str, Json]:
+    # The ceiling the hold was sized with; the client's own fields are not read again (M-15).
+    config: dict[str, Json] = {"maxOutputTokens": ceiling}
     config |= {
         t: body[s] for s, t in (("temperature", "temperature"), ("top_p", "topP")) if s in body
     }
@@ -195,11 +202,15 @@ def _check_fields(body: Mapping[str, Json]) -> None:
             raise Untranslatable(f"{key} is not supported for Gemini models.", key)
 
 
-def chat_to_gemini(body: Mapping[str, Json]) -> dict[str, Json]:
-    """The Gemini request body for an OpenAI chat body; raises `Untranslatable`."""
+def chat_to_gemini(body: Mapping[str, Json], ceiling: int) -> dict[str, Json]:
+    """The Gemini request body for an OpenAI chat body; raises `Untranslatable`.
+
+    `ceiling` is the output ceiling the hold was sized with, sent as the only `maxOutputTokens`.
+    """
     _check_fields(body)
     contents, system = _contents(body.get("messages"))
-    out: dict[str, Json] = {"contents": contents, "generationConfig": _generation_config(body)}
+    config = _generation_config(body, ceiling)
+    out: dict[str, Json] = {"contents": contents, "generationConfig": config}
     if system:
         out["systemInstruction"] = {"parts": system}
     if body.get("tools"):
@@ -242,7 +253,8 @@ class GoogleProvider:
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         if (refusal := self.validate(req)) is not None:
             raise Untranslatable(refusal.message, refusal.param)
-        body = json.dumps(chat_to_gemini(req.body), separators=(",", ":")).encode()
+        gemini = chat_to_gemini(req.body, held_ceiling(req, "max_completion_tokens"))
+        body = json.dumps(gemini, separators=(",", ":")).encode()
         method = "streamGenerateContent" if req.stream else "generateContent"
         url, headers = self._target(deployment, method)
         if req.stream:
@@ -301,7 +313,9 @@ class GoogleProvider:
     @never_raises_usage
     def usage(self, req: CleanRequest, response: UpstreamResponse) -> Usage | None:
         body = load(response.body)
-        return read_usage(body.get("usageMetadata")) if body else None
+        if body is None:
+            return None
+        return read_usage(body.get("usageMetadata"), output_seen=has_output(body))
 
     @never_raises_error
     def error(self, response: UpstreamResponse) -> UpstreamError:

@@ -74,11 +74,11 @@ Used at `providers.<name>`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `base_url` | string (optional) | unset | Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start. |
+| `base_url` | string (optional) | unset | Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start. For `openai` and `azure_openai` the upstream must honour `max_completion_tokens`: the proxy sends the held output ceiling in that field only, so an OpenAI-compatible server (vLLM, LiteLLM, ...) that ignores it does not enforce the ceiling (protocol.md 2.1). |
 | `auth` | `api_key` or `bearer_token` or `sigv4` | `"api_key"` | How the proxy authenticates to the provider. |
 | `credential` | secret reference (`env:NAME` or `file:/path`) (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. |
 | `region` | string (optional) | unset | Provider region, where the adapter needs one (Bedrock, Azure). |
-| `api_version` | string (optional) | unset | Azure OpenAI query version; leave unset for the v1 path. |
+| `api_version` | string (optional) | unset | Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the minimum version is not verified here, so prefer the v1 API. |
 
 ## ModelRoute
 
@@ -106,7 +106,7 @@ Used at `fail_open`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `allow_remote_media` | boolean | `false` | Accept image, audio and file URLs in request bodies. The provider then fetches them itself, which is a server-side request forgery risk. Off by default: only inline `data:` URLs are accepted. |
+| `allow_remote_media` | boolean | `false` | Accept `http(s)` URLs in image positions of request bodies. The provider fetches them itself and treats them as images; spendgate does not fetch or check what they serve, and the fetch is a server-side request forgery risk. Off by default: only inline `data:` URLs are accepted. Inline media must be a png, jpeg, webp or gif image either way: other types are not priced and are refused. |
 
 ## Bootstrap
 
@@ -188,7 +188,7 @@ Used at `defaults.limits`, `bootstrap.keys[].limits`.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `rpm` | positive integer (optional) | unset | Requests per minute. Unset means no limit. |
-| `tpm` | positive integer (optional) | unset | Estimated tokens per minute. Unset means no limit. |
+| `tpm` | positive integer (optional) | unset | Estimated tokens per minute. Unset means no limit. The estimate is the worst case: each image counts at the model's image ceiling, up to 61,000 tokens on a model without a documented one. |
 | `concurrency` | positive integer (optional) | unset | Calls in flight at once. Unset means no limit. |
 
 ## BootstrapBudget

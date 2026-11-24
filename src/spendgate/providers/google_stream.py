@@ -7,7 +7,15 @@ Kept apart from `google.py` for size. It imports only `core`, `providers.port`, 
 import json
 
 from spendgate.core.cost import Usage
-from spendgate.providers.google_shapes import candidate, chat_usage, load, read_usage
+from spendgate.providers.google_shapes import (
+    candidate,
+    chat_usage,
+    finishes,
+    has_output,
+    load,
+    read_usage,
+    shrinks,
+)
 from spendgate.providers.port import UNREADABLE, Json, SseEvent, SseLimits, bounded
 from spendgate.providers.sse import SseParser, serialise
 
@@ -21,7 +29,10 @@ class ChatStream:
         self._model, self._id, self._created = model, response_id, created
         self._include_usage = include_usage  # the client asked for the usage-only chunk
         self._started, self._calls = False, 0
-        self._usage: Usage | None = None
+        self._meta: Json = None  # the latest `usageMetadata`; final only once `_final` is set
+        self._output_seen = False  # any content so far: then a candidates count is required
+        self._finished = False  # a terminal finish reason (or a blocked prompt) arrived
+        self._final = False  # `_meta` came from that chunk or a later one
         self._unreadable = False  # an event we could not convert: usage is no longer trusted
 
     def feed(self, event: SseEvent) -> list[SseEvent]:
@@ -35,10 +46,21 @@ class ChatStream:
         chunk = load(event.data)
         if chunk is None:
             return []
-        # Every chunk repeats the running totals, so the last one carrying them is final.
-        if "usageMetadata" in chunk:
-            self._usage = read_usage(chunk["usageMetadata"])
         text, calls, finish = candidate(chunk)
+        ends = finishes(chunk)
+        if has_output(chunk) and not ends:
+            self._finished = False  # content after a finish: the answer was not over after all
+        self._finished = self._finished or ends
+        # Every chunk carries the running totals; only those sent with or after the finish reason
+        # are the answer's final usage. A stream cut before then has none (charge the hold, M-13).
+        # They are judged at the end, against all content seen: a missing candidates count is no
+        # zero for an answer that had content.
+        if "usageMetadata" in chunk:
+            if shrinks(self._meta, chunk["usageMetadata"]):
+                self._unreadable = True  # cumulative totals that drop cannot be the final ones
+            self._meta = chunk["usageMetadata"]
+        self._output_seen = self._output_seen or has_output(chunk)
+        self._final = self._finished and ("usageMetadata" in chunk or self._final)
         delta: dict[str, Json] = {} if self._started else {"role": "assistant"}
         self._started = True
         if text:
@@ -50,14 +72,20 @@ class ChatStream:
             return []
         return [self._event([{"index": 0, "delta": delta, "finish_reason": finish}])]
 
+    def _usage(self) -> Usage | None:
+        """The final totals, read against all content seen; None before the finish reason."""
+        return read_usage(self._meta, output_seen=self._output_seen) if self._final else None
+
     def usage(self) -> Usage | None:
-        return None if self._unreadable else bounded(self._usage)
+        """Final usage only: a running total from before the finish reason is never trusted."""
+        return None if self._unreadable else bounded(self._usage())
 
     def close(self) -> list[SseEvent]:
         """The usage-only chunk (empty choices; only if the client asked) and `[DONE]`."""
         frames = []
-        if self._usage is not None and self._include_usage:
-            frames.append(self._event([], chat_usage(self._usage)))
+        usage = self.usage()  # the client sees what is charged: none once unreadable
+        if usage is not None and self._include_usage:
+            frames.append(self._event([], chat_usage(usage)))
         return [*frames, SseEvent(None, "[DONE]")]
 
     def _event(self, choices: list[Json], usage: Json = None) -> SseEvent:

@@ -139,6 +139,8 @@ class FakeUpstream:
             extra["Retry-After"] = script.retry_after
         if script.status >= 400:
             return _plain(shape.error(script.status, "scripted failure"), script.status, extra)
+        if script.body is not None:
+            return Response(script.body, 200, extra, JSON)
         if not shape.streaming(ctx):
             return _plain(shape.reply(ctx), 200, extra)
         content_type, frames = shape.stream(ctx)

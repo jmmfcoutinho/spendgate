@@ -165,17 +165,70 @@ def test_absent_or_unreadable_usage_is_none_so_the_hold_is_charged(body: bytes) 
     assert provider().usage(REQ, UpstreamResponse(200, {}, body)) is None
 
 
-async def test_stream_usage_is_taken_from_the_last_chunk_carrying_it() -> None:
+def _gemini(tokens: int | None, finish: str | None = None) -> bytes:
+    """One Gemini SSE chunk: running totals of `tokens` prompt tokens, optionally finishing."""
+    chunk: dict[str, Json] = {"candidates": [{"content": {"parts": [{"text": "x"}]}}]}
+    if finish is not None:
+        chunk["candidates"] = [{"content": {"parts": [{"text": "x"}]}, "finishReason": finish}]
+    if tokens is not None:
+        # The chunk has text, so its candidates count is required (a zero keeps the sums simple).
+        chunk["usageMetadata"] = {"promptTokenCount": tokens, "candidatesTokenCount": 0}
+    return serialise(SseEvent(None, json.dumps(chunk)))
+
+
+async def test_stream_usage_is_the_totals_sent_with_the_finish_reason() -> None:
     fake = FakeUpstream(Script(usage=USAGE))
     up = provider().translate(request({"messages": [USER]}, stream=True), gemini_deployment())
     relay = provider().relay(converting(stream=True))
     relay.feed((await send(fake, up)).content)
     assert relay.usage() == Usage(1000, 1000, 200, reasoning_tokens=700)
     running = provider().relay(converting(stream=True))  # Gemini repeats totals; the last wins
+    for raw in (_gemini(3), _gemini(9), _gemini(12, "STOP")):
+        running.feed(raw)
+    assert running.usage() == Usage(input_tokens=12)
+    trailing = provider().relay(converting(stream=True))  # totals after the finish are final too
+    trailing_totals = {"usageMetadata": {"promptTokenCount": 14, "candidatesTokenCount": 0}}
+    totals_only = serialise(SseEvent(None, json.dumps(trailing_totals)))
+    for raw in (_gemini(3, "STOP"), totals_only):
+        trailing.feed(raw)
+    assert trailing.usage() == Usage(input_tokens=14)
+
+
+def test_m13_gemini_running_total_before_the_finish_reason_is_not_final_usage() -> None:
+    asked = {"messages": [USER], "stream_options": {"include_usage": True}}
+    cut = provider().relay(converting(asked, stream=True))
     for tokens in (3, 9):
-        data = json.dumps({"usageMetadata": {"promptTokenCount": tokens}})
-        running.feed(serialise(SseEvent(None, data)))
-    assert running.usage() == Usage(input_tokens=9)
+        cut.feed(_gemini(tokens))
+    assert cut.usage() is None  # a cut, cancel or stop now charges the full hold
+    tail = cut.close()
+    assert tail.endswith(b"data: [DONE]\n\n") and b'"usage"' not in tail  # no partial total
+
+
+def test_m13_gemini_finish_without_its_own_usage_keeps_the_running_total_untrusted() -> None:
+    relay = provider().relay(converting(stream=True))
+    relay.feed(_gemini(9) + _gemini(None, "STOP"))
+    assert relay.usage() is None
+
+
+def test_m13_gemini_unspecified_finish_reason_does_not_make_usage_final() -> None:
+    relay = provider().relay(converting(stream=True))
+    relay.feed(_gemini(9, "FINISH_REASON_UNSPECIFIED"))
+    assert relay.usage() is None
+
+
+def test_m13_gemini_content_after_the_finish_makes_its_usage_untrusted_again() -> None:
+    relay = provider().relay(converting(stream=True))
+    relay.feed(_gemini(9, "STOP") + _gemini(11))  # odd order: more answer after the finish
+    assert relay.usage() is None
+    relay.feed(_gemini(15, "STOP"))  # a real finish again: those totals are final
+    assert relay.usage() == Usage(input_tokens=15)
+
+
+def test_m13_gemini_blocked_prompt_with_usage_is_final() -> None:
+    body = {"promptFeedback": {"blockReason": "SAFETY"}, "usageMetadata": {"promptTokenCount": 4}}
+    relay = provider().relay(converting(stream=True))
+    relay.feed(serialise(SseEvent(None, json.dumps(body))))
+    assert relay.usage() == Usage(input_tokens=4)
 
 
 async def test_stream_without_usage_is_none_and_still_ends_with_done() -> None:
@@ -260,8 +313,8 @@ def test_a_blocked_prompt_maps_to_the_content_filter_finish_reason() -> None:
 
 
 def test_the_usage_only_chunk_reaches_the_client_only_when_it_asked() -> None:
-    meta = json.dumps({"usageMetadata": {"promptTokenCount": 3, "candidatesTokenCount": 4}})
-    raw = serialise(SseEvent(None, meta))
+    meta = {"usageMetadata": {"promptTokenCount": 3, "candidatesTokenCount": 4}}
+    raw = serialise(SseEvent(None, json.dumps(meta | {"candidates": [{"finishReason": "STOP"}]})))
     asked = {"messages": [USER], "stream_options": {"include_usage": True}}
     plain, shown = (
         provider().relay(converting(stream=True)),

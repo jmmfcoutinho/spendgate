@@ -11,7 +11,8 @@ extra keys at random depth, content lists inside `function_call_output.output`, 
 and free-form subtrees nested up to the interpreter's JSON limit.
 
 Invariants: no accepted body carries a non-`data:` URL or a file reference in a media position
-(unless `remote_ok` for the OpenAI shapes); only `Untranslatable` / `Refusal` are ever raised; an
+(unless `remote_ok` for the OpenAI shapes), nor inline media that is not a png, jpeg, webp or gif
+image (M-14, even with `remote_ok`); only `Untranslatable` / `Refusal` are ever raised; an
 OpenAI body that `validate` accepts also translates, and the rebuilt upstream body is clean too; the
 Bedrock and Google bodies built from a chat body contain inline bytes only.
 """
@@ -65,6 +66,9 @@ _FILE_KEYS = frozenset(
 _FETCH_TYPES = frozenset(
     {"url", "file", "input_file", "input_audio", "document", "video", "file_url"}
 )
+# The only inline media the estimate prices (M-14); spelled out here, not imported.
+_IMAGE_TYPES = ("image/png", "image/jpeg", "image/webp", "image/gif")
+_IMAGE_PREFIXES = tuple(f"data:{t};base64," for t in _IMAGE_TYPES)
 
 
 def _direct(part: Mapping[str, Any], remote_ok: bool, path: str) -> list[str]:
@@ -97,10 +101,14 @@ def _part(kind: str, part: Any, remote_ok: bool, path: str) -> list[str]:  # noq
         url = image.get("url") if isinstance(image, Mapping) else image
         if not isinstance(url, str) or not (url.startswith("data:") or remote_ok):
             found.append(f"{path}: image without an inline data URL")
+        elif url[:5].lower() == "data:" and not url.startswith(_IMAGE_PREFIXES):
+            found.append(f"{path}: inline media that is not an image")
     if part["type"] == "image":
         source = part.get("source")
         if not isinstance(source, Mapping) or source.get("type") != "base64":
             found.append(f"{path}: image source is not base64")
+        elif source.get("media_type") not in _IMAGE_TYPES:
+            found.append(f"{path}: image media_type is not an image type")
     if part["type"] == "tool_result" and isinstance(part.get("content"), list):
         for i, inner in enumerate(part["content"]):
             found += _inner_anthropic(inner, f"{path}.content[{i}]")
@@ -175,6 +183,8 @@ def output_violations(node: Any, path: str = "$") -> list[str]:  # noqa: ANN401
                 continue
             if key in _FILE_KEYS or key in ("url", "image_url"):
                 found.append(f"{path}.{key}")
+            if key == "mimeType" and value not in _IMAGE_TYPES:
+                found.append(f"{path}.mimeType: {value!r:.40}")
             found += output_violations(value, f"{path}.{key}")
     return found
 
@@ -192,6 +202,10 @@ _NASTY_URLS = [
     "data:image/png;base64,AAAA",
     "data:image/jpeg;base64,/9j/4A==",
     "data:text/html,<script>",
+    "data:video/mp4;base64,AAAA",
+    "data:application/pdf;base64,AAAA",
+    "data:audio/wav;base64,AAAA",
+    "DATA:video/mp4;base64,AAAA",
     "javascript:alert(1)",
     "",
     "s3://bucket/key",
@@ -251,11 +265,12 @@ media_part = st.one_of(
     st.builds(lambda u: {"type": "input_file", "file_data": u}, _URLS),
     st.builds(lambda u: {"type": "image", "source": {"type": "url", "url": u}}, _URLS),
     st.builds(
-        lambda u: {
+        lambda u, m: {
             "type": "image",
-            "source": {"type": "base64", "media_type": "image/png", "data": u},
+            "source": {"type": "base64", "media_type": m, "data": u},
         },
         _URLS,
+        st.sampled_from(["image/png", "image/png", "video/mp4", "application/pdf", "IMAGE/PNG"]),
     ),
     st.builds(lambda i: {"type": "image", "source": {"type": "file", "file_id": i}}, _URLS),
 )
@@ -684,6 +699,7 @@ def perturbed(skeleton: st.SearchStrategy[Any]) -> st.SearchStrategy[Any]:
 _DEPLOYMENT = Deployment(
     "openai", "https://api.example.test", "m", AuthMode.API_KEY, credential="k"
 )  # pragma: allowlist secret
+_CEILING = 64  # the output ceiling the pipeline would have held (M-15)
 
 
 def check_openai(case: tuple[str, dict[str, Any], bool]) -> None:
@@ -703,7 +719,10 @@ def check_openai(case: tuple[str, dict[str, Any], bool]) -> None:
     assert not bad, f"accepted a body with a media reference outside the allowlist: {bad[:3]}"
     if endpoint != openai.TRANSCRIPTIONS:
         sent = OpenAIProvider(remote_ok=remote_ok).translate(
-            CleanRequest(endpoint, "m", body, stream=body.get("stream") is True), _DEPLOYMENT
+            CleanRequest(
+                endpoint, "m", body, stream=body.get("stream") is True, output_ceiling=_CEILING
+            ),
+            _DEPLOYMENT,
         )
         rebuilt = json.loads(sent.body)
         if kind:
@@ -723,7 +742,7 @@ def check_anthropic(case: tuple[dict[str, Any], dict[str, str]]) -> None:
 
 def _translated(builder: Any, body: dict[str, Any]) -> dict[str, Any] | None:  # noqa: ANN401
     try:
-        out: dict[str, Any] = builder(body)
+        out: dict[str, Any] = builder(body, _CEILING)
     except Untranslatable:
         return None
     return out

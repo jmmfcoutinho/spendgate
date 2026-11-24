@@ -24,6 +24,7 @@ from typing import Any
 from hypothesis import strategies as st
 
 from spendgate.core.cost import Usage
+from spendgate.providers import openai_shapes as shapes
 from spendgate.providers.anthropic import PATH as ANTHROPIC_PATH
 from spendgate.providers.anthropic import AnthropicProvider
 from spendgate.providers.azure_openai import AzureOpenAIProvider
@@ -361,7 +362,8 @@ def check_retry_after(case: tuple[str, str]) -> None:
 
 
 def check_shared_readers(doc: Any) -> None:  # noqa: ANN401
-    valid_usage(parse_usage(doc))
+    for endpoint in sorted(shapes.ENDPOINTS):
+        valid_usage(parse_usage(doc, endpoint))
     valid_usage(converse_usage(doc))
 
 

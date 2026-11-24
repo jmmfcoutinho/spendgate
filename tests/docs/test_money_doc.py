@@ -48,7 +48,7 @@ def test_every_cited_test_exists() -> None:
 
 
 def test_every_money_rule_has_a_row_with_a_test() -> None:
-    for number in range(1, 14):
+    for number in range(1, 16):
         rule = f"M-{number:02d}"
         row = next((ln for ln in TEXT.splitlines() if ln.startswith(f"| {rule} |")), None)
         assert row is not None, f"{rule} is missing from the table"

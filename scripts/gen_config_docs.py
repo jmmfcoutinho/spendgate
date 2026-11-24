@@ -124,7 +124,11 @@ D: dict[str, str] = {
     ),
     # Provider / DeploymentSpec
     "Provider.base_url": (
-        "Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start."
+        "Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at "
+        "start. For `openai` and `azure_openai` the upstream must honour "
+        "`max_completion_tokens`: the proxy sends the held output ceiling in that field only, "
+        "so an OpenAI-compatible server (vLLM, LiteLLM, ...) that ignores it does not enforce "
+        "the ceiling (protocol.md 2.1)."
     ),
     "Provider.auth": "How the proxy authenticates to the provider.",
     "Provider.credential": (
@@ -132,7 +136,11 @@ D: dict[str, str] = {
         "AWS credential chain."
     ),
     "Provider.region": "Provider region, where the adapter needs one (Bedrock, Azure).",
-    "Provider.api_version": "Azure OpenAI query version; leave unset for the v1 path.",
+    "Provider.api_version": (
+        "Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version "
+        "must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the "
+        "minimum version is not verified here, so prefer the v1 API."
+    ),
     "DeploymentSpec.provider": "Provider slug. It must match the provider part of `catalog_id`.",
     "DeploymentSpec.model": (
         "The provider's own model or deployment name. Default: the model part of `catalog_id`."
@@ -155,7 +163,11 @@ D: dict[str, str] = {
     ),
     # Limits
     "Limits.rpm": "Requests per minute. Unset means no limit.",
-    "Limits.tpm": "Estimated tokens per minute. Unset means no limit.",
+    "Limits.tpm": (
+        "Estimated tokens per minute. Unset means no limit. The estimate is the worst case: each "
+        "image counts at the model's image ceiling, up to 61,000 tokens on a model without a "
+        "documented one."
+    ),
     "Limits.concurrency": "Calls in flight at once. Unset means no limit.",
     # Defaults
     "Defaults.limits": "Applied to a key for each limit the key does not set itself.",
@@ -170,9 +182,11 @@ D: dict[str, str] = {
     ),
     # FailOpen
     "FailOpen.allow_remote_media": (
-        "Accept image, audio and file URLs in request bodies. The provider then fetches them "
-        "itself, which is a server-side request forgery risk. Off by default: only inline "
-        "`data:` URLs are accepted."
+        "Accept `http(s)` URLs in image positions of request bodies. The provider fetches them "
+        "itself and treats them as images; spendgate does not fetch or check what they serve, "
+        "and the fetch is a server-side request forgery risk. Off by default: only inline "
+        "`data:` URLs are accepted. Inline media must be a png, jpeg, webp or gif image either "
+        "way: other types are not priced and are refused."
     ),
     # Routing
     "Routing.max_attempts": "Most deployments tried for one request.",

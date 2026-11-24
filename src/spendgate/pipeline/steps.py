@@ -35,7 +35,7 @@ from spendgate.providers.port import CleanRequest, Json, Provider
 _USER_VALUE = re.compile(r"[A-Za-z0-9._:-]{1,128}")
 _MINUTE_MS = 60_000
 _MS = 1000
-# Output-ceiling fields per kind; the first is what the gateway injects when the client set none.
+# Output-ceiling fields per kind; the first is the one field the forwarded body carries.
 _CEILING = {
     RequestKind.CHAT: ("max_completion_tokens", "max_tokens"),
     RequestKind.RESPONSES: ("max_output_tokens",),
@@ -96,10 +96,16 @@ def _body_user(body: Mapping[str, Json]) -> str | None:
     return None
 
 
-def _inject_ceiling(kind: RequestKind, body: dict[str, Json], ceiling: int) -> None:
+def _set_ceiling(kind: RequestKind, body: dict[str, Json], ceiling: int) -> int | None:
+    """One ceiling field, equal to the resolved one: injected when absent, the smaller kept when
+    the client sent two (a provider that honours the larger would bill past the hold, M-15)."""
     names = _CEILING.get(kind)
-    if names and not any(n in body for n in names):
-        body[names[0]] = ceiling
+    if not names:
+        return None
+    for name in names:
+        body.pop(name, None)
+    body[names[0]] = ceiling
+    return ceiling
 
 
 def _check_shape(inbound: Inbound, settings: Settings) -> Refusal | None:
@@ -194,18 +200,18 @@ def _prepare(ctx: Context) -> Prepared | Refusal:
 def _clean_request(
     ctx: Context, routed: _Routed, entry: PriceEntry, key_cap: int | None
 ) -> CleanRequest | Refusal:
-    """The validated request: output ceiling resolved and injected, secrets kept out."""
+    """The validated request: output ceiling resolved once and set, secrets kept out."""
     kind = ctx.inbound.endpoint.kind
     body: dict[str, Json] = dict(ctx.inbound.body)
     ceiling = resolve_output_ceiling(kind, body, entry=entry, key_max_output_tokens=key_cap)
     if isinstance(ceiling, Refusal):
         return ceiling
-    _inject_ceiling(kind, body, ceiling)
+    held = _set_ceiling(kind, body, ceiling)
     return CleanRequest(
         ctx.inbound.endpoint.path, routed.name, body, body.get("stream") is True,
         {k: v for k, v in ctx.inbound.headers.items() if k not in _SECRET_HEADERS},
         ctx.inbound.files, "chatcmpl-" + ctx.request_id.removeprefix("sg_req_"),
-        ctx.now // _MS,
+        ctx.now // _MS, held,
     )  # fmt: skip
 
 
@@ -219,6 +225,7 @@ def _price(
         _estimate_body(ctx.inbound, clean.body),
         entry=entry,
         key_max_output_tokens=key_cap,
+        output_ceiling=clean.output_ceiling,  # the value the adapter forwards, not re-read
     )
     if isinstance(estimated, Refusal):
         return estimated

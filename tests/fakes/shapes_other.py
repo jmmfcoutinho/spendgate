@@ -85,10 +85,11 @@ class Gemini:
     def streaming(self, ctx: Ctx) -> bool:
         return ctx.path.endswith(":streamGenerateContent")
 
-    def _chunk(self, ctx: Ctx, text: str) -> dict[str, object]:
-        chunk: dict[str, object] = {
-            "candidates": [{"content": {"role": "model", "parts": [{"text": text}]}}]
-        }
+    def _chunk(self, ctx: Ctx, text: str, *, last: bool = True) -> dict[str, object]:
+        candidate: dict[str, object] = {"content": {"role": "model", "parts": [{"text": text}]}}
+        if last:  # like the real API: the finish reason rides the last chunk, with final usage
+            candidate["finishReason"] = "STOP"
+        chunk: dict[str, object] = {"candidates": [candidate]}
         if ctx.script.final_usage:
             u = _usage(ctx)
             chunk["usageMetadata"] = {
@@ -104,7 +105,8 @@ class Gemini:
         return Reply(JSON, dumps(self._chunk(ctx, "Hello")))
 
     def stream(self, ctx: Ctx) -> tuple[str, list[bytes]]:
-        chunks = [self._chunk(ctx, text) for text in ctx.script.stream_deltas()]
+        deltas = ctx.script.stream_deltas()
+        chunks = [self._chunk(ctx, t, last=i == len(deltas) - 1) for i, t in enumerate(deltas)]
         if ctx.query.get("alt") == "sse":
             return SSE, [sse_json(c) for c in chunks]
         # Without alt=sse the API streams one JSON array, element by element.

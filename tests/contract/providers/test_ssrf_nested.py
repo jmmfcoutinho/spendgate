@@ -129,3 +129,69 @@ def test_t_ssrf_01_anthropic_inline_nested_image_is_accepted() -> None:
         ]
     )
     assert AnthropicProvider().validate(CleanRequest("/v1/messages", "m", body)) is None
+
+
+NOT_IMAGES = (
+    "data:video/mp4;base64,AAAA",
+    "data:application/pdf;base64,AAAA",
+    "data:audio/wav;base64,AAAA",
+    "DATA:video/mp4;base64,AAAA",
+    "data:image/svg+xml;base64,AAAA",
+    "data:image/png,AAAA",  # not base64
+    " data:video/mp4;base64,AAAA",
+    "file:///etc/passwd",
+)
+
+
+@pytest.mark.parametrize("cls", [OpenAIProvider, AzureOpenAIProvider])
+@pytest.mark.parametrize("url", NOT_IMAGES)
+@pytest.mark.parametrize("remote_ok", [False, True])
+def test_m14_inline_media_must_be_an_image_even_with_remote_ok(
+    cls: type[OpenAIProvider] | type[AzureOpenAIProvider], url: str, remote_ok: bool
+) -> None:
+    provider = cls(remote_ok=remote_ok)
+    for endpoint, body in (
+        ("/v1/chat/completions", _chat({"type": "image_url", "image_url": {"url": url}})),
+        ("/v1/responses", _responses_content(_image(url))),
+    ):
+        refusal = provider.validate(CleanRequest(endpoint, "m", body))
+        assert refusal is not None and refusal.param is not None
+        assert refusal.param.endswith("image_url") or refusal.param.endswith("image_url.url")
+
+
+@pytest.mark.parametrize("mime", ["image/png", "image/jpeg", "image/webp", "image/gif"])
+def test_m14_the_four_image_types_are_accepted(mime: str) -> None:
+    body = _chat({"type": "image_url", "image_url": {"url": f"data:{mime};base64,AAAA"}})
+    assert OpenAIProvider().validate(CleanRequest("/v1/chat/completions", "m", body)) is None
+    source: Json = {"type": "base64", "media_type": mime, "data": "AAAA"}
+    anthropic = _anthropic([{"type": "image", "source": source}])
+    assert AnthropicProvider().validate(CleanRequest("/v1/messages", "m", anthropic)) is None
+
+
+@pytest.mark.parametrize("detail", ["ultra", 123, {"x": 1}, None])
+def test_m14_an_unknown_image_detail_is_refused(detail: Json) -> None:
+    chat = _chat({"type": "image_url", "image_url": {"url": INLINE, "detail": detail}})
+    responses = _responses_content({"type": "input_image", "image_url": INLINE, "detail": detail})
+    assert OpenAIProvider().validate(CleanRequest("/v1/chat/completions", "m", chat)) is not None
+    assert OpenAIProvider().validate(CleanRequest("/v1/responses", "m", responses)) is not None
+    for known in ("auto", "low", "high", "original"):
+        chat = _chat({"type": "image_url", "image_url": {"url": INLINE, "detail": known}})
+        assert OpenAIProvider().validate(CleanRequest("/v1/chat/completions", "m", chat)) is None
+
+
+def test_m14_a_second_data_url_inside_the_payload_is_refused() -> None:
+    url = "data:image/png;base64,AAAA;data:video/mp4;base64,BBBB"
+    chat = _chat({"type": "image_url", "image_url": {"url": url}})
+    assert OpenAIProvider().validate(CleanRequest("/v1/chat/completions", "m", chat)) is not None
+
+
+@pytest.mark.parametrize(
+    "instructions",
+    [{"type": "input_image", "image_url": INLINE}, [{"type": "input_text", "text": "x"}], 5],
+)
+def test_m14_responses_instructions_must_be_a_string(instructions: Json) -> None:
+    body: dict[str, Json] = {"model": "m", "input": "hi", "instructions": instructions}
+    refusal = OpenAIProvider().validate(CleanRequest("/v1/responses", "m", body))
+    assert refusal is not None and refusal.param == "instructions"
+    body["instructions"] = "be brief"
+    assert OpenAIProvider().validate(CleanRequest("/v1/responses", "m", body)) is None

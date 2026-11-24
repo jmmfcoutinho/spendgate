@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from decimal import Decimal
 from pathlib import Path
 
+import pytest
+
 from spendgate.config import Settings, load
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.limits import InMemoryLimitStore
@@ -145,13 +147,36 @@ def test_missing_ceiling_is_injected_per_kind(tmp_path: Path) -> None:
     s = settings(tmp_path)
     chat = prepared(run_prepare(s, inbound(body={"model": "alpha", "messages": USER})))
     assert chat.request.body["max_completion_tokens"] == 128_000
+    assert chat.request.output_ceiling == 128_000
     assert chat.request.endpoint == "/v1/chat/completions"
-    own = prepared(
-        run_prepare(s, inbound(body={"model": "alpha", "messages": USER, "max_tokens": 7}))
-    )
-    assert "max_completion_tokens" not in own.request.body and own.tokens < 100
     messages = prepared(run_prepare(s, inbound(MESSAGES, {"model": "haiku", "messages": USER})))
-    assert messages.request.body["max_tokens"] == 128_000
+    assert messages.request.body["max_tokens"] == messages.request.output_ceiling == 128_000
+
+
+@pytest.mark.parametrize(
+    "ceilings",
+    [
+        {},
+        {"max_tokens": 7},
+        {"max_completion_tokens": 7},
+        {"max_tokens": 7, "max_completion_tokens": 900},
+    ],
+    ids=["none", "max_tokens", "max_completion_tokens", "both"],
+)
+def test_m15_the_clean_request_carries_one_ceiling_equal_to_the_held_one(
+    tmp_path: Path, ceilings: dict[str, int]
+) -> None:
+    s = settings(tmp_path)
+    done = prepared(run_prepare(s, inbound(body={"model": "alpha", "messages": USER, **ceilings})))
+    held = done.request.output_ceiling
+    assert held == min(ceilings.values(), default=128_000)
+    fields = {k: v for k, v in done.request.body.items() if k.startswith("max_")}
+    assert fields == {"max_completion_tokens": held}
+    reference = prepared(
+        run_prepare(s, inbound(body={"model": "alpha", "messages": USER, "max_tokens": held}))
+    )
+    assert done.pricing.worst == reference.pricing.worst  # the hold was sized from `held`
+    assert done.tokens == reference.tokens
 
 
 def test_key_ceiling_wins_when_smaller(tmp_path: Path) -> None:

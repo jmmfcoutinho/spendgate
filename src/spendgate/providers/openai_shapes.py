@@ -16,7 +16,8 @@ from typing import NoReturn
 from spendgate.core.audio import AudioError, measure
 from spendgate.core.cost import Usage
 from spendgate.core.errors import Refusal
-from spendgate.providers.port import CleanRequest, Json, Untranslatable
+from spendgate.core.media import IMAGE_URL_RULE, inline_image, is_remote
+from spendgate.providers.port import CleanRequest, Json, Untranslatable, held_ceiling
 
 type Body = Mapping[str, Json]
 
@@ -79,6 +80,8 @@ _TOOL_STRINGS = frozenset({"none", "auto", "required"})
 _VOICE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _LANGUAGE = re.compile(r"[a-z]{2,3}")
 _MAX_SPEECH_CHARS = 4096
+# Image detail levels the OpenAI vision guide documents; an unknown one could bill more (M-14).
+_DETAIL = frozenset({"auto", "low", "high", "original"})
 
 
 def _obj(value: Json, param: str) -> Body:
@@ -106,9 +109,12 @@ def _one_of(value: Json, allowed: Collection[str], param: str) -> None:
 
 
 def _data_url(value: Json, param: str, *, remote_ok: bool) -> None:
-    # Remote media would make the provider fetch a client-chosen URL (SSRF).
-    if not isinstance(value, str) or not (value.startswith("data:") or remote_ok):
-        _refuse(param, "must be an inline data: URL")
+    # Remote media would make the provider fetch a client-chosen URL (SSRF). Inline media must be
+    # an image even with `remote_ok`: only images are priced (M-14), video or PDF bills far more.
+    if remote_ok and isinstance(value, str) and is_remote(value):
+        return
+    if inline_image(value) is None:
+        _refuse(param, IMAGE_URL_RULE)
 
 
 # --- shared pieces -------------------------------------------------------------------------------
@@ -164,6 +170,8 @@ def _chat_part(raw: Json, param: str, *, remote_ok: bool) -> None:
         image = _obj(part.get("image_url"), f"{param}.image_url")
         _only(image, {"url", "detail"}, f"{param}.image_url")
         _data_url(image.get("url"), f"{param}.image_url.url", remote_ok=remote_ok)
+        if "detail" in image:
+            _one_of(image["detail"], _DETAIL, f"{param}.image_url.detail")
     else:  # input_audio and file parts land here
         _refuse(f"{param}.type", "must be text or image_url")
 
@@ -257,6 +265,8 @@ def _response_parts(parts: list[Json], param: str, *, remote_ok: bool) -> None:
         _only(p, _PART_KEYS[ptype], f"{param}[{j}]")
         if ptype == "input_image":
             _data_url(p.get("image_url"), f"{param}[{j}].image_url", remote_ok=remote_ok)
+            if "detail" in p:
+                _one_of(p["detail"], _DETAIL, f"{param}[{j}].detail")
 
 
 def _responses(body: Body, *, remote_ok: bool) -> None:
@@ -267,6 +277,8 @@ def _responses(body: Body, *, remote_ok: bool) -> None:
             _response_item(raw, i, remote_ok=remote_ok)
     elif not isinstance(items, str):
         _refuse("input", "must be a string or a list of items")
+    if "instructions" in body and not isinstance(body["instructions"], str):
+        _refuse("instructions", "must be a string")  # no content parts outside `input` (M-14)
     if body.get("store") not in (None, False):
         _refuse("store", "must be false")
     if "text" in body:
@@ -370,9 +382,26 @@ _ALLOWED: Mapping[str, frozenset[str]] = {
 }  # fmt: skip
 
 
-def rebuild(endpoint: str, body: Body, model: str) -> dict[str, Json]:
-    """A fresh body from validated fields only, with the provider's model and the forced fields."""
-    out: dict[str, Json] = {k: v for k, v in body.items() if k in _ALLOWED[endpoint]}
+# The one ceiling field each endpoint forwards; every other spelling is dropped (M-15).
+_CEILING_FIELD: Mapping[str, str] = {CHAT: "max_completion_tokens", RESPONSES: "max_output_tokens"}
+_CEILING_SPELLINGS = frozenset({"max_tokens", "max_completion_tokens", "max_output_tokens"})
+
+
+def rebuild(req: CleanRequest, model: str) -> dict[str, Json]:
+    """A fresh body from validated fields only, with the provider's model and the forced fields.
+
+    The client's ceiling fields are dropped and `req.output_ceiling`, the one the hold was sized
+    with, is sent alone as `max_completion_tokens` (chat): OpenAI honours it over `max_tokens`,
+    so forwarding both would let the larger one run past the hold, and reasoning models reject
+    `max_tokens` outright.
+    """
+    endpoint = req.endpoint
+    allowed = _ALLOWED[endpoint]
+    out: dict[str, Json] = {
+        k: v for k, v in req.body.items() if k in allowed and k not in _CEILING_SPELLINGS
+    }
+    if (name := _CEILING_FIELD.get(endpoint)) is not None:
+        out[name] = held_ceiling(req, name)  # refuses a missing, boolean or non-positive one
     out["model"] = model
     if endpoint in (CHAT, RESPONSES):
         out["store"] = False  # never provider-side storage
@@ -383,7 +412,7 @@ def rebuild(endpoint: str, body: Body, model: str) -> dict[str, Json]:
 
 def encode(req: CleanRequest, model: str) -> tuple[str, bytes]:
     """Content type and bytes of the upstream body, shared by OpenAI and Azure OpenAI."""
-    fields = rebuild(req.endpoint, req.body, model)
+    fields = rebuild(req, model)
     if req.endpoint == TRANSCRIPTIONS:
         return multipart(fields, req.files["file"])
     return "application/json", json.dumps(fields, separators=(",", ":")).encode()
@@ -419,7 +448,10 @@ def _part(boundary: str, name: str, extra: str, data: bytes) -> bytes:
     return head.encode() + data + b"\r\n"
 
 
-def speech_usage(body: Body) -> Usage:
-    """Speech answers with audio bytes and no usage; it is billed by the input's characters."""
+def speech_usage(body: Body) -> Usage | None:
+    """Speech answers with audio bytes and no usage; it is billed by the input's characters.
+
+    An input that is not text cannot be counted: None (the full hold), never 0 characters.
+    """
     text = body.get("input")
-    return Usage(characters=len(text) if isinstance(text, str) else 0)
+    return Usage(characters=len(text)) if isinstance(text, str) else None

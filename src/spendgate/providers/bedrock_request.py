@@ -9,6 +9,7 @@ import binascii
 import json
 from collections.abc import Mapping
 
+from spendgate.core.media import IMAGE_URL_RULE, inline_image
 from spendgate.providers.bedrock_stream import as_obj
 from spendgate.providers.port import Json, Untranslatable
 
@@ -17,7 +18,6 @@ _TRANSLATED = frozenset(
     {"model", "messages", "max_tokens", "max_completion_tokens", "temperature", "top_p", "stop"}
     | {"tools", "tool_choice", "response_format", "stream", "user", "stream_options", "store"}
 )
-_IMAGE_FORMATS = {"png": "png", "jpeg": "jpeg", "jpg": "jpeg", "gif": "gif", "webp": "webp"}
 
 
 def _refuse(param: str, message: str) -> Untranslatable:
@@ -39,17 +39,16 @@ def _text_blocks(content: Json, param: str) -> list[Json]:
 
 
 def _image_block(url: Json, param: str) -> Json:
-    if not isinstance(url, str) or not url.startswith("data:image/") or ";base64," not in url:
-        raise _refuse(param, "only base64 data: image URLs are supported")
-    head, _, data = url.partition(";base64,")
-    fmt = _IMAGE_FORMATS.get(head.removeprefix("data:image/").lower())
+    # The one definition of a priceable image (M-14); Converse names the format without "image/".
+    image = inline_image(url)
+    if image is None:
+        raise _refuse(param, IMAGE_URL_RULE)
+    mime, data = image
     try:
         base64.b64decode(data, validate=True)
     except (binascii.Error, ValueError):
         raise _refuse(param, "invalid base64 image data") from None
-    if fmt is None:
-        raise _refuse(param, "unsupported image format")
-    return {"image": {"format": fmt, "source": {"bytes": data}}}
+    return {"image": {"format": mime.removeprefix("image/"), "source": {"bytes": data}}}
 
 
 def _user_blocks(content: Json, param: str) -> list[Json]:
@@ -139,13 +138,9 @@ def _number(body: Mapping[str, Json], key: str) -> float | int | None:
     return value
 
 
-def _inference_config(body: Mapping[str, Json]) -> dict[str, Json]:
-    cfg: dict[str, Json] = {}
-    limits = [
-        v for k in ("max_tokens", "max_completion_tokens") if (v := _number(body, k)) is not None
-    ]
-    if limits:
-        cfg["maxTokens"] = int(min(limits))  # both set: the smaller applies (protocol 2.2)
+def _inference_config(body: Mapping[str, Json], ceiling: int) -> dict[str, Json]:
+    # The ceiling the hold was sized with; the client's own fields are not read again (M-15).
+    cfg: dict[str, Json] = {"maxTokens": ceiling}
     for key, target in (("temperature", "temperature"), ("top_p", "topP")):
         if (value := _number(body, key)) is not None:
             cfg[target] = value
@@ -219,8 +214,11 @@ def _output_config(fmt: Json) -> Json:
     return {"textFormat": {"type": "json_schema", "structure": {"jsonSchema": definition}}}
 
 
-def converse_body(body: Mapping[str, Json]) -> dict[str, Json]:
-    """The Converse request for an allowlisted chat body; refuses everything not translated."""
+def converse_body(body: Mapping[str, Json], ceiling: int) -> dict[str, Json]:
+    """The Converse request for an allowlisted chat body; refuses everything not translated.
+
+    `ceiling` is the output ceiling the hold was sized with, sent as the only `maxTokens`.
+    """
     for key in body:
         if key not in _TRANSLATED:
             raise _refuse(key, "is not supported for Bedrock")
@@ -230,10 +228,10 @@ def converse_body(body: Mapping[str, Json]) -> dict[str, Json]:
     out: dict[str, Json] = {"messages": messages}
     if system:
         out["system"] = system
-    if cfg := _inference_config(body):
-        out["inferenceConfig"] = cfg
+    out["inferenceConfig"] = _inference_config(body, ceiling)
     if (tools := _tool_config(body)) is not None:
         out["toolConfig"] = tools
     if (fmt := _output_config(body.get("response_format"))) is not None:
         out["outputConfig"] = fmt
-    return out  # `user`, `stream`, `stream_options`: consumed by the gateway, not forwarded
+    # `user`, `stream`, `stream_options` and the client's ceiling fields: consumed by the gateway.
+    return out

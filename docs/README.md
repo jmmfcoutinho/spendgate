@@ -6,7 +6,7 @@ Start with the [project README](../README.md) for the five-minute quickstart.
 
 | Doc | What it covers |
 |---|---|
-| [how-money-is-protected.md](how-money-is-protected.md) | Each guarantee, the code and tests behind it, and the money rules M-01 to M-13 |
+| [how-money-is-protected.md](how-money-is-protected.md) | Each guarantee, the code and tests behind it, and the money rules M-01 to M-15 |
 | [deploy/local.md](deploy/local.md) | Running locally: SDK only, local proxy, Docker Compose with a perimeter |
 | [library-mode.md](library-mode.md) | The SDK without a server, and its limits |
 | [configuration.md](configuration.md) | Every `spendgate.yaml` key (generated from the code) and [examples/](../examples/) |

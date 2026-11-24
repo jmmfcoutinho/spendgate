@@ -3,6 +3,12 @@
 Usage is normalised to `core.cost.Usage`: text counters keep their cached and reasoning subsets,
 audio tokens move to the separate audio counters so nothing is billed twice. Anything that does
 not parse cleanly is "no usage" (None), which the pipeline settles as the full hold.
+
+Each endpoint accepts only its own usage shape, so a chat answer cannot pass for a free
+transcription. The input and output counters are required (embeddings have no output): a missing
+one is unreadable, never 0, or a call that produced output would book as free. The detail
+counters are optional, since most answers have no cached, reasoning or audio part, but a present
+one must be a count.
 """
 
 import math
@@ -11,6 +17,7 @@ from decimal import Decimal
 
 from spendgate.core.cost import Usage
 from spendgate.core.errors import ErrorCode
+from spendgate.providers import openai_shapes as shapes
 from spendgate.providers.port import (
     INT64_MAX,
     Json,
@@ -25,9 +32,19 @@ _CONTEXT_CODES = frozenset({"context_length_exceeded", "string_above_max_length"
 _MAX_MESSAGE = 500
 
 
-def _count(obj: Mapping[str, Json], key: str, *, required: bool = False) -> int:
+def _count(
+    obj: Mapping[str, Json], key: str, *, required: bool = False, null_is_zero: bool = False
+) -> int:
+    """A counter: absent is 0 only when optional; a present key must be a count.
+
+    `null_is_zero` is only for a counter that can lower the cost (cached reads): reading its null
+    as 0 bills those tokens at the full input price, which over-charges. A null counter that can
+    raise the cost (audio, cache writes, reasoning) or a required one stays unreadable.
+    """
+    if key not in obj and not required:
+        return 0
     value = obj.get(key)
-    if value is None and not required:
+    if value is None and null_is_zero and not required:
         return 0
     if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= INT64_MAX:
         raise ValueError(key)
@@ -35,22 +52,25 @@ def _count(obj: Mapping[str, Json], key: str, *, required: bool = False) -> int:
 
 
 def _details(usage: Mapping[str, Json], *keys: str) -> Mapping[str, Json]:
+    """The first details object; null is "no details", any other non-object is unreadable."""
     for key in keys:
         value = usage.get(key)
         if isinstance(value, Mapping):
             return value
+        if value is not None:
+            raise ValueError(key)
     return {}
 
 
-def _text_usage(u: Mapping[str, Json], in_key: str, out_key: str) -> Usage:
+def _text_usage(u: Mapping[str, Json], in_key: str, out_key: str | None) -> Usage:
     """Chat (`prompt_tokens`/`completion_tokens`) and Responses (`input_tokens`/...) usage."""
     inp = _details(u, "prompt_tokens_details", "input_tokens_details", "input_token_details")
     out = _details(u, "completion_tokens_details", "output_tokens_details")
     audio_in, audio_out = _count(inp, "audio_tokens"), _count(out, "audio_tokens")
     return Usage(
         input_tokens=max(_count(u, in_key, required=True) - audio_in, 0),
-        output_tokens=max(_count(u, out_key) - audio_out, 0),
-        cached_input_tokens=_count(inp, "cached_tokens"),
+        output_tokens=max((_count(u, out_key, required=True) if out_key else 0) - audio_out, 0),
+        cached_input_tokens=_count(inp, "cached_tokens", null_is_zero=True),
         cache_write_tokens=_count(inp, "cache_write_tokens"),
         reasoning_tokens=_count(out, "reasoning_tokens"),
         audio_input_tokens=audio_in,
@@ -67,44 +87,94 @@ def _duration(u: Mapping[str, Json]) -> Usage:
     return Usage(audio_seconds=Decimal(str(seconds)))
 
 
-def parse_usage(value: Json) -> Usage | None:
-    """Read any OpenAI usage object: chat, embeddings, Responses, or transcription (both kinds)."""
+# Input and output counter names per endpoint (embeddings have no output). Transcription billed
+# by tokens uses the Responses names; billed by duration it has its own shape (`_duration`).
+_TOKEN_KEYS: Mapping[str, tuple[str, str | None]] = {
+    shapes.CHAT: ("prompt_tokens", "completion_tokens"),
+    shapes.RESPONSES: ("input_tokens", "output_tokens"),
+    shapes.TRANSCRIPTIONS: ("input_tokens", "output_tokens"),
+    shapes.EMBEDDINGS: ("prompt_tokens", None),
+}
+
+
+def _by_endpoint(u: Mapping[str, Json], endpoint: str) -> Usage | None:
+    transcription = endpoint == shapes.TRANSCRIPTIONS
+    if transcription and u.get("type") == "duration":
+        return _duration(u)
+    if "type" in u and not (transcription and u["type"] == "tokens"):
+        return None  # only transcription usage is typed: this is not this endpoint's usage
+    if (keys := _TOKEN_KEYS.get(endpoint)) is None:
+        return None
+    in_key, out_key = keys
+    if endpoint == shapes.EMBEDDINGS and in_key not in u:
+        in_key = "input_tokens"  # embeddings usage is spelled either way
+    return _text_usage(u, in_key, out_key)
+
+
+def parse_usage(value: Json, endpoint: str) -> Usage | None:
+    """Read the usage object of an `endpoint` answer; any other shape is unreadable (None)."""
     if not isinstance(value, Mapping):
         return None
     try:
-        if value.get("type") == "duration":
-            return _duration(value)
-        if "prompt_tokens" in value:  # chat; embeddings carry no completion_tokens
-            return _text_usage(value, "prompt_tokens", "completion_tokens")
-        if "input_tokens" in value:  # Responses; transcription with type "tokens"
-            return _text_usage(value, "input_tokens", "output_tokens")
+        return _by_endpoint(value, endpoint)
     except ValueError:
         return None
-    return None
 
 
-def usage_of(response: UpstreamResponse) -> Usage | None:
+def usage_of(response: UpstreamResponse, endpoint: str) -> Usage | None:
     """Usage of a non-streamed answer. Speech is audio bytes, so it has none (None)."""
     body = load_json(response.body)
-    return parse_usage(body.get("usage")) if isinstance(body, Mapping) else None
+    return parse_usage(body.get("usage"), endpoint) if isinstance(body, Mapping) else None
+
+
+# Responses events that end the answer; only their `response.usage` is the final usage.
+_TERMINAL_EVENTS = frozenset({"response.completed", "response.incomplete", "response.failed"})
 
 
 class OpenAIStreamUsage:
-    """Keeps the last usage seen: chat's usage-only chunk, or Responses' terminal event."""
+    """Keeps final usage only: chat's usage-only chunk, or a terminal Responses event.
 
-    def __init__(self) -> None:
+    A compatible upstream may also put running totals on content chunks (or on
+    `response.in_progress`); those are partial, so a stream cut after one must still be charged
+    the full hold (M-13) and they are ignored here. A final usage object that does not parse
+    breaks the reading for good: an earlier, smaller one must not stand in for it.
+    """
+
+    def __init__(self, endpoint: str) -> None:
+        self._endpoint = endpoint
         self._usage: Usage | None = None
+        self._broken = False
 
     def feed(self, event: SseEvent) -> None:
         obj = load_json(event.data)  # "[DONE]" and malformed events simply carry nothing
         if not isinstance(obj, Mapping):
             return
-        holder = obj.get("response") if isinstance(obj.get("response"), Mapping) else obj
-        if isinstance(holder, Mapping) and (found := parse_usage(holder.get("usage"))) is not None:
+        holder = _final_holder(obj)
+        if holder is None:
+            if _continues(obj):
+                self._usage = None  # the answer went on after its "final" usage: untrusted
+            return
+        if (raw := holder.get("usage")) is not None:
+            found = parse_usage(raw, self._endpoint)
+            self._broken = self._broken or found is None
             self._usage = found
 
     def result(self) -> Usage | None:
-        return self._usage
+        return None if self._broken else self._usage
+
+
+def _final_holder(obj: Mapping[str, Json]) -> Mapping[str, Json] | None:
+    """The object whose `usage` is final in this event, or None for a mid-stream event."""
+    response = obj.get("response")
+    if isinstance(response, Mapping):
+        return response if obj.get("type") in _TERMINAL_EVENTS else None
+    return obj if obj.get("choices") == [] else None
+
+
+def _continues(obj: Mapping[str, Json]) -> bool:
+    """A chat chunk with choices, or any non-terminal Responses event: the answer is not over."""
+    choices = obj.get("choices")
+    return bool(choices) if isinstance(choices, list) else isinstance(obj.get("type"), str)
 
 
 def is_usage_only_chunk(event: SseEvent) -> bool:

@@ -41,6 +41,7 @@ uvx check-jsonschema --schemafile design/catalog-schema.json design/catalog-exam
 | Long context | `long_context` | `threshold_input_tokens`, `input_multiplier`, `output_multiplier` | no | Per model, never global |
 | Limits | `limits.max_output_tokens` | int | **yes** for chat, responses, messages | Last link of the output-ceiling precedence (request, key, catalog; none means refuse, protocol 2.1); used by worst-case estimation. The Alpha/Terra/Sol seed uses the guard's `MAX_OUTPUT_TOKENS_LIMIT` (64000) as the documented ceiling, `verified: false` |
 | | `limits.context_window` | int | no | Request validation |
+| | `limits.max_image_tokens` | int | no | Input tokens the hold assumes for each image part: the most the model bills for one image at any detail level a client can request, plus a margin. Unset means the conservative default of 61,000 (the largest per-image cost a provider documents, 48,169, plus 25 percent). Set it only to lower the hold, citing the provider page and the date it was read in the entry's `note` or a comment above the entry (M-14). `tests/unit/test_catalog.py` keeps a per-provider minimum table that every bundled entry must meet |
 | Lifecycle | `deprecation_date` | date | no | First day the model is refused (set it to the provider's shutdown date) |
 
 ### Meters
@@ -78,7 +79,13 @@ If the request's `input_tokens` is **strictly greater** than `threshold_input_to
 is priced at the higher rates: `input_multiplier` multiplies input, cached input, cache-write and audio-input
 meters; `output_multiplier` multiplies output, reasoning and audio-output meters. Per-minute and
 per-character meters are untouched. The earlier guard's rule (272,000; x2; x1.5) is written on each of its
-three models, not in code.
+three models, not in code. The hold takes the higher rates earlier: once the input estimate, which already
+carries the 25% safety margin, reaches 80% of the threshold (`input_tokens x 1.25 >= threshold`; for text
+alone, a raw count x 1.5625 >= threshold), or once the byte bound does: the UTF-8 bytes of the input text
+(tool-call JSON at its widest rendering and opaque inputs such as signatures included), which no byte-level
+tokenizer exceeds, plus the request, message, tool and structured-output overheads and the catalog image
+ceiling (`limits.max_image_tokens`, else `DEFAULT_IMAGE_TOKENS`) per image. The bytes are a proof; the
+overheads and the image ceiling are assumptions about hidden provider prompts and image billing. Settlement uses the reported count and the rule above.
 
 ### `settlement` (per provider, optional, top-level `providers:`)
 
@@ -175,8 +182,12 @@ output rate 0.60 x 1.5 = 0.90; native = (300,000 x 0.24 + 1,000 x 0.90) / 1e6 = 
 
 Worst case (`worst_case`) uses the same formula with every estimated input token uncached at
 the dearest applicable input meter, the output ceiling at the dearest output meter (output, reasoning or
-audio output), long-context applied if the estimate exceeds the threshold, and the dearer of minute vs token
-meters for audio.
+audio output), long-context applied once the margined input estimate reaches 80% of the threshold
+(`input_tokens x 1.25 >= threshold`, `LONG_CONTEXT_MARGIN_PERCENT`) or the estimate's byte bound
+(`input_tokens_bound`: one token per UTF-8 byte of the text, plus the assumed overheads and image ceiling)
+reaches it (the estimate is counted without the provider's tokenizer, so the real count may be above it; the
+bytes of the text cannot be: M-14), and the dearer of minute vs
+token meters for audio.
 
 ## 6. Open points
 

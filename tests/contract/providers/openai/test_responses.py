@@ -34,6 +34,9 @@ from tests.unit.audio_builders import wav
 
 pytestmark = pytest.mark.anyio
 REQ = CleanRequest(shapes.CHAT, "m", {})
+EMBED = CleanRequest(shapes.EMBEDDINGS, "m", {})  # the one endpoint with no output count
+RESPONSES = CleanRequest(shapes.RESPONSES, "m", {})
+TRANSCRIBE = CleanRequest(shapes.TRANSCRIPTIONS, "m", {})
 PRICES = Path(__file__).parents[4] / "src/spendgate/catalog/prices.yaml"
 
 
@@ -43,8 +46,10 @@ def events(name: str) -> list[SseEvent]:
     return [SseEvent(None, json.dumps(item)) for item in data]
 
 
-def collect(items: list[SseEvent], provider: OpenAIProvider) -> Usage | None:
-    relay = provider.relay(CleanRequest(shapes.CHAT, "m", {}, stream=True))
+def collect(
+    items: list[SseEvent], provider: OpenAIProvider, endpoint: str = shapes.CHAT
+) -> Usage | None:
+    relay = provider.relay(CleanRequest(endpoint, "m", {}, stream=True))
     for event in items:
         relay.feed(serialise(event))
     return relay.usage()
@@ -78,12 +83,12 @@ def test_chat_audio_tokens_move_to_the_audio_counters(provider: OpenAIProvider) 
 
 
 def test_responses_embeddings_and_transcription_usage(provider: OpenAIProvider) -> None:
-    assert provider.usage(REQ, answer("responses.json")) == CHAT_USAGE
-    assert provider.usage(REQ, answer("embeddings.json")) == Usage(input_tokens=8)
-    assert provider.usage(REQ, answer("transcription_tokens.json")) == Usage(
+    assert provider.usage(RESPONSES, answer("responses.json")) == CHAT_USAGE
+    assert provider.usage(EMBED, answer("embeddings.json")) == Usage(input_tokens=8)
+    assert provider.usage(TRANSCRIBE, answer("transcription_tokens.json")) == Usage(
         input_tokens=14, output_tokens=20, audio_input_tokens=200
     )
-    assert provider.usage(REQ, answer("transcription_duration.json")) == Usage(
+    assert provider.usage(TRANSCRIBE, answer("transcription_duration.json")) == Usage(
         audio_seconds=Decimal("3.5")
     )
 
@@ -122,7 +127,7 @@ def test_costs_match_the_catalog_for_recorded_usage(
     expected = (Decimal(1000) * Decimal("0.1") + Decimal(200) * Decimal("0.01")
                 + Decimal(500) * Decimal("0.5")) / 1_000_000  # fmt: skip
     assert cost(catalog, "gpt-6-luna", usage) == expected
-    emb = provider.usage(REQ, answer("embeddings.json"))
+    emb = provider.usage(EMBED, answer("embeddings.json"))
     assert emb is not None
     assert cost(catalog, "text-embedding-3-small", emb) == Decimal(8) * Decimal("0.02") / 1_000_000
 
@@ -142,7 +147,7 @@ def test_stream_usage_is_read_from_chat_chunks_and_the_responses_terminal_event(
     chat = [*events("chat_stream_events.json"), SseEvent(None, "[DONE]")]
     assert collect(chat, provider) == CHAT_USAGE
     named = [SseEvent("response.completed", e.data) for e in events("responses_stream_events.json")]
-    assert collect(named, provider) == CHAT_USAGE
+    assert collect(named, provider, shapes.RESPONSES) == CHAT_USAGE
     assert collect([SseEvent(None, "{broken")], provider) is None
 
 
@@ -230,13 +235,12 @@ async def test_every_endpoint_works_against_the_fake_and_usage_is_read(
     fake = FakeUpstream(
         Script(usage=FakeUsage(input_tokens=11, output_tokens=7, audio_seconds=Decimal(2)))
     )
-    request = CleanRequest(endpoint, "m", body, stream=streams, files=files)
+    request = CleanRequest(endpoint, "m", body, stream=streams, files=files, output_ceiling=64)
     response, parsed = await run(fake, provider, deployment, request)
     assert response.status_code == 200
     assert fake.requests[0].headers["authorization"] == f"Bearer {SECRET}"
     if streams:
-        assert collect(parsed, provider) is not None
-        assert collect(parsed, provider) == Usage(input_tokens=11, output_tokens=7)
+        assert collect(parsed, provider, endpoint) == Usage(input_tokens=11, output_tokens=7)
         return
     usage = provider.usage(request, UpstreamResponse(200, {}, response.content))
     if endpoint == shapes.TRANSCRIPTIONS:
@@ -264,7 +268,7 @@ async def test_chat_stream_through_the_fake_hides_an_injected_usage_chunk(
 ) -> None:
     fake = FakeUpstream()
     body: dict[str, Json] = {"messages": [{"role": "user", "content": "hi"}], "stream": True}
-    request = CleanRequest(shapes.CHAT, "m", body, stream=True)
+    request = CleanRequest(shapes.CHAT, "m", body, stream=True, output_ceiling=64)
     _, parsed = await run(fake, provider, deployment, request)
     relay = provider.relay(request)
     visible = [e for p in parsed for e in parse_wire(relay.feed(serialise(p)))]
@@ -285,7 +289,7 @@ async def test_a_fake_stream_with_no_final_usage_yields_none(
 ) -> None:
     fake = FakeUpstream(Script(final_usage=False))
     body: dict[str, Json] = {"messages": [{"role": "user", "content": "hi"}], "stream": True}
-    request = CleanRequest(shapes.CHAT, "m", body, stream=True)
+    request = CleanRequest(shapes.CHAT, "m", body, stream=True, output_ceiling=64)
     _, parsed = await run(fake, provider, deployment, request)
     assert collect(parsed, provider) is None
 
@@ -294,7 +298,9 @@ async def test_the_fakes_429_maps_to_a_free_throttle_with_retry_after(
     provider: OpenAIProvider, deployment: Deployment
 ) -> None:
     fake = FakeUpstream(Script(status=429, retry_after="3"))
-    req = CleanRequest(shapes.CHAT, "m", {"messages": [{"role": "user", "content": "x"}]})
+    req = CleanRequest(
+        shapes.CHAT, "m", {"messages": [{"role": "user", "content": "x"}]}, output_ceiling=64
+    )
     response, _ = await run(fake, provider, deployment, req)
     error = provider.error(
         UpstreamResponse(response.status_code, dict(response.headers), response.content)
@@ -308,7 +314,10 @@ def test_no_secret_or_user_content_in_reprs_or_logs(
 ) -> None:
     caplog.set_level(logging.DEBUG)
     req = CleanRequest(
-        shapes.CHAT, "m", {"messages": [{"role": "user", "content": "private words"}]}
+        shapes.CHAT,
+        "m",
+        {"messages": [{"role": "user", "content": "private words"}]},
+        output_ceiling=64,
     )
     sent = provider.translate(req, deployment)
     refusal = provider.validate(
@@ -349,10 +358,42 @@ def test_remote_image_urls_pass_validate_and_translate_only_when_configured(
 ) -> None:
     part: Json = {"type": "image_url", "image_url": {"url": "https://img.test/x.png"}}
     body: dict[str, Json] = {"messages": [{"role": "user", "content": [part]}]}
-    req = CleanRequest(shapes.CHAT, "m", body)
+    req = CleanRequest(shapes.CHAT, "m", body, output_ceiling=64)
     assert OpenAIProvider().validate(req) is not None
     with pytest.raises(Untranslatable):
         OpenAIProvider().translate(req, deployment)
     permissive = OpenAIProvider(remote_ok=True)
     assert permissive.validate(req) is None
     assert permissive.translate(req, deployment).body
+
+
+def test_m13_only_end_of_stream_usage_is_final(provider: OpenAIProvider) -> None:
+    """Running totals on content chunks or `response.in_progress` are partial: never charged."""
+    running = {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+    partial = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+    content = {"choices": [{"index": 0, "delta": {"content": "x"}}], "usage": running}
+    progress = {"type": "response.in_progress", "response": {"usage": partial}}
+    assert collect([SseEvent(None, json.dumps(content))], provider) is None
+    in_progress = [SseEvent("response.in_progress", json.dumps(progress))]
+    assert collect(in_progress, provider, shapes.RESPONSES) is None
+    for kind in ("response.completed", "response.incomplete", "response.failed"):
+        final = {"type": kind, "response": {"usage": partial}}
+        assert collect([SseEvent(kind, json.dumps(final))], provider, shapes.RESPONSES) == Usage(
+            1, 1
+        )
+    usage_only = {"choices": [], "usage": running}
+    assert collect([SseEvent(None, json.dumps(usage_only))], provider) == Usage(1, 1)
+
+
+def test_m13_content_after_the_final_usage_makes_it_untrusted(provider: OpenAIProvider) -> None:
+    """Odd order (more answer after the usage-only chunk or a terminal event) is not trusted."""
+    running = {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}
+    usage_only = SseEvent(None, json.dumps({"choices": [], "usage": running}))
+    content = SseEvent(None, json.dumps({"choices": [{"index": 0, "delta": {"content": "x"}}]}))
+    assert collect([usage_only, content], provider) is None
+    assert collect([usage_only, SseEvent(None, "[DONE]")], provider) == Usage(1, 1)
+    usage = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2}
+    done = SseEvent(None, json.dumps({"type": "response.completed", "response": {"usage": usage}}))
+    delta = SseEvent(None, json.dumps({"type": "response.output_text.delta", "delta": "x"}))
+    assert collect([done], provider, shapes.RESPONSES) == Usage(1, 1)
+    assert collect([done, delta], provider, shapes.RESPONSES) is None

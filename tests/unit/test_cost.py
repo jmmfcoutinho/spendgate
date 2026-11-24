@@ -335,12 +335,12 @@ def test_long_context_applies_to_input_cached_audio_and_output_but_not_per_unit_
     assert actual_cost(e, above) == Money.from_amount(long_cost, "USD")
 
 
-def test_worst_case_takes_the_long_tier_when_the_estimate_crosses_the_threshold() -> None:
-    e = parsed(LONG)
-    at = worst_case(e, Estimate(input_tokens=1000, max_output_tokens=100))
-    over = worst_case(e, Estimate(input_tokens=1001, max_output_tokens=100))
-    assert at == Money.from_amount(Decimal(1000 * 10 + 100 * 20) / 10**6, "USD")
-    assert over == Money.from_amount(Decimal(1001 * 10 * 2 + 100 * 20 * 3) / 10**6, "USD")
+def test_worst_case_takes_the_long_tier_when_the_estimate_is_within_the_margin() -> None:
+    e = parsed(LONG)  # threshold 1000: 800 x 1.25 reaches it (M-14)
+    below = worst_case(e, Estimate(input_tokens=799, max_output_tokens=100))
+    near = worst_case(e, Estimate(input_tokens=800, max_output_tokens=100))
+    assert below == Money.from_amount(Decimal(799 * 10 + 100 * 20) / 10**6, "USD")
+    assert near == Money.from_amount(Decimal(800 * 10 * 2 + 100 * 20 * 3) / 10**6, "USD")
 
 
 def test_a_multiplier_below_one_never_shrinks_the_worst_case() -> None:

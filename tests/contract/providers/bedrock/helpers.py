@@ -6,6 +6,7 @@ from dataclasses import replace
 from spendgate.providers.bedrock import AwsCredentials, Bedrock
 from spendgate.providers.port import AuthMode, CleanRequest, Deployment, Json, SseEvent
 from spendgate.providers.sse import SseParser
+from tests.contract.providers.ceiling import ceiling_of
 from tests.fakes import BASE_URL
 
 # AWS's documented example credentials (docs.aws.amazon.com), not real.
@@ -23,7 +24,8 @@ def adapter() -> Bedrock:
 
 
 def request(body: dict[str, object], *, stream: bool = False) -> CleanRequest:
-    return CleanRequest(CHAT, "gateway-name", body, stream=stream)  # type: ignore[arg-type]
+    held = ceiling_of(body)  # the pipeline always resolves and holds one ceiling
+    return CleanRequest(CHAT, "gateway-name", body, stream=stream, output_ceiling=held)  # type: ignore[arg-type]
 
 
 def dig(value: Json, *path: str | int) -> Json:

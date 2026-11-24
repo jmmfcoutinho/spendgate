@@ -21,6 +21,9 @@ models:
   # ===================== OpenAI (direct) =====================
   # Page: developers.openai.com/api/docs/pricing and /models/<id>. Long context: prompts over 272K input tokens price the
   # whole request at 2x input/cache, 1.5x output. Max output 128,000, context 1,050,000 (model pages).
+  # max_image_tokens: developers.openai.com/api/docs/guides/images-vision, read 2026-11-22: gpt-6-astra bills up to 30,000
+  # patches x 1.2 = 36,000 tokens per image (detail original / auto); 45,000 = +25%. gpt-6-luna is not in that table, so it
+  # keeps the estimator default (61,000).
   - id: openai/gpt-6-astra
     mode: responses
     currency: USD
@@ -32,7 +35,7 @@ models:
     deployment_type: standard
     meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "12.5", output_per_mtok: "50" }
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
-    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    limits: { max_output_tokens: 128000, context_window: 1050000, max_image_tokens: 45000 }
   - id: openai/gpt-6-luna
     mode: responses
     currency: USD
@@ -82,6 +85,8 @@ models:
   # Stored meters are Global Standard; price_multiplier 1.20 = highest Data Zone uplift seen in any region (1.10 in US zones,
   # 1.20 in EU). Long context (over 272K input) is 2x input/cache, 1.5x output, matching the LongCo meters. Cache write meter
   # is published, so it is encoded. max_output_tokens 128000 follows OpenAI's model page (not re-checked on Azure docs).
+  # max_image_tokens 45,000 for gpt-6-astra follows the OpenAI vision guide (read 2026-11-22, 36,000 + 25%; not re-checked on
+  # Azure docs). gpt-6-luna, gpt-6.1-terra and gpt-6.1-sol are not in that guide and keep the estimator default (61,000).
   - id: azure_openai/gpt-6-astra
     mode: responses
     currency: USD
@@ -94,7 +99,7 @@ models:
     price_multiplier: "1.20"
     meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "12.5", output_per_mtok: "50" }
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
-    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    limits: { max_output_tokens: 128000, context_window: 1050000, max_image_tokens: 45000 }
   - id: azure_openai/gpt-6-luna
     mode: responses
     currency: USD
@@ -218,6 +223,8 @@ models:
   # Page: platform.claude.com/docs/en/about-claude/pricing; limits from /docs/en/models/overview (max output 128K, context 1M;
   # retirement not sooner than 2027-11-09 for Fable 5.2 and 2027-10-07 for Haiku 5.5, so no deprecation_date).
   # cache_write_per_mtok holds the 1h cache-write price (dearer than the 5m price) because the schema has one meter.
+  # max_image_tokens: platform.claude.com/docs/en/build-with-claude/vision, read 2026-11-22: Claude 4.7 and later use the
+  # high-resolution tier, at most 4,784 visual tokens per image; 6,000 = +25%. Same value for the Bedrock entries below.
   - id: anthropic/claude-fable-5-2
     mode: messages
     currency: USD
@@ -227,7 +234,7 @@ models:
     checked_on: "2026-11-13"
     note: "Flagship. Input 8, cache write 5m 10 (1h 16 stored), cache hit 0.20 (0.025x), output 40."
     meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
-    limits: { max_output_tokens: 128000, context_window: 1000000 }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
   - id: anthropic/claude-haiku-5-5
     mode: messages
     currency: USD
@@ -238,12 +245,13 @@ models:
     note: "Small. Prompts over 100,000 tokens: 5x on every meter (0.50/2.50 etc.). Cache write: 1h price 0.20 stored (5m 0.125)."
     meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.2", output_per_mtok: "0.5" }
     long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
-    limits: { max_output_tokens: 128000, context_window: 1000000 }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
 
   # ===================== AWS Bedrock (Converse), region us-east-1 =====================
   # Source: AWS Price List bulk API (pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current),
   # read 2026-11-13; the aws.amazon.com/bedrock/pricing page itself did not render the Anthropic tables to the fetcher.
   # Model ids from platform.claude.com models overview. Cache write = 1h price (dearer than 5m).
+  # max_image_tokens 6,000: same models as the Anthropic entries (vision page, read 2026-11-22: 4,784 per image + 25%).
   - id: bedrock/global.anthropic.claude-fable-5-2
     mode: messages
     currency: USD
@@ -255,7 +263,7 @@ models:
     deployment_type: global
     note: "Flagship, global inference profile price. Regional (non-global) us-east-1 would be +10% (8.8/44)."
     meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
-    limits: { max_output_tokens: 128000, context_window: 1000000 }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
   - id: bedrock/anthropic.claude-haiku-5-5
     mode: messages
     currency: USD
@@ -268,13 +276,18 @@ models:
     note: "Small. Regional us-east-1 price (+10% over global, the dearer choice). Over 100,000 input tokens: 5x all meters."
     meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
     long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
-    limits: { max_output_tokens: 128000, context_window: 1000000 }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
 
   # ===================== Google (Gemini API, AI Studio) =====================
   # Page: ai.google.dev/gemini-api/docs/pricing (redirects to aistudio.google.com/docs/pricing), Standard paid tier.
   # Vertex AI pricing page could not be read by the fetcher, so Vertex-specific prices are not encoded.
   # max_output_tokens 65536: the models page says "65K / 1M" for Gemini 4 (ambiguous) and is silent for 3.5 Flash-Lite; the
   # lower figure is used (it is sent as the cap, so cost is bounded). Context window 1M per models page for Gemini 4.
+  # max_image_tokens: aistudio.google.com/docs/media-resolution, read 2026-11-22, table "Gemini 4 and Gemini 3 models":
+  # at most 1,120 tokens per image at the default resolution; 1,400 = +25% for gemini-4-carbon. ultra_high (2,240) is set
+  # per content item, which the Gemini translation never sends. Conflicting rule: aistudio.google.com/docs/image-understanding
+  # (same date) still describes 258 tokens per 768x768 tile with no cap. The capped page names no model, so
+  # gemini-3.5-flash-lite is not explicitly covered and keeps the estimator default (61,000).
   - id: google/gemini-4-carbon
     mode: chat
     currency: USD
@@ -284,7 +297,7 @@ models:
     checked_on: "2026-11-13"
     note: "Flagship. Price valid through 2026-11-30; doubles from 2026-12-01 (see next entry). Implicit caching only."
     meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", output_per_mtok: "10" }
-    limits: { max_output_tokens: 65536, context_window: 1000000 }
+    limits: { max_output_tokens: 65536, context_window: 1000000, max_image_tokens: 1400 }
   - id: google/gemini-4-carbon
     mode: chat
     currency: USD
@@ -294,7 +307,7 @@ models:
     checked_on: "2026-11-13"
     note: "Announced price from 2026-12-01 ($4 input, $0.20 cached, $20 output)."
     meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", output_per_mtok: "20" }
-    limits: { max_output_tokens: 65536, context_window: 1000000 }
+    limits: { max_output_tokens: 65536, context_window: 1000000, max_image_tokens: 1400 }
   - id: google/gemini-3.5-flash-lite
     mode: chat
     currency: USD

@@ -3,7 +3,7 @@
 An adapter teaches spendgate one provider's wire format. It does not touch money: the pipeline
 holds, sends, settles and refunds; the adapter only validates, translates, reads usage and maps
 errors. That keeps an adapter small, and a new one cannot weaken a money rule unless it reports
-usage wrongly. Read [architecture](architecture.md) and the [wire protocol](protocol.md) first.
+usage wrongly or forwards an output ceiling other than the held one. Read [architecture](architecture.md) and the [wire protocol](protocol.md) first.
 
 ## The port
 
@@ -26,7 +26,25 @@ Rules the pipeline relies on:
 - **Usage is normalised into core `Usage`:** cached and cache-write tokens are subsets of
   `input_tokens`, reasoning tokens a subset of `output_tokens`, audio counters separate. If you
   cannot tell, resolve to the dearer meter. Return `None` when usage is missing: the pipeline then
-  charges the full hold. Never invent a number.
+  charges the full hold. Never invent a number: a required counter (input and output tokens, or
+  whatever the meter bills) that is absent makes the usage `None`, not 0. Optional counters
+  (cached, reasoning, audio) may be absent, but a present one must be a non-negative int. A
+  `null` optional counter is unreadable too, unless it can only lower the cost (cache reads):
+  reading that one as 0 over-charges, which is safe. A null counter that can raise the cost
+  (audio, cache writes, reasoning) or a null required counter makes the usage `None`.
+- **A relay's `usage()` returns final usage only.** That is the end-of-stream usage (a usage-only
+  chunk, a terminal event, the totals sent with the finish reason), never a running total from
+  mid-stream: a stream cut, cancelled or stopped before the final usage arrived must return
+  `None`, so it is charged the full hold (M-13). Usage followed by more answer (odd order) is
+  not final either. For OpenAI and Azure OpenAI this means an OpenAI-compatible upstream must
+  send the usage-only chunk (`stream_options.include_usage`, which the gateway forces upstream)
+  or a terminal Responses event with usage; one that does not is charged the full hold on every
+  streamed call.
+- **Forward the held output ceiling, alone.** On chat, Responses and Messages the pipeline sets
+  `req.output_ceiling` to the ceiling the hold was sized with. Send exactly that value in the
+  provider's one ceiling field and drop every client ceiling field (`max_tokens`,
+  `max_completion_tokens`, `max_output_tokens`); read it with `held_ceiling(req, param)`, which
+  refuses a request without one (M-15).
 - **`UpstreamError.sent` is `False` only for failures before the request left** (DNS, connect,
   TLS). Those are free and fail over. Anything else is charged by the settlement rules
   ([how money is protected](how-money-is-protected.md), M-13).
@@ -35,9 +53,12 @@ Rules the pipeline relies on:
 - **Errors never echo user content or secrets.** Messages name the field, not the value. Reprs of
   deployments and requests must not show credentials.
 - **Hostile responses are expected.** A stream that is malformed or too large raises
-  `StreamBroken` or `StreamLimitExceeded`; it is settled at the usage seen or the full hold.
+  `StreamBroken` or `StreamLimitExceeded`; it is settled at the final usage seen or the full hold.
 - **Refuse, never drop.** A request field you cannot translate is `invalid_request` with `param`,
   not silently ignored.
+- **Inline media is an image or nothing.** Accept inline images only through
+  `core.media.inline_image` (pass the subset your provider documents) and refuse every other type:
+  the estimate prices images only, at the entry's `limits.max_image_tokens` (M-14).
 
 ## Steps
 
@@ -51,7 +72,9 @@ Rules the pipeline relies on:
    `tests/unit/test_layout.py` and `tests/unit/test_catalog.py`. If it needs a new `auth` mode,
    extend `AuthMode` in the port and `AuthName` in the schema.
 3. **Price it.** Add catalog entries for its models and a `providers.<slug>.free_statuses` block
-   ([catalog how-to](catalog-how-to.md)). Without a price the model is refused.
+   ([catalog how-to](catalog-how-to.md)). Without a price the model is refused. For a model that
+   takes images, set `limits.max_image_tokens` from the provider's vision docs, or leave it unset
+   for the conservative default.
 4. **Record real answers.** Save sanitised request and response samples, with the date, under
    `tests/contract/providers/<slug>/fixtures/` (for example `message_response_20261117.json`) and
    write contract tests beside them: allowlist accepted and refused, headers, usage for plain and

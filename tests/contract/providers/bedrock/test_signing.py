@@ -113,7 +113,7 @@ def test_importing_the_adapter_and_translating_requests_never_loads_botocore_unt
     code = (
         "import sys\n"
         "import spendgate.providers.bedrock as b, spendgate.providers.bedrock_request as r\n"
-        "r.converse_body({'messages': [{'role': 'user', 'content': 'x'}]})\n"
+        "r.converse_body({'messages': [{'role': 'user', 'content': 'x'}]}, 64)\n"
         "print(sorted(m for m in sys.modules if m.split('.')[0] == 'botocore'))\n"
     )
     out = subprocess.run(  # noqa: S603 - fixed interpreter and code, no user input

@@ -62,14 +62,14 @@ class OpenAIProvider:
         """Relays events unchanged, minus the usage-only chunk when `translate` injected it."""
         injected = shapes.injected_include_usage(req.endpoint, req.body)
         hide = wire.is_usage_only_chunk if injected else None
-        return SseRelay(wire.OpenAIStreamUsage(), limits, hide)
+        return SseRelay(wire.OpenAIStreamUsage(req.endpoint), limits, hide)
 
     @never_raises_usage
     def usage(self, req: CleanRequest, response: UpstreamResponse) -> Usage | None:
         if req.endpoint == shapes.SPEECH:  # audio bytes carry no usage: billed by input characters
             ok = HTTPStatus.OK <= response.status < HTTPStatus.MULTIPLE_CHOICES
             return shapes.speech_usage(req.body) if ok else None
-        return wire.usage_of(response)
+        return wire.usage_of(response, req.endpoint)
 
     @never_raises_error
     def error(self, response: UpstreamResponse) -> UpstreamError:
