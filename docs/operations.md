@@ -1,7 +1,7 @@
 # Operations
 
 Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retention, Postgres
-connections, the sweeper, draining on restart, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
+connections, the sweeper, draining on restart, a ledger outage or failover, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
 the [configuration reference](configuration.md).
 
 Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
@@ -80,6 +80,11 @@ spendgate kill off SWITCH_ID
 
 A provider-level switch refuses only when every candidate deployment of the model is killed, so
 other deployments keep serving.
+
+A kill switch, the global one included, never changes `/readyz`. The switch lives in the shared
+ledger, so an unready answer would take every replica out of the load balancer at once and clients
+would get the balancer's own error. Every replica stays in service and answers each call with the
+`kill_switch` error itself; `GET /admin/v1/readiness` lists an engaged global switch as a warning.
 
 ## Budgets and overruns
 
@@ -210,34 +215,77 @@ chain in their own transaction.
 ## Draining on restart
 
 On `SIGTERM`, `serve` closes its listener at once and waits for every call in flight, streams
-included, before it shuts down; the lease heartbeat keeps running while it waits, so those holds
-are settled normally. It does not set a drain deadline of its own: the orchestrator's grace period
-is the deadline. Once shutdown has started, a `SIGINT` forces an exit and a second `SIGTERM` does
-nothing (uvicorn 0.54). A forced exit skips the lifespan shutdown, so the holds still open are left
-to the sweeper. A call still running when the process is killed or forced out is never settled by
-it; its hold expires after `ledger.lease_seconds` and the next sweep (any instance, or this one
-after restart) charges it **in full**. Size the stop so that does not happen:
+included, for up to `server.graceful_shutdown_seconds` (default 30). The lease heartbeat keeps
+running while it waits, so calls that finish in time are settled normally. At the deadline it stops
+the calls still running and settles each one as a client cancel (M-13): the full hold once the
+request was sent, unless usage was seen (for a stream, the usage so far). Then it shuts down. Once
+shutdown has started, a `SIGINT` forces an exit and a second `SIGTERM` does nothing (uvicorn 0.54).
+A forced exit, or a kill before the deadline has passed, skips that settle: those holds expire after
+`ledger.lease_seconds` and the next sweep (any instance, or this one after restart) charges them
+**in full**. Size the stop so the deadline, not the kill, ends the drain:
 
 - **Stop sending new calls first.** The listener closes as soon as `SIGTERM` arrives, so new
   connections are refused until the load balancer drops the instance, and `/readyz` does not turn
   unready before that. That gap is why the load balancer needs time before the signal: in
   Kubernetes a `preStop` hook that waits 5 to 10 seconds, with the `sleep` lifecycle action
   (Kubernetes 1.30 and later) or `exec: {command: ["sleep", "10"]}`.
-- **Grace period sized to the longest stream.** One call or stream runs at most
-  `server.max_request_seconds` (default 900). Set `terminationGracePeriodSeconds` (Compose:
-  `stop_grace_period`, default 10 s) to at least the `preStop` wait plus `max_request_seconds` plus
-  a margin of about 30 s. In Kubernetes the `preStop` wait counts against the grace period. A
-  shorter grace period is a choice to charge the longest calls in full on every restart.
+- **Grace period above the drain deadline.** Set `terminationGracePeriodSeconds` (Compose:
+  `stop_grace_period`, default 10 s) to at least the `preStop` wait plus
+  `server.graceful_shutdown_seconds` plus about 15 s for the settles and the shutdown. In
+  Kubernetes the `preStop` wait counts against the grace period. With the defaults that is 55 s
+  for a 10 s `preStop`: the Kubernetes default of 30 s is too short, so raise it or lower the
+  deadline.
+- **Drain deadline against the longest call.** One call or stream runs at most
+  `server.max_request_seconds` (default 900). A drain deadline below it is a choice to stop the
+  longest calls on every restart and charge them as cancelled; to let every call finish, set
+  `graceful_shutdown_seconds` to at least `max_request_seconds` and the grace period to match.
 - **After a kill.** Held money from the killed instance shows for up to `ledger.lease_seconds`
   (default 60) plus one `ledger.sweep_seconds` (default 30), then the sweep settles it. With one
   instance that happens after it starts again; with several, a surviving one sweeps it.
+
+**Idle connections.** `server.keep_alive_seconds` (default 75) is how long an idle client
+connection stays open. Keep it above the load balancer's idle timeout (60 s on many): if the proxy
+closes first, the balancer can send a request on a connection that is being closed and answer it
+with a 502. Raise it when your balancer keeps idle connections longer.
+
+## Ledger outage and failover
+
+spendgate keeps no copy of the money state, so it cannot serve without the ledger: it fails
+closed. The recovery time is the ledger's own; spendgate adds no wait of its own once the ledger
+answers again.
+
+**Postgres.** While the database is down or failing over:
+
+- Every new call is refused with `ledger_unavailable` (503, `Retry-After: 5`) before any provider
+  contact (M-12). A refusal can take up to 10 s, the wait for a ledger connection.
+- `/readyz` answers 503 on every replica (`ledger_unreachable` in the admin detail), or not within
+  a short probe timeout. Once the load balancer marks them all unready, clients get the balancer's
+  own error instead.
+- A stream whose lease renewal fails is stopped and settled from its final (end-of-stream) usage if
+  that already arrived, else at the full hold (M-13). A settle the ledger refuses is retried by the
+  heartbeat; if the hold's lease runs out first, the sweeper charges it in full and a later settle
+  books only the excess (M-04).
+
+When the new primary accepts connections at the DSN's address, the next call opens a fresh
+connection (broken ones are checked and discarded) and succeeds, `/readyz` turns 200 at the next
+probe, and the load balancer adds the replicas back after its healthy threshold. No restart is
+needed. So point the DSN at an address that follows the primary (a DNS name or virtual IP your
+provider moves on failover, or libpq's multi-host form with `target_session_attrs=read-write`).
+With asynchronous replication, transactions the old primary committed but did not ship are lost,
+as with a restored backup: spend in that window is missing from the books.
+
+**SQLite.** There is no failover: the ledger is a file on one host. If the file or its volume is
+unavailable, calls are refused with `ledger_unavailable` and `/readyz` answers 503 until it is
+back; if the host is lost, recovery is restoring the backup on a new host and starting the proxy.
+Spend after the backup point is lost.
 
 ## Metrics and logs
 
 **Metrics** are Prometheus text at `GET /metrics`, served by the admin app only: open to whoever
 can reach a separate admin port, or needing an admin key with `usage:read` on a shared port.
 Probes `GET /livez` and `GET /readyz` are on the data port; `/readyz` answers with the status code
-and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days) are at
+and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days, an engaged global kill
+switch) are at
 `GET /admin/v1/readiness` with a `usage:read` admin key. Label values never come from the
 request: `model` is always the routed catalog id (`unknown` on a refusal that names no routed
 model), and `scope` is the key's scope path (`unknown` if it could not be read). Names:
@@ -289,7 +337,7 @@ turns away writes one `spendgate.internal` event at level `ERROR`:
 | `routing.usage` | `500 internal_error` | Usage unreadable: the full hold |
 | `routing.response` | `500 internal_error` | The provider answered: actual usage |
 | `routing.error` | `500 internal_error` | Unknown what the provider did: the full hold |
-| `stream.relay` | An in-stream `error` event after the `200` (then `[DONE]` for chat) | Usage seen so far, else the full hold |
+| `stream.relay` | An in-stream `error` event after the `200` (then `[DONE]` for chat) | Its final (end-of-stream) usage if that already arrived, else the full hold (M-13) |
 | `stream.usage` | A normal end of the stream | Usage unreadable: the full hold |
 | `admin.handler` | `500 internal_error` from the admin API | None |
 
