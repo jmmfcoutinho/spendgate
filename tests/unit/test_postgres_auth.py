@@ -1,4 +1,4 @@
-"""Database tokens for `ledger.backend.auth`: fake identities, no network."""
+"""Database tokens for `ledger.backend.auth` and DSN rotation: fake identities, no network."""
 
 import asyncio
 from dataclasses import dataclass
@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 
 from spendgate.ledger.port import LedgerUnavailable
-from spendgate.ledger.postgres import PostgresLedger
+from spendgate.ledger.postgres import PostgresLedger, same_but_password
 from spendgate.ledger.postgres_auth import (
     CLOUDSQL_SCOPE,
     RDS_TOKEN_SECONDS,
@@ -167,7 +167,23 @@ def test_db_tokens_builds_each_kind_and_refuses_others() -> None:
         db_tokens("kerberos", DSN)
 
 
-# --- the ledger side: a password per connection --------------------------------------------------
+# --- the ledger side: a password per connection, DSN rotation ------------------------------------
+
+
+def test_only_a_password_change_is_a_rotation() -> None:
+    old = "postgresql://u:old@db:5432/spend?sslmode=verify-full"  # pragma: allowlist secret
+    assert same_but_password(old, old.replace(":old@", ":new@"))
+    assert not same_but_password(old, old.replace("@db:", "@other:"))
+    assert not same_but_password(old, old.replace("/spend", "/other"))
+
+
+def test_rotate_dsn_takes_a_new_password_and_refuses_a_new_target() -> None:
+    old = "postgresql://u:old@db/spend"  # pragma: allowlist secret
+    ledger = PostgresLedger(old, "USD", lambda: "id")
+    assert ledger.rotate_dsn("postgresql://u:new@db/spend") is True  # pragma: allowlist secret
+    assert ledger.rotate_dsn("postgresql://u:new@db/spend") is False  # pragma: allowlist secret
+    with pytest.raises(ValueError, match="restart"):
+        ledger.rotate_dsn("postgresql://u:new@elsewhere/spend")  # pragma: allowlist secret
 
 
 async def test_every_new_connection_asks_for_the_current_password() -> None:

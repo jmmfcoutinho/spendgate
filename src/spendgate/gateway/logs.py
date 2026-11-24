@@ -26,6 +26,8 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "job",  # which background job failed (`background_job_failed`)
         # Budget warnings (pipeline.alerts): budget facts only, never request or key data.
         "budget_id", "period", "period_start", "spent", "cap", "scope_kind",
+        # Secret reloads (SIGHUP): comma-separated config paths, never a value.
+        "reloaded", "changed",
     }
 )  # fmt: skip
 

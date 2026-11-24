@@ -369,6 +369,11 @@ class Pipeline:
         """Closes the ledger refused, waiting for a heartbeat retry or the sweeper."""
         return self._closer.unsettled()
 
+    def reload_credentials(self, settings: Settings) -> None:
+        """Provider credentials re-read from their files (SIGHUP); routes must be unchanged."""
+        self._router.reload(settings.routes)
+        self.settings = settings
+
     # --- background ----------------------------------------------------------------------------
 
     def _spawn[T](self, coro: Awaitable[T]) -> "asyncio.Future[T]":

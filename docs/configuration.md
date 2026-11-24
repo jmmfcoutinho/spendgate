@@ -84,7 +84,7 @@ Used at `providers.<name>`.
 |---|---|---|---|
 | `base_url` | string (optional) | unset | Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start. For `openai` and `azure_openai` the upstream must honour `max_completion_tokens`: the proxy sends the held output ceiling in that field only, so an OpenAI-compatible server (vLLM, LiteLLM, ...) that ignores it does not enforce the ceiling (protocol.md 2.1). |
 | `auth` | `api_key` or `bearer_token` or `sigv4` | `"api_key"` | How the proxy authenticates to the provider. |
-| `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the service-account JSON, or `adc` for application default credentials (workload identity, the metadata server). |
+| `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the service-account JSON, or `adc` for application default credentials (workload identity, the metadata server). A `file:` credential is read again on `SIGHUP`. |
 | `region` | string (optional) | unset | Provider region, where the adapter needs one (Bedrock, Azure). |
 | `api_version` | string (optional) | unset | Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the minimum version is not verified here, so prefer the v1 API. |
 
@@ -189,7 +189,7 @@ Used at `ledger.backend`.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `kind` | `postgres` | required | Always `postgres`. Needs the `postgres` extra. |
-| `dsn` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the connection URL, password included. Use `sslmode=verify-full` when the server is on another host. Each connection gets lock, statement and idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the URL or the server sets them: see [Postgres connections](operations.md#postgres-connections). |
+| `dsn` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the connection URL, password included. Use `sslmode=verify-full` when the server is on another host. Each connection gets lock, statement and idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the URL or the server sets them: see [Postgres connections](operations.md#postgres-connections). A `file:` DSN is read again on `SIGHUP`; only its password may change there. |
 | `auth` | [RdsIamAuth](#rdsiamauth) or [EntraAuth](#entraauth) or [CloudSqlIamAuth](#cloudsqliamauth) (optional) | unset | Sign in with a short-lived token from the host's cloud identity instead of a password; the DSN then names the user and carries no password. See [cloud identity](operations.md#cloud-identity-for-the-database). |
 
 ## DeploymentSpec

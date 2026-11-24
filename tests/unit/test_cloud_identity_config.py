@@ -1,4 +1,4 @@
-"""Cloud identity settings: `credential: adc`, `ledger.backend.auth`, pool sizes."""
+"""Cloud identity settings: `credential: adc`, `ledger.backend.auth`, pool sizes, file re-reads."""
 
 import asyncio
 from pathlib import Path
@@ -7,7 +7,7 @@ import pytest
 
 from spendgate.cli.client import EXIT_CONFIG, CliError
 from spendgate.cli.runtime import _postgres
-from spendgate.config import load
+from spendgate.config import Secret, load, reread_file_secrets
 from spendgate.config.secrets import CREDENTIAL_HELP, check_credential_ref
 from tests.unit.test_config import BASE, ENV, failure, write
 
@@ -129,3 +129,45 @@ def test_a_dsn_with_a_password_under_token_auth_is_a_config_error(
         asyncio.run(_postgres(settings, secret_dsn, migrate=False))
     assert info.value.code == EXIT_CONFIG and "must not carry a password" in str(info.value)
     assert "pw-secret" not in str(info.value)
+
+
+# --- SIGHUP: `file:` secrets read again --------------------------------------------------------
+
+
+def _file_config(tmp_path: Path) -> tuple[Path, Path, Path]:
+    key, dsn = tmp_path / "openai_key", tmp_path / "dsn"
+    key.write_text("sk-test-old-0000\n")  # pragma: allowlist secret
+    dsn.write_text("postgresql://u:old-pw@db/spend\n")  # pragma: allowlist secret
+    text = _with_ledger(dsn=f"file:{dsn}").replace("env:OPENAI_API_KEY", f"file:{key}")
+    return write(tmp_path, text), key, dsn
+
+
+def test_file_secrets_are_read_again_and_reported_by_path_only(tmp_path: Path) -> None:
+    path, key, dsn = _file_config(tmp_path)
+    settings = load(path, env=ENV)
+    key.write_text("sk-test-new-0000")  # pragma: allowlist secret
+    result = reread_file_secrets(settings)
+    assert result.reloaded == ("providers.openai.credential", "ledger.backend.dsn")
+    assert result.changed == ("providers.openai.credential",) and result.failed == ()
+    assert result.settings.routes["m"].deployments[0].credential == Secret("sk-test-new-0000")
+    assert result.settings.ledger_dsn == settings.ledger_dsn
+    assert result.settings.config is settings.config  # nothing but secret values changes
+    dsn.write_text("postgresql://u:new-pw@db/spend")  # pragma: allowlist secret
+    assert reread_file_secrets(result.settings).changed == ("ledger.backend.dsn",)
+
+
+def test_an_unreadable_secret_keeps_its_old_value_and_is_reported(tmp_path: Path) -> None:
+    path, key, _ = _file_config(tmp_path)
+    settings = load(path, env=ENV)
+    key.unlink()
+    result = reread_file_secrets(settings)
+    assert result.failed[0][0] == "providers.openai.credential"
+    assert "cannot be read" in result.failed[0][1] and "sk-test" not in result.failed[0][1]
+    assert result.settings.routes["m"].deployments[0].credential == Secret("sk-test-old-0000")
+    assert result.reloaded == ("ledger.backend.dsn",)
+
+
+def test_env_secrets_are_not_read_again(tmp_path: Path) -> None:
+    settings = load(write(tmp_path), env=ENV)
+    result = reread_file_secrets(settings)
+    assert result.reloaded == () and result.changed == () and result.settings == settings

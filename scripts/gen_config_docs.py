@@ -147,7 +147,8 @@ D: dict[str, str] = {
         "when the server is on another host. Each connection gets lock, statement and "
         "idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the "
         "URL or the server sets them: "
-        "see [Postgres connections](operations.md#postgres-connections)."
+        "see [Postgres connections](operations.md#postgres-connections). A `file:` DSN is "
+        "read again on `SIGHUP`; only its password may change there."
     ),
     "PostgresLedger.auth": (
         "Sign in with a short-lived token from the host's cloud identity instead of a password; "
@@ -194,7 +195,7 @@ D: dict[str, str] = {
         "Secret reference for the key or token. Not used with `sigv4`, which reads the standard "
         "AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the "
         "service-account JSON, or `adc` for application default credentials (workload "
-        "identity, the metadata server)."
+        "identity, the metadata server). A `file:` credential is read again on `SIGHUP`."
     ),
     "Provider.region": "Provider region, where the adapter needs one (Bedrock, Azure).",
     "Provider.api_version": (

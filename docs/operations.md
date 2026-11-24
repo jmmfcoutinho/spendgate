@@ -431,6 +431,31 @@ unavailable, calls are refused with `ledger_unavailable` and `/readyz` answers 5
 back; if the host is lost, recovery is restoring the backup on a new host and starting the proxy.
 Spend after the backup point is lost.
 
+## Rotating secrets
+
+Send `SIGHUP` to `serve` (`kill -HUP <pid>`, `docker compose kill -s HUP spendgate`) after you
+write a new key or password to a secret file. It reads every `file:` secret again in place, with
+no restart and no drain:
+
+- **Provider credentials** (`providers.*.credential` and per-deployment `credential`): the next
+  call uses the new value; a call already in flight finishes with the one it started with.
+- **The ledger DSN** (`ledger.backend.dsn`): connections the pool opens from then on log in with
+  the new password; open connections keep their session. Only the password may change. A DSN that
+  names another host, port, database, user or option is refused and the old one stays in use:
+  moving to another ledger is a restart.
+
+`env:` secrets are not read again (a process's environment cannot change), nor is anything else in
+`spendgate.yaml`: routes, budgets and limits change with a restart. The key pepper is never
+reloaded, because a new pepper would void every key at once. A file that cannot be read or is
+empty keeps its old value, so a rotation caught half-written does not take a deployment down. Each reload logs one
+`secrets_reloaded` event with the config paths it read (`reloaded`) and the ones whose value is
+new (`changed`), comma-separated, never a value; a path that failed is logged as
+`secret_reload_failed` at level `WARNING` with `where` and `reason`. Keep the old key valid at
+the provider until the log shows the path in `changed`. A Kubernetes secret volume swaps its files
+at once, after the kubelet's sync delay, so send the signal once the pod sees the new value. A
+Docker Compose file secret is a bind mount of one host file: overwrite that file in place
+(`printf ... > file`), because a file renamed over it is not seen inside the container.
+
 ## Metrics and logs
 
 **Metrics** are Prometheus text at `GET /metrics`, served by the admin app only: open to whoever
@@ -532,9 +557,11 @@ key, a user, tag or session label. See [ADR-0019](adr/0019-otel-extra.md).
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,
 `request_id`, `key_prefix`, `scope_path`, `model`, `deployment`, `outcome`, token counts, `cost`,
 `currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`, for internal errors
-`where`, `error_class`, `frames`, `charged`, `job` (a background job that failed), and the
-budget-warning fields below (`budget_id`, `scope_kind`, `period`, `period_start`, `spent`, `cap`).
-Prompts, response bodies, headers and secrets are never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
+`where`, `error_class`, `frames`, `charged`, `job` (a background job that failed), the
+budget-warning fields below (`budget_id`, `scope_kind`, `period`, `period_start`, `spent`, `cap`),
+and `reloaded` and `changed` for [secret reloads](#rotating-secrets). Prompts, response bodies,
+headers and secrets are never logged: a field not on the list is dropped, and strings shaped like
+keys are dropped too.
 Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
 start.
 

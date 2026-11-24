@@ -27,6 +27,8 @@ class Runtime:
     ledger: AdminLedger
     keys: KeyService
     now: Clock
+    # Postgres only: hand new connections a re-read DSN (SIGHUP); True when it changed.
+    rotate_dsn: Callable[[str], bool] | None = None
 
 
 async def _postgres(settings: Settings, dsn: str, *, migrate: bool) -> "postgres.PostgresLedger":
@@ -65,6 +67,7 @@ async def open_runtime(
     backend = settings.config.ledger.backend
     currency = settings.ledger_currency
     ledger: AdminLedger
+    rotate: Callable[[str], bool] | None = None
     if backend.kind == "sqlite" and settings.ledger_path is not None:
         from spendgate.ledger.sqlite import SqliteLedger  # noqa: PLC0415 - only the chosen backend
 
@@ -73,12 +76,12 @@ async def open_runtime(
         closer: Callable[[], Awaitable[None] | None] = sqlite.close
     elif settings.ledger_dsn is not None:
         pg = await _postgres(settings, settings.ledger_dsn.reveal(), migrate=migrate)
-        ledger, closer = pg, pg.aclose
+        ledger, closer, rotate = pg, pg.aclose, pg.rotate_dsn
     else:
         raise ValueError("the ledger backend has no location")
     try:
         keys = KeyService(ledger, settings.key_pepper.reveal().encode())
-        yield Runtime(settings, ledger, keys, system_ms)
+        yield Runtime(settings, ledger, keys, system_ms, rotate)
     finally:
         done = closer()
         if done is not None:

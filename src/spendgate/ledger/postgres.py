@@ -13,9 +13,9 @@ correctness; it would only save duplicate scans, so it is not used.
 Every pooled connection is bounded (`SESSION_DEFAULTS`, `TCP_DEFAULTS`) so that a locked row or a
 silent server ends in `LedgerUnavailable` instead of holding a call; what the operator set wins.
 
-The pool asks for the password each time it opens a connection, never once at start: `password`
-(an IAM token source, `postgres_auth`) is awaited per connection. Open connections keep their
-login.
+The pool reads the DSN and the password each time it opens a connection, never once at start:
+`password` (an IAM token source, `postgres_auth`) is asked per connection, and `rotate_dsn` hands
+new connections a re-read DSN whose password changed. Open connections keep their login.
 """
 
 import asyncio
@@ -166,6 +166,14 @@ async def _steps(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
             )  # fmt: skip
 
 
+def same_but_password(old: str, new: str) -> bool:
+    """Whether two DSNs differ in their password at most (the only change a reload may make)."""
+    a, b = conninfo_to_dict(old), conninfo_to_dict(new)
+    a.pop("password", None)
+    b.pop("password", None)
+    return a == b
+
+
 def tcp_options_for(dsn: str) -> dict[str, str]:
     """The `TCP_DEFAULTS` the DSN does not set itself (libpq options it names are kept)."""
     named = conninfo_to_dict(dsn)
@@ -246,6 +254,17 @@ class PostgresLedger(LedgerEngine):
             password=password,
         )
 
+    def rotate_dsn(self, dsn: str) -> bool:
+        """Use a re-read DSN for every connection opened from now on; True when it is new.
+
+        Raises ValueError unless only the password differs: a new host, database or user is a
+        restart, never a silent move to another ledger while holds are open.
+        """
+        if not same_but_password(self._dsn, dsn):
+            raise ValueError("the DSN changed more than its password; restart to apply it")
+        changed, self._dsn = dsn != self._dsn, dsn
+        return changed
+
     async def _connect_kwargs(self) -> dict[str, object]:
         """Pool `kwargs` hook, called for each new connection: the login password is current."""
         kwargs: dict[str, object] = {
@@ -284,7 +303,7 @@ class PostgresLedger(LedgerEngine):
             self._loop = asyncio.get_running_loop()
             low, high = self._sizes
             self._pool = AsyncConnectionPool(
-                self._dsn,
+                lambda: self._dsn,  # read per connection: `rotate_dsn` reaches the next one
                 min_size=low,
                 max_size=high,
                 timeout=self._pool_timeout,
