@@ -66,6 +66,33 @@ def test_over_budget_is_refused_before_the_provider(tmp_path: Path) -> None:
     fake.assert_no_contact()
 
 
+def test_refusal_with_room_left_names_the_worst_case_hold_in_library_mode(
+    tmp_path: Path,
+) -> None:
+    fake = FakeUpstream()
+    with sync_client(tmp_path, fake, cap="0.000001 USD") as client:
+        reply = client.post(CHAT, json=BODY)
+    error = reply.json()["error"]
+    assert reply.status_code == 402 and error["code"] == "budget_exhausted"
+    assert error["details"]["remaining"] == "0.000001000 USD"
+    assert f"worst-case hold for this call ({error['details']['hold']})" in error["message"]
+    assert "max_tokens" in error["message"] and "is exhausted" not in error["message"]
+    fake.assert_no_contact()
+
+
+def test_refusal_with_nothing_left_keeps_the_exhausted_message_in_library_mode(
+    tmp_path: Path,
+) -> None:
+    fake = FakeUpstream()
+    with sync_client(tmp_path, fake, cap="0 USD") as client:
+        reply = client.post(CHAT, json=BODY)
+    error = reply.json()["error"]
+    assert reply.status_code == 402 and error["code"] == "budget_exhausted"
+    assert error["message"] == "Budget for org:local is exhausted."
+    assert error["details"]["remaining"] == "0.000000000 USD"
+    fake.assert_no_contact()
+
+
 def test_the_sync_transport_works_inside_a_running_event_loop(tmp_path: Path) -> None:
     """The notebook case: asyncio.run stands in for Jupyter's already-running loop."""
     fake = FakeUpstream()

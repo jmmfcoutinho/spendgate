@@ -5,6 +5,7 @@ upstream's request log must stay empty, the budget untouched and the error body 
 """
 
 import asyncio
+import re
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from spendgate.core.sessions import SessionDefaults
 from spendgate.ledger.port import HoldRequest, LedgerPort, LedgerUnavailable
 from tests.fakes import Script
 from tests.integration.harness import NOW_MS, Stack, open_stack, usd, wait_until
+
+HOLD_FORMAT = re.compile(r"\d+\.\d{9} USD")  # the `details.remaining` money format
 
 
 def run(case: Callable[[Path], Coroutine[object, object, None]], tmp_path: Path) -> None:
@@ -171,6 +174,43 @@ def test_rate_limit_is_refused_before_upstream(tmp_path: Path) -> None:
             assert error_of(r)["details"] == {"limit": "rpm", "retry_after_seconds": 60}
             assert r.headers["retry-after"] == "60"
             assert s.fake.calls == contacted
+
+    run(case, tmp_path)
+
+
+def test_refusal_with_room_left_names_the_worst_case_hold(tmp_path: Path) -> None:
+    """Issue #16: the hold, not the budget, is too big; the code stays `budget_exhausted`."""
+
+    async def case(path: Path) -> None:
+        async with open_stack(path, budget="0.000001") as s:
+            r = await s.chat(max_tokens=1000)
+            await refused(s, r, 402, "budget_exhausted")
+            error = error_of(r)
+            details = error["details"]
+            assert isinstance(details, dict) and isinstance(error["message"], str)
+            assert details["remaining"] == "0.000001000 USD"
+            hold = details["hold"]
+            assert isinstance(hold, str) and usd(hold.split()[0]) > usd("0.000001")
+            assert HOLD_FORMAT.fullmatch(hold)
+            assert error["message"] == (
+                f"The worst-case hold for this call ({hold}) exceeds the remaining budget for "
+                f"{details['scope']} (0.000001000 USD). Set or lower max_tokens (or "
+                "max_output_tokens) to lower the hold, or raise the cap."
+            )
+
+    run(case, tmp_path)
+
+
+def test_refusal_with_nothing_left_says_the_budget_is_exhausted(tmp_path: Path) -> None:
+    async def case(path: Path) -> None:
+        async with open_stack(path, budget="0") as s:
+            r = await s.chat(max_tokens=1000)
+            await refused(s, r, 402, "budget_exhausted")
+            error = error_of(r)
+            details = error["details"]
+            assert isinstance(details, dict) and details["remaining"] == "0.000000000 USD"
+            assert error["message"] == f"Budget for {details['scope']} is exhausted."
+            assert isinstance(details["hold"], str) and HOLD_FORMAT.fullmatch(details["hold"])
 
     run(case, tmp_path)
 

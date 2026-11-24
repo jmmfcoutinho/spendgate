@@ -145,7 +145,20 @@ def _rfc3339(ms: int) -> str:
     return (_EPOCH + ms * _MS).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _refusal(budget: Budget, remaining: Money, now: int, *, review: bool) -> Refusal:
+def _exhausted_message(scope: str, remaining: Money, hold: Money) -> str:
+    if remaining.nano == 0:
+        return f"Budget for {scope} is exhausted."
+    # Room is left, so the worst-case hold is what does not fit (often the catalog output
+    # ceiling, used when the call sets no max_tokens). Say so: "exhausted" with money left
+    # gives the caller nothing to change.
+    return (
+        f"The worst-case hold for this call ({hold.format()}) exceeds the remaining budget for "
+        f"{scope} ({remaining.format()}). Set or lower max_tokens (or max_output_tokens) to "
+        "lower the hold, or raise the cap."
+    )
+
+
+def _refusal(budget: Budget, remaining: Money, hold: Money, now: int, *, review: bool) -> Refusal:
     scope = budget.scope_path or budget.scope_id
     details: dict[str, str | int] = {"scope": scope, "remaining": remaining.format()}
     if budget.scope_kind is ScopeKind.SESSION:
@@ -156,16 +169,14 @@ def _refusal(budget: Budget, remaining: Money, now: int, *, review: bool) -> Ref
         return Refusal(
             ErrorCode.BUDGET_EXHAUSTED, f"Budget for {scope} awaits overrun review.", None, details
         )
+    details["hold"] = hold.format()
+    message = _exhausted_message(scope, remaining, hold)
     ends = next_period_start(budget.period, now)
     if ends is None:
-        return Refusal(
-            ErrorCode.BUDGET_EXHAUSTED, f"Budget for {scope} is exhausted.", None, details
-        )
+        return Refusal(ErrorCode.BUDGET_EXHAUSTED, message, None, details)
     details["period_resets_at"] = _rfc3339(ends)
     wait = -((now - ends) // 1000)  # ceiling of (ends - now) / 1000
-    return Refusal(
-        ErrorCode.BUDGET_PERIOD_EXHAUSTED, f"Budget for {scope} is exhausted.", None, details, wait
-    )
+    return Refusal(ErrorCode.BUDGET_PERIOD_EXHAUSTED, message, None, details, wait)
 
 
 def _crossed_soft(budget: Budget, state: PeriodState, used: int, effective: int) -> bool:
@@ -184,10 +195,11 @@ def check_admission(
     excess = normalise_excess(state, effective)
     used = state.spent_nano + state.held_nano
     remaining = Money(max(0, effective - used), currency)
+    hold = Money(worst_nano, currency)
     if budget.review_required_at is not None:
-        return Admission(_refusal(budget, remaining, now, review=True), excess)
+        return Admission(_refusal(budget, remaining, hold, now, review=True), excess)
     if used + worst_nano > effective:
-        return Admission(_refusal(budget, remaining, now, review=False), excess)
+        return Admission(_refusal(budget, remaining, hold, now, review=False), excess)
     warning = None
     if _crossed_soft(budget, state, used + worst_nano, effective):
         warning = SoftWarning(budget.id, budget.soft_pct, used + worst_nano, effective)

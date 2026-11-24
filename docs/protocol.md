@@ -138,7 +138,7 @@ OpenAI-shaped endpoints (all `/v1/*` except `/v1/messages`):
 
 ```json
 {"error": {"type": "budget_error", "code": "budget_exhausted", "message": "Budget for org:acme/project:app/service:chat is exhausted.", "param": null,
-           "details": {"scope": "org:acme/project:app/service:chat", "remaining": "0.000000000 EUR", "period_resets_at": "2026-12-01T00:00:00Z"}}}
+           "details": {"scope": "org:acme/project:app/service:chat", "remaining": "0.000000000 EUR", "hold": "0.003000000 EUR", "period_resets_at": "2026-12-01T00:00:00Z"}}}
 ```
 
 Anthropic-shaped (`/v1/messages`), same codes plus the request id as the Anthropic API does:
@@ -148,7 +148,7 @@ Anthropic-shaped (`/v1/messages`), same codes plus the request id as the Anthrop
 ```
 
 * `code` is the stable contract: client logic switches on `code`, never on `message` or `type`. `message` is human text and may change; it contains no secrets or prompt text.
-* `param` is the offending field or header name or `null`. `details` is optional and typed per code: `scope`, `remaining` (decimal string + currency), `limit` (`budget`/`steps`/`time`/`new_sessions`/`rpm`/`tpm`/`concurrency`), `reason` (`overrun_review` on `budget_exhausted`: a breach overrun awaits `POST /admin/v1/budgets/{id}/ack-overrun`), `period_resets_at` (RFC 3339 UTC), `retry_after_seconds`, `provider`.
+* `param` is the offending field or header name or `null`. `details` is optional and typed per code: `scope`, `remaining` (decimal string + currency), `hold` (the refused call's worst-case hold, same format as `remaining`; set when a budget had no room for the hold, not on `reason = overrun_review`), `limit` (`budget`/`steps`/`time`/`new_sessions`/`rpm`/`tpm`/`concurrency`), `reason` (`overrun_review` on `budget_exhausted`: a breach overrun awaits `POST /admin/v1/budgets/{id}/ack-overrun`), `period_resets_at` (RFC 3339 UTC), `retry_after_seconds`, `provider`.
 * Every error response carries `X-Spendgate-Request-Id`. For non-retryable errors the gateway also sends `x-should-retry: false`, which the OpenAI and Anthropic SDKs honour, so their automatic retries do not repeat a refused call.
 
 ### 4.2 Code table
@@ -159,8 +159,8 @@ Anthropic-shaped (`/v1/messages`), same codes plus the request id as the Anthrop
 |---|---|---|---|---|
 | `invalid_request` | 400 | no | `invalid_request_error` / same | Malformed body, unknown or refused field or header value; `param` set |
 | `unauthorized` | 401 | no | `authentication_error` / same | Missing, malformed, unknown, revoked or expired key |
-| `budget_exhausted` | 402 | no | `budget_error` / `billing_error` | A budget with `period: none` (or any cap) has no room for the worst-case hold, or `strict_overrun` holds it for review (`details.reason = overrun_review`); `details.scope` is the tightest scope |
-| `budget_period_exhausted` | 402 | yes: seconds to next UTC period start | `budget_error` / `billing_error` | Same, for a `day` or `month` budget; `details.period_resets_at` set |
+| `budget_exhausted` | 402 | no | `budget_error` / `billing_error` | A budget with `period: none` (or any cap) has no room for the worst-case hold, or `strict_overrun` holds it for review (`details.reason = overrun_review`); `details.scope` is the tightest scope. With `details.remaining` above zero the budget is not spent: the message says the worst-case hold (`details.hold`) exceeds what remains and suggests setting or lowering `max_tokens` (or `max_output_tokens`) or raising the cap; with nothing left it says the budget is exhausted |
+| `budget_period_exhausted` | 402 | yes: seconds to next UTC period start | `budget_error` / `billing_error` | Same (including the hold-aware message), for a `day` or `month` budget; `details.period_resets_at` set |
 | `session_limit_reached` | 402 | no | `budget_error` / `billing_error` | The session's own budget, step limit, time limit or new-session rate reached, or a session already closed by one of them; `details.limit` says which |
 | `forbidden` | 403 | no | `permission_error` / same | Key lacks the endpoint or admin scope |
 | `model_not_allowed` | 403 | no | `permission_error` / same | Model not in the key's allow list or not in config |
@@ -181,7 +181,7 @@ Rules:
 2. 429 is used for both `rate_limited` and `upstream_throttled` because SDK retry logic for rate limits is correct for both; clients tell them apart by `code`. Budget refusals use 402 (not retried by SDKs; matches Anthropic's `billing_error`).
 3. Retry guidance for clients: retry `rate_limited`, `upstream_throttled`, `ledger_unavailable` using `Retry-After` when present; `upstream_unavailable` after a 5xx or timeout is the caller's decision (the gateway sets `x-should-retry: false` because the hold was charged); never retry the others unchanged. `budget_period_exhausted` becomes retryable at `Retry-After`.
 4. Charging (M-13): refusals cost nothing and write no `calls` row. An attempt for which `not_processed` holds (never sent, or a `free_statuses` answer) costs nothing. A provider 4xx without usage (a rejected request, not throttling) is settled at 0 with no failover. After the request was sent, any other failure or cancel (5xx, timeout, stream cut, client disconnect, `internal_error` after upstream contact) is charged the **full hold** unless usage was seen (for a stream: its final, end-of-stream usage); the ledger rule decides and `X-Spendgate-Cost` reflects it. For 5xx and timeout the response sets `x-should-retry: false`.
-5. Errors for refused requests never reveal other scopes' budgets: `details.scope` and `remaining` are shown only for scopes in the caller's own chain.
+5. Errors for refused requests never reveal other scopes' budgets: `details.scope`, `remaining` and `hold` are shown only for scopes in the caller's own chain.
 
 ## 5. Response headers
 

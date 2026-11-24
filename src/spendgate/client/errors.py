@@ -54,7 +54,15 @@ class BudgetExhausted(SpendgateError):
 
     @property
     def remaining(self) -> Money | None:
-        text = self._text("remaining")
+        return self._money("remaining")
+
+    @property
+    def hold(self) -> Money | None:
+        """The refused call's worst-case hold; absent on an overrun-review refusal."""
+        return self._money("hold")
+
+    def _money(self, name: str) -> Money | None:
+        text = self._text(name)
         if text is None:
             return None
         try:

@@ -293,6 +293,7 @@ def test_error_details_are_exposed_as_typed_properties(shape: str) -> None:
         {
             "scope": "a/b",
             "remaining": "1.500000000 EUR",
+            "hold": "2.250000000 EUR",
             "period_resets_at": "2026-12-01T00:00:00Z",
         },
         402,
@@ -300,6 +301,7 @@ def test_error_details_are_exposed_as_typed_properties(shape: str) -> None:
     assert isinstance(budget, sg.BudgetExhausted)
     assert budget.scope == "a/b"
     assert budget.remaining == Money.from_amount("1.5", "EUR")
+    assert budget.hold == Money.from_amount("2.25", "EUR")
     assert budget.period_resets_at == datetime(2026, 12, 1, tzinfo=UTC)
     limited = fetch("rate_limited", {"limit": "rpm", "retry_after_seconds": 2}, 429)
     assert isinstance(limited, sg.RateLimited)
@@ -307,6 +309,12 @@ def test_error_details_are_exposed_as_typed_properties(shape: str) -> None:
     session = fetch("session_limit_reached", {"limit": "time"}, 402)
     assert isinstance(session, sg.SessionLimitReached)
     assert session.limit is LimitName.TIME
+
+
+def test_budget_exhausted_hold_is_none_when_absent_or_unreadable() -> None:
+    review = sg.BudgetExhausted("budget_exhausted", "m", {"reason": "overrun_review"})
+    garbled = sg.BudgetExhausted("budget_exhausted", "m", {"hold": "lots"})
+    assert review.hold is None and garbled.hold is None and garbled.remaining is None
 
 
 def test_retry_after_header_backs_up_missing_detail() -> None:

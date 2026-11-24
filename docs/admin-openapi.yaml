@@ -528,7 +528,7 @@ components:
             details:
               type: object
               additionalProperties: true
-              description: 'Typed per code: scope, remaining, limit, period_resets_at, retry_after_seconds, provider, reason (overrun_review).'
+              description: 'Typed per code: scope, remaining, hold, limit, period_resets_at, retry_after_seconds, provider, reason (overrun_review).'
     ErrorCode:
       type: string
       enum: [invalid_request, unauthorized, forbidden, not_found, conflict, internal_error, ledger_unavailable,
