@@ -135,6 +135,10 @@ All notable changes to this project are documented here. The format follows
   `AttemptError` enums in `core.failures`, so mypy rejects an unknown one. Every value is listed
   in [data-model](docs/data-model.md#callserror_code-values); existing rows keep their values,
   listed there as legacy. Charges are unchanged.
+- Roadmap: adds per-instance budget slices, library mode on Python 3.12, per-end-user budgets
+  keyed on `X-Spendgate-User`, weekly and rolling budget windows, a generic OpenAI-compatible
+  provider, a read-only usage page, a public hold and settle API and per-`detail` image
+  ceilings, each with why. Soft-threshold webhook alerts and OpenTelemetry tracing move to Done.
 
 ### Fixed
 
