@@ -69,6 +69,7 @@ class DeploymentHealth:
         self._probe_out = False
         self._busy_only = False  # open only because of 429s from closed: no probe needed after
         self._streak = 0  # busy cooldowns in a row with no success in between
+        self._tripped_at = 0  # when the latest busy cooldown started
 
     @property
     def state(self) -> HealthState:
@@ -90,17 +91,24 @@ class DeploymentHealth:
         """Cooling only because the provider was busy (a 429 from closed): worth waiting for."""
         return self._state is HealthState.OPEN and self._busy_only
 
+    @property
+    def escalated(self) -> bool:
+        """A busy cooldown that already doubled: the deployment came back and was throttled."""
+        return self.busy and self._streak > 1
+
     def retry_after(self, now: int) -> int:
         """Milliseconds until the next attempt may be admitted (0 when allowed or probing)."""
         if self._state is HealthState.OPEN:
             return max(self._open_until - now, 0)
         return 0
 
-    def record_success(self, now: int) -> bool:
+    def record_success(self, now: int, started: int | None = None) -> bool:
         """Count a success; a half-open success closes the breaker. False: ignored while open.
 
         A result in half-open is taken as the probe's: requests started before the trip are
-        indistinguishable here, and a wrong close is corrected by the next failures.
+        indistinguishable here, and a wrong close is corrected by the next failures. Only a call
+        that ``started`` at or after the latest busy trip resets the escalation: one sent before
+        the provider began throttling says nothing about whether it has stopped.
         """
         self._expire_busy(now)
         if self._state is HealthState.HALF_OPEN:
@@ -109,7 +117,7 @@ class DeploymentHealth:
         elif self._state is HealthState.CLOSED:
             self._add(now, ok=True)
         counted = self._state is not HealthState.OPEN
-        if counted:
+        if counted and (started is None or started >= self._tripped_at):
             self._streak = 0
         return counted
 
@@ -148,7 +156,7 @@ class DeploymentHealth:
         elif self._state is HealthState.CLOSED:  # busy: keep the failure window, no probe after
             self._state, self._open_until = HealthState.OPEN, now + wanted
             self._busy_only, self._probe_out = True, False
-            self._streak += 1
+            self._streak, self._tripped_at = self._streak + 1, now
         else:  # a throttled probe still owes its probe
             self._trip(now, wanted)
         return wanted

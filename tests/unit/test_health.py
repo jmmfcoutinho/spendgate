@@ -224,3 +224,25 @@ def test_a_busy_cooldown_keeps_the_failure_window() -> None:
     assert health.record_failure(700)  # after the busy cooldown: 5 of 5 in the window
     assert _state(health) is HealthState.OPEN and not health.busy
     assert health.retry_after(700) == 5_000
+
+
+def test_a_success_from_a_call_sent_before_the_throttle_keeps_the_escalation() -> None:
+    """A call sent before the provider began throttling says nothing about it having stopped."""
+    health = DeploymentHealth()
+    health.record_throttled(0)
+    health.record_throttled(500)  # back and throttled again: busy since 500, streak 2
+    assert health.record_success(1_600, started=400)  # counted for the breaker...
+    assert health.record_throttled(1_700) == 2_000  # ...but the escalation goes on
+    fresh = DeploymentHealth()
+    fresh.record_throttled(0)
+    fresh.record_throttled(500)
+    assert fresh.record_success(1_600, started=1_550)  # sent after the trip: it has stopped
+    assert fresh.record_throttled(1_700) == 500
+
+
+def test_escalated_marks_a_busy_cooldown_that_already_doubled() -> None:
+    health = DeploymentHealth()
+    health.record_throttled(0)
+    assert health.busy and not health.escalated
+    health.record_throttled(500)
+    assert health.escalated

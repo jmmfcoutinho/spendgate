@@ -206,3 +206,15 @@ async def test_a_garbage_retry_after_cools_for_the_full_cooldown(tmp_path: Path)
         r = await s.chat("alpha-one")
         assert [a.cooldown_ms for a in s.observer.attempts] == [5_000]
         assert r.status_code == 429 and r.headers["retry-after"] == "5"
+
+
+@async_test
+async def test_a_valid_retry_after_ms_on_an_openai_429_is_honoured(tmp_path: Path) -> None:
+    """The OpenAI adapter reads only Retry-After; Azure's `retry-after-ms` is still a hint."""
+    async with open_stack(tmp_path) as s:
+        s.fake.enqueue(Script(status=429, headers=(("retry-after-ms", "200"),)))
+        r = await s.chat("alpha-one")
+        # 200 ms rounds up to 1 s, which beats the short draw; not the 5 s for an unreadable hint
+        assert [a.cooldown_ms for a in s.observer.attempts] == [1_000]
+        assert r.status_code == 429 and r.headers["retry-after"] == "1"
+

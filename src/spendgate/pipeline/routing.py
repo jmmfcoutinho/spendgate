@@ -236,7 +236,7 @@ class Forwarder:
                          not_processed=False, error_code="relay_error")  # fmt: skip
             refusal = Refusal(ErrorCode.INTERNAL_ERROR, "The stream could not be relayed.")
             return Failed(refusal, 500, fault=fault_of("routing.relay", exc))
-        self._router.succeeded(target, self._now())
+        self._router.succeeded(target, self._now(), started)
         broke = lambda: self._router.failed(target, self._now())  # noqa: E731 - a one-line callback
         return Live(opened, relay, job.model, target.provider, target.label, started, broke)
 
@@ -316,7 +316,7 @@ class Forwarder:
             return self._unreadable(job, book, target, started, response.status, fault)
         book.note(reading)
         outcome = Outcome.OK if reading.cost else Outcome.OK_NO_USAGE
-        self._router.succeeded(target, self._now())
+        self._router.succeeded(target, self._now(), started)
         self._record(
             job, book, target, started, outcome, response.status, not_processed=False,
             reading=reading,
@@ -358,18 +358,18 @@ class Forwarder:
                 cooldown_ms=cooldown, error_code=err.code.value,
             )  # fmt: skip
             return _Retry(cause, retry_s)
-        self._feed_health(target, status, now)
+        self._feed_health(target, status, now, started)
         self._record(
             job, book, target, started, err.outcome(free), status, not_processed=False,
             error_code=err.code.value,
         )  # fmt: skip
         return _failure_for(err, target.provider)
 
-    def _feed_health(self, target: Target, status: int, now: int) -> None:
+    def _feed_health(self, target: Target, status: int, now: int, started: int) -> None:
         if status >= 500 or status == 408 or status in _OUR_CREDENTIAL_FAULTS:  # noqa: PLR2004
             self._router.failed(target, now)
         else:
-            self._router.succeeded(target, now)  # the deployment answered: the request was bad
+            self._router.succeeded(target, now, started)  # it answered: the request was bad
 
 
 def _failure_for(err: UpstreamError, provider: str) -> Failed:

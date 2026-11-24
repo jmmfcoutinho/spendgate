@@ -194,3 +194,31 @@ def test_an_unreadable_retry_after_cools_for_the_breaker_cooldown(tmp_path: Path
     r, s = router(tmp_path)
     a = r.targets("alpha")[0]
     assert r.cool(a, NOW, None, Cause.THROTTLED, unknown=True) == s.health.cooldown_ms
+
+
+def test_soonest_does_not_wait_for_an_escalated_cooldown(tmp_path: Path) -> None:
+    """Throttled again on its return: waiters would only meet it again; new arrivals try it."""
+    r, s = router(tmp_path)
+    a = r.targets("alpha")[0]
+    r.cool(a, NOW, None, Cause.THROTTLED)
+    assert r.soonest((a,), set(), NOW) is not None  # a first busy cooldown is waited for
+    back = NOW + s.health.throttle_max_ms
+    assert r.pick((a,), set(), back) is a
+    r.cool(a, back, None, Cause.THROTTLED)
+    assert a.shared.health.escalated and r.soonest((a,), set(), back) is None
+
+
+def test_succeeded_passes_the_start_so_an_old_call_keeps_the_escalation(tmp_path: Path) -> None:
+    s = make_settings(tmp_path)
+    r = Router(s.routes, s.health, lambda low, high: high)  # the longest draw: exact numbers
+    a = r.targets("alpha")[0]
+    r.cool(a, NOW, None, Cause.THROTTLED)
+    back = NOW + s.health.throttle_max_ms
+    r.cool(a, back, None, Cause.THROTTLED)
+    after = back + 2 * s.health.throttle_max_ms
+    r.succeeded(a, after, started=back - 1)  # sent before the second trip
+    assert r.cool(a, after, None, Cause.THROTTLED) == 4 * s.health.throttle_max_ms
+
+
+def test_retry_hint_falls_back_to_a_valid_retry_after_ms() -> None:
+    assert retry_hint(_throttled(), {"retry-after-ms": "200"}, NOW) == (1, False)  # rounded up

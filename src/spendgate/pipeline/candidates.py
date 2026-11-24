@@ -20,6 +20,7 @@ from spendgate.providers.port import (
     UpstreamError,
     has_retry_after,
     retry_after_date_ms,
+    retry_after_ms_seconds,
 )
 
 _MS = 1000
@@ -104,21 +105,23 @@ class Router:
         if target.shared.health.record_failure(now):
             target.shared.cause = Cause.FAILING
 
-    def succeeded(self, target: Target, now: int) -> None:
-        if target.shared.health.record_success(now):
+    def succeeded(self, target: Target, now: int, started: int | None = None) -> None:
+        if target.shared.health.record_success(now, started):
             target.shared.cause = None
 
     def soonest(self, targets: Iterable[Target], tried: set[str], now: int) -> int | None:
         """Ms until the first untried, busy deployment is back from its cooldown; None if none.
 
-        Only a deployment cooling on a busy 429 is waited for. Never a quota fault (waiting will
-        not fix billing), nor a breaker opened on failures: waiting for it would hand its
-        half-open probe to this call, a new way to be charged a 5xx.
+        Only a deployment cooling on a first busy 429 is waited for. Never a quota fault
+        (waiting will not fix billing), nor a breaker opened on failures (waiting for it would
+        hand its half-open probe to this call, a new way to be charged a 5xx), nor an escalated
+        cooldown: that deployment was throttled again on its return, so a herd of waiters would
+        only meet it again; callers that arrive after it ends try it instead.
         """
         waits = [
             t.shared.health.retry_after(now)
             for t in targets
-            if t.label not in tried and t.shared.cause is Cause.THROTTLED and t.shared.health.busy
+            if t.label not in tried and t.shared.cause is Cause.THROTTLED and _first_busy(t)
         ]
         return min((ms for ms in waits if ms > 0), default=None)
 
@@ -139,19 +142,28 @@ class Router:
         return all(t.shared.cause is Cause.QUOTA for t in targets)
 
 
+def _first_busy(target: Target) -> bool:
+    health = target.shared.health
+    return health.busy and not health.escalated
+
+
 def retry_hint(err: UpstreamError, headers: Mapping[str, str], now: int) -> tuple[int | None, bool]:
     """(Retry-After in seconds, unreadable?) for a free 429 or 529.
 
     The adapter's delta-seconds win. Otherwise an HTTP-date counts as the seconds until it by
-    the injected clock (rounded up, capped at a day; a past date is 0, so the short draw), and a
-    hint header that is there but neither is unreadable: `Router.cool` then uses the full
-    `cooldown_seconds`, because it may have asked for anything.
+    the injected clock (rounded up, capped at a day; a past date is 0, so the short draw), then a
+    valid `retry-after-ms` (rounded up) for adapters that do not read it. A hint header that is
+    there but none of these is unreadable: `Router.cool` then uses the full `cooldown_seconds`,
+    because it may have asked for anything.
     """
     if err.retry_after_seconds is not None:
         return err.retry_after_seconds, False
     at = retry_after_date_ms(headers)
     if at is not None:
         return min(max(math.ceil((at - now) / _MS), 0), _MAX_DATE_SECONDS), False
+    millis = retry_after_ms_seconds(headers)  # Azure's header, sent to adapters that ignore it
+    if millis is not None:
+        return millis, False
     return None, has_retry_after(headers)
 
 
