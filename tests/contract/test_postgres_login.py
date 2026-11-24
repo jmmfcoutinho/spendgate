@@ -20,6 +20,20 @@ TOKEN = "fake-iam-token-0000"  # noqa: S105  # pragma: allowlist secret
 OLD_PW, NEW_PW = "fake-old-pw", "fake-new-pw"  # pragma: allowlist secret
 
 
+class CountingLogin:
+    """A token source that hands out a new numbered token for each login."""
+
+    def __init__(self) -> None:
+        self.asked = self.invalidated = 0
+
+    async def password(self) -> str:
+        self.asked += 1
+        return f"{TOKEN}-{self.asked}"
+
+    def invalidate(self) -> None:
+        self.invalidated += 1
+
+
 @pytest.fixture
 def location(postgres_url: str, tmp_path: Path) -> Iterator[str]:
     yield workdir_location("postgres", tmp_path)
@@ -39,22 +53,19 @@ async def _connections(ledger: PostgresLedger, n: int) -> list[str]:
 def test_open_and_every_new_pooled_connection_log_in_with_the_current_token(
     location: str,
 ) -> None:
-    asked = 0
-
-    async def password() -> str:
-        nonlocal asked
-        asked += 1
-        return f"{TOKEN}-{asked}"
+    login = CountingLogin()
 
     async def run() -> list[str]:
-        ledger = await PostgresLedger.open(location, min_size=0, max_size=2, password=password)
+        ledger = await PostgresLedger.open(location, min_size=0, max_size=2, login=login)
         try:
             return await _connections(ledger, 2)
         finally:
             await ledger.aclose()
 
     used = asyncio.run(run())
-    assert asked == 3  # the migration connection, then one per pooled connection
+    assert (
+        login.asked == 3 and login.invalidated == 0
+    )  # the migration connection, then one per pooled connection
     assert sorted(used) == [f"{TOKEN}-2", f"{TOKEN}-3"]
 
 

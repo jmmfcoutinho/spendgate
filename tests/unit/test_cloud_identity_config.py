@@ -112,9 +112,9 @@ def test_the_runtime_passes_pool_settings_and_a_token_source_to_the_ledger(
     assert opened.dsn == dsn
     kw = opened.kwargs
     assert (kw["min_size"], kw["max_size"], kw["pool_timeout"]) == (2, 4, 3.0)
-    assert callable(kw["password"]) and kw["currency"] == "USD"
+    assert repr(kw["login"]) == "DbTokens(entra)" and kw["currency"] == "USD"
     asyncio.run(_postgres(load(write(tmp_path, _with_ledger()), env=ENV), dsn, migrate=False))
-    assert opened.kwargs["password"] is None and opened.kwargs["max_size"] == 10
+    assert opened.kwargs["login"] is None and opened.kwargs["max_size"] == 10
 
 
 def test_a_dsn_with_a_password_under_token_auth_is_a_config_error(

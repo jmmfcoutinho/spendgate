@@ -14,18 +14,18 @@ Every pooled connection is bounded (`SESSION_DEFAULTS`, `TCP_DEFAULTS`) so that 
 silent server ends in `LedgerUnavailable` instead of holding a call; what the operator set wins.
 
 The pool reads the DSN and the password each time it opens a connection, never once at start:
-`password` (an IAM token source, `postgres_auth`) is asked per connection, and `rotate_dsn` hands
-new connections a re-read DSN whose password changed. Open connections keep their login.
+`login` (an IAM token source, `postgres_auth`) is asked per connection and forgets its token when a
+connect fails, and `rotate_dsn` hands new connections a re-read DSN whose password changed. Open
+connections keep their login.
 """
 
 import asyncio
 import contextlib
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from typing import Final, Self
 
 import psycopg
-from psycopg import AsyncConnection
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
@@ -36,6 +36,7 @@ from spendgate.ledger.common import i
 from spendgate.ledger.engine import LedgerEngine
 from spendgate.ledger.ids import new_id as default_new_id
 from spendgate.ledger.port import LedgerUnavailable, PoolStats
+from spendgate.ledger.postgres_auth import Login, connection_class
 from spendgate.ledger.postgres_driver import (
     Conn,
     ConnectionDropped,
@@ -49,7 +50,6 @@ from spendgate.ledger.postgres_driver import (
 from spendgate.ledger.sql import Flow, q
 
 _CONNECT_TIMEOUT_S = 10
-type Password = Callable[[], Awaitable[str]]  # the login password for one new connection
 # Server-side bounds for each pooled connection. lock_timeout stays above deadlock_timeout (1 s by
 # default) so a deadlock is still reported as one and retried; a lock or statement timeout is not
 # retried (postgres_driver). Set only where the server reports the built-in default, so a value from
@@ -168,7 +168,10 @@ async def _steps(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
 
 def same_but_password(old: str, new: str) -> bool:
     """Whether two DSNs differ in their password at most (the only change a reload may make)."""
-    a, b = conninfo_to_dict(old), conninfo_to_dict(new)
+    try:
+        a, b = conninfo_to_dict(old), conninfo_to_dict(new)
+    except psycopg.Error:  # its message may quote the DSN, password included
+        raise ValueError("not a valid connection string") from None
     a.pop("password", None)
     b.pop("password", None)
     return a == b
@@ -200,11 +203,11 @@ class PostgresLedger(LedgerEngine):
         min_size: int = 1,
         max_size: int = 10,
         pool_timeout: float = 10.0,
-        password: Password | None = None,
+        login: Login | None = None,
     ) -> None:
         super().__init__(currency, new_id)
         self._dsn = dsn
-        self._password = password
+        self._login = login
         self._tcp = tcp_options_for(dsn)
         self._sizes = (min_size, max_size)
         self._pool_timeout = pool_timeout
@@ -227,15 +230,22 @@ class PostgresLedger(LedgerEngine):
         max_size: int = 10,
         pool_timeout: float = 10.0,
         migrate: bool = True,
-        password: Password | None = None,
+        login: Login | None = None,
     ) -> Self:
         """Migrate (or with `migrate` False refuse a schema that is behind, `SchemaBehind`) and
         check the ledger currency. Never touches a reservation."""
         try:
-            login = {"password": await password()} if password is not None else {}
+            tcp = tcp_options_for(dsn)
+        except psycopg.Error as exc:  # its message may quote the DSN, password included
+            raise LedgerUnavailable(
+                f"cannot open ledger: ledger.backend.dsn is not a valid connection string "
+                f"({type(exc).__name__})"
+            ) from None
+        try:
+            token = {"password": await login.password()} if login is not None else {}
             # TCP options only: a migration may wait for a peer's lock or run long.
-            async with await AsyncConnection.connect(
-                make_conninfo(dsn, **tcp_options_for(dsn), **login),
+            async with await connection_class(login).connect(
+                make_conninfo(dsn, **tcp, **token),
                 autocommit=True,
                 row_factory=dict_row,
                 connect_timeout=_CONNECT_TIMEOUT_S,
@@ -251,7 +261,7 @@ class PostgresLedger(LedgerEngine):
             min_size=min_size,
             max_size=max_size,
             pool_timeout=pool_timeout,
-            password=password,
+            login=login,
         )
 
     def rotate_dsn(self, dsn: str) -> bool:
@@ -273,8 +283,8 @@ class PostgresLedger(LedgerEngine):
             "connect_timeout": _CONNECT_TIMEOUT_S,
             **self._tcp,
         }
-        if self._password is not None:
-            kwargs["password"] = await self._password()
+        if self._login is not None:
+            kwargs["password"] = await self._login.password()
         return kwargs
 
     @property
@@ -309,6 +319,7 @@ class PostgresLedger(LedgerEngine):
                 timeout=self._pool_timeout,
                 open=False,
                 kwargs=self._connect_kwargs,
+                connection_class=connection_class(self._login),
                 configure=bound_session,  # no `check`: see postgres_driver (ConnectionDropped)
             )
         pool = self._pool

@@ -37,12 +37,12 @@ async def _postgres(settings: Settings, dsn: str, *, migrate: bool) -> "postgres
 
     cfg = settings.config.ledger
     auth = cfg.backend.auth if isinstance(cfg.backend, PostgresLedger) else None
-    password = None
+    login = None
     if auth is not None:
         region = auth.region if isinstance(auth, RdsIamAuth) else None
         scope = auth.scope if isinstance(auth, EntraAuth) else ""
         try:
-            password = db_tokens(auth.kind, dsn, region=region, scope=scope).password
+            login = db_tokens(auth.kind, dsn, region=region, scope=scope)
         except ValueError as exc:  # the DSN does not fit token auth: a config error, no traceback
             raise CliError(EXIT_CONFIG, f"{settings.source}: {exc}") from None
     return await Ledger.open(
@@ -51,7 +51,7 @@ async def _postgres(settings: Settings, dsn: str, *, migrate: bool) -> "postgres
         min_size=cfg.pool_min,
         max_size=cfg.pool_max,
         pool_timeout=float(cfg.pool_timeout_seconds),
-        password=password,
+        login=login,
         migrate=migrate,
     )
 

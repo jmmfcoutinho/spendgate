@@ -1,9 +1,12 @@
 """Database tokens for `ledger.backend.auth` and DSN rotation: fake identities, no network."""
 
 import asyncio
+import threading
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import NoReturn
 
+import psycopg
 import pytest
 
 from spendgate.ledger.port import LedgerUnavailable
@@ -15,6 +18,7 @@ from spendgate.ledger.postgres_auth import (
     UNKNOWN_EXPIRY_SECONDS,
     DbTokens,
     cloudsql_fetch,
+    connection_class,
     db_tokens,
     entra_fetch,
     rds_fetch,
@@ -186,17 +190,90 @@ def test_rotate_dsn_takes_a_new_password_and_refuses_a_new_target() -> None:
         ledger.rotate_dsn("postgresql://u:new@elsewhere/spend")  # pragma: allowlist secret
 
 
-async def test_every_new_connection_asks_for_the_current_password() -> None:
-    asked: list[int] = []
+class FakeLogin:
+    def __init__(self) -> None:
+        self.asked = self.invalidated = 0
 
-    async def password() -> str:
-        asked.append(1)
+    async def password(self) -> str:
+        self.asked += 1
         return TOKEN
 
-    ledger = PostgresLedger(DSN, "USD", lambda: "id", password=password)
+    def invalidate(self) -> None:
+        self.invalidated += 1
+
+
+async def test_every_new_connection_asks_for_the_current_password() -> None:
+    login = FakeLogin()
+    ledger = PostgresLedger(DSN, "USD", lambda: "id", login=login)
     first = await ledger._connect_kwargs()
     second = await ledger._connect_kwargs()
-    assert first["password"] == second["password"] == TOKEN and len(asked) == 2
+    assert first["password"] == second["password"] == TOKEN and login.asked == 2
     assert first["autocommit"] is True and first["keepalives"] == "1"
     plain = await PostgresLedger(DSN, "USD", lambda: "id")._connect_kwargs()
     assert "password" not in plain
+
+
+# --- a rejected token is not reused; a malformed DSN is never quoted ----------------------------
+
+MALFORMED = "postgresql://spendgate:pw-fragment-0000@[db/spend"  # pragma: allowlist secret
+
+
+async def test_an_invalidated_token_is_fetched_again_before_it_expires() -> None:
+    clock = Clock()
+    fetch = Fetches(clock)
+    tokens = DbTokens("rds_iam", fetch, clock=clock)
+    assert await tokens.password() == f"{TOKEN}-1"
+    tokens.invalidate()  # the server refused it: do not wait out its lifetime
+    assert await tokens.password() == f"{TOKEN}-2" and fetch.count == 2
+
+
+async def test_a_cancelled_caller_does_not_start_a_second_concurrent_fetch() -> None:
+    started, release = threading.Event(), threading.Event()
+    clock, calls = Clock(), [0]
+
+    def slow() -> tuple[str, float]:
+        calls[0] += 1
+        started.set()
+        assert release.wait(timeout=10)
+        return TOKEN, clock() + 3600
+
+    tokens = DbTokens("entra", slow, clock=clock)
+    first = asyncio.ensure_future(tokens.password())
+    assert await asyncio.to_thread(started.wait, 10)
+    first.cancel()  # the caller holding the fetch gives up; the thread keeps running
+    with pytest.raises(asyncio.CancelledError):
+        await first
+    second = asyncio.ensure_future(tokens.password())
+    release.set()
+    assert await second == TOKEN and calls[0] == 1
+
+
+async def test_a_failed_connect_forgets_the_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    login = FakeLogin()
+
+    async def refused(*args: object, **kwargs: object) -> NoReturn:
+        raise psycopg.OperationalError("password authentication failed")
+
+    monkeypatch.setattr(psycopg.AsyncConnection, "connect", classmethod(refused))
+    with pytest.raises(psycopg.OperationalError):
+        await connection_class(login).connect("host=db.example.test")
+    assert login.invalidated == 1
+    assert connection_class(None) is psycopg.AsyncConnection
+
+
+def test_a_malformed_dsn_is_refused_without_quoting_it() -> None:
+    with pytest.raises(ValueError, match="not a valid connection string") as info:
+        rds_fetch(MALFORMED, None, client=FakeRds())
+    assert "pw-fragment" not in str(info.value) and info.value.__cause__ is None
+    with pytest.raises(ValueError, match="not a valid connection string") as info:
+        same_but_password("postgresql://u:old@db/spend", MALFORMED)  # pragma: allowlist secret
+    assert "pw-fragment" not in str(info.value)
+    with pytest.raises(ValueError, match="not a valid connection string"):
+        entra_fetch("postgresql://spendgate@db:notaport/spend", "s")
+
+
+async def test_open_with_a_malformed_dsn_never_quotes_it() -> None:
+    with pytest.raises(LedgerUnavailable) as info:
+        await PostgresLedger.open(MALFORMED, currency="USD")
+    assert "not a valid connection string" in str(info.value)
+    assert "pw-fragment" not in str(info.value) and info.value.__cause__ is None

@@ -15,9 +15,12 @@ import asyncio
 import time
 from collections.abc import Callable
 from datetime import UTC
-from typing import Any, Final, Protocol, cast
+from typing import Any, Final, Protocol, Self, cast
 
+import psycopg
+from psycopg import AsyncConnection
 from psycopg.conninfo import conninfo_to_dict
+from psycopg.rows import DictRow
 
 from spendgate.ledger.port import LedgerUnavailable
 
@@ -29,6 +32,15 @@ KINDS: Final = ("rds_iam", "entra", "cloudsql_iam")
 
 type Clock = Callable[[], float]  # Unix seconds
 type Fetch = Callable[[], tuple[str, float]]  # blocking: (token, expires at in Unix seconds)
+type Conn = AsyncConnection[DictRow]
+
+
+class Login(Protocol):
+    """What the ledger asks of a token source: a password per login, and to forget a bad one."""
+
+    async def password(self) -> str: ...
+
+    def invalidate(self) -> None: ...
 
 
 class DbTokens:
@@ -37,7 +49,7 @@ class DbTokens:
     def __init__(self, kind: str, fetch: Fetch, *, clock: Clock = time.time) -> None:
         self._kind, self._fetch, self._clock = kind, fetch, clock
         self._token: tuple[str, float] | None = None
-        self._lock: tuple[asyncio.AbstractEventLoop, asyncio.Lock] | None = None
+        self._fetching: asyncio.Task[str] | None = None
 
     def _fresh(self) -> str | None:
         token = self._token
@@ -45,34 +57,68 @@ class DbTokens:
             return None
         return token[0]
 
-    def _guard(self) -> asyncio.Lock:
-        # A lock belongs to one loop; `open` may run on another loop than the pool does.
-        loop = asyncio.get_running_loop()
-        if self._lock is None or self._lock[0] is not loop:
-            self._lock = (loop, asyncio.Lock())
-        return self._lock[1]
-
     async def password(self) -> str:
         """A token with more than `REFRESH_MARGIN_SECONDS` left; fetched when there is none."""
         if (ready := self._fresh()) is not None:
             return ready
-        async with self._guard():  # one fetch at a time; the others take what it brought
-            if (ready := self._fresh()) is not None:
-                return ready
-            try:
-                token, expires = await asyncio.to_thread(self._fetch)
-            except Exception as exc:  # the message may quote a signed URL: the class only,
-                # and no chained cause, which a traceback at start would print in full
-                raise LedgerUnavailable(
-                    f"cannot get a {self._kind} database token ({type(exc).__name__})"
-                ) from None
-            if not token:
-                raise LedgerUnavailable(f"the {self._kind} identity returned an empty token")
-            self._token = (token, expires)
-            return token
+        loop = asyncio.get_running_loop()
+        task = self._fetching
+        # One fetch at a time: callers share the task in flight. A task belongs to one loop, and
+        # `open` may run on another loop than the pool does.
+        if task is None or task.done() or task.get_loop() is not loop:
+            task = self._fetching = loop.create_task(self._fetch_one())
+            task.add_done_callback(_retrieve)
+        # Shielded: a cancelled caller leaves the fetch running for the others, instead of
+        # letting the next caller start a second one beside the thread still at work.
+        return await asyncio.shield(task)
+
+    async def _fetch_one(self) -> str:
+        try:
+            token, expires = await asyncio.to_thread(self._fetch)
+        except Exception as exc:  # the message may quote a signed URL: the class only,
+            # and no chained cause, which a traceback at start would print in full
+            raise LedgerUnavailable(
+                f"cannot get a {self._kind} database token ({type(exc).__name__})"
+            ) from None
+        if not token:
+            raise LedgerUnavailable(f"the {self._kind} identity returned an empty token")
+        self._token = (token, expires)
+        return token
+
+    def invalidate(self) -> None:
+        """Forget the cached token: a login failed, maybe because the server rejected it."""
+        self._token = None
 
     def __repr__(self) -> str:  # the token lives only in `_token`; never print it
         return f"DbTokens({self._kind})"
+
+
+def _retrieve(task: "asyncio.Task[str]") -> None:
+    # Every caller may have been cancelled: read the outcome so asyncio does not log it as lost.
+    if not task.cancelled():
+        task.exception()
+
+
+def connection_class(login: Login | None) -> type[Conn]:
+    """The connection class for `login`: a failed connect forgets its cached token.
+
+    libpq reports a rejected login (SQLSTATE 28P01 or 28000) as an `OperationalError` that often
+    carries no SQLSTATE, so any failed connect drops the token; the next login fetches a new one.
+    """
+    if login is None:
+        return AsyncConnection
+    forget = login.invalidate
+
+    class TokenConnection(AsyncConnection[DictRow]):
+        @classmethod
+        async def connect(cls, conninfo: str = "", **kwargs: Any) -> Self:  # noqa: ANN401
+            try:
+                return await super().connect(conninfo, **kwargs)
+            except psycopg.OperationalError:
+                forget()
+                raise
+
+    return TokenConnection
 
 
 class RdsClient(Protocol):
@@ -98,7 +144,11 @@ def _missing(extra: str) -> RuntimeError:
 
 def _login(dsn: str) -> tuple[str, int, str]:
     """Host, port and user of the DSN, which must name the user and carry no password."""
-    params = conninfo_to_dict(dsn)
+    try:
+        params = conninfo_to_dict(dsn)
+        port = int(str(params.get("port") or 5432))
+    except (psycopg.Error, ValueError):  # psycopg's message may quote the DSN, password included
+        raise ValueError("ledger.backend.dsn is not a valid connection string") from None
     if params.get("password"):
         raise ValueError(
             "ledger.backend.dsn must not carry a password when ledger.backend.auth is set"
@@ -106,8 +156,7 @@ def _login(dsn: str) -> tuple[str, int, str]:
     user = str(params.get("user") or "")
     if not user:
         raise ValueError("ledger.backend.dsn must name the database user for token auth")
-    host = str(params.get("host") or "")
-    return host, int(str(params.get("port") or 5432)), user
+    return str(params.get("host") or ""), port, user
 
 
 def rds_fetch(
