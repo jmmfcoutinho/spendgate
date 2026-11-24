@@ -10,7 +10,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from spendgate.config.secrets import check_ref
+from spendgate.config.secrets import check_credential_ref, check_ref
 from spendgate.core.money import Money, MoneyError, parse_amount
 
 # Must match providers.anthropic: older SDKs send 2023-06-01; 2026-10-21 is the current version.
@@ -39,6 +39,7 @@ def _decimal_text(value: object) -> str:
 
 Amount = Annotated[Money, BeforeValidator(_money)]
 SecretRef = Annotated[str, AfterValidator(check_ref)]
+CredentialRef = Annotated[str, AfterValidator(check_credential_ref)]  # a SecretRef or `adc`
 PosInt = Annotated[int, Field(strict=True, gt=0)]
 Currency = Annotated[str, Field(strict=True, pattern=r"^[A-Z]{3}$")]  # ISO 4217 code
 ScopePath = Annotated[str, Field(strict=True, pattern=_SCOPE_PATH)]
@@ -131,7 +132,7 @@ class Provider(_Strict):
 
     base_url: Annotated[str, Field(strict=True, min_length=1)] | None = None
     auth: AuthName = "api_key"
-    credential: SecretRef | None = None  # none for sigv4 (the standard AWS chain)
+    credential: CredentialRef | None = None  # none for sigv4 (the standard AWS chain)
     region: str | None = None
     api_version: str | None = None
 
@@ -141,7 +142,7 @@ class DeploymentSpec(_Strict):
     model: Annotated[str, Field(strict=True, min_length=1)] | None = None  # default: catalog model
     base_url: Annotated[str, Field(strict=True, min_length=1)] | None = None
     auth: AuthName | None = None
-    credential: SecretRef | None = None
+    credential: CredentialRef | None = None
     region: str | None = None
     api_version: str | None = None
 

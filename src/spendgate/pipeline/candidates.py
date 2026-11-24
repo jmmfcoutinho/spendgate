@@ -170,5 +170,5 @@ def retry_hint(err: UpstreamError, headers: Mapping[str, str], now: int) -> tupl
 def _deployment(d: ResolvedDeployment) -> Deployment:
     return Deployment(
         d.provider, d.base_url, d.model, AuthMode(d.auth), d.region, d.api_version,
-        d.credential.reveal() if d.credential is not None else "",
+        d.credential.reveal() if d.credential is not None else "", d.ambient,
     )  # fmt: skip

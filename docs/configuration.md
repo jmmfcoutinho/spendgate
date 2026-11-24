@@ -81,7 +81,7 @@ Used at `providers.<name>`.
 |---|---|---|---|
 | `base_url` | string (optional) | unset | Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start. For `openai` and `azure_openai` the upstream must honour `max_completion_tokens`: the proxy sends the held output ceiling in that field only, so an OpenAI-compatible server (vLLM, LiteLLM, ...) that ignores it does not enforce the ceiling (protocol.md 2.1). |
 | `auth` | `api_key` or `bearer_token` or `sigv4` | `"api_key"` | How the proxy authenticates to the provider. |
-| `credential` | secret reference (`env:NAME` or `file:/path`) (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. |
+| `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the service-account JSON, or `adc` for application default credentials (workload identity, the metadata server). |
 | `region` | string (optional) | unset | Provider region, where the adapter needs one (Bedrock, Azure). |
 | `api_version` | string (optional) | unset | Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the minimum version is not verified here, so prefer the v1 API. |
 
@@ -198,7 +198,7 @@ Used at `models.<name>.deployments[]`.
 | `model` | string (optional) | unset | The provider's own model or deployment name. Default: the model part of `catalog_id`. |
 | `base_url` | string (optional) | unset | Overrides `providers.<slug>.base_url` for this deployment. May be `env:NAME`. |
 | `auth` | `api_key` or `bearer_token` or `sigv4` (optional) | unset | Overrides `providers.<slug>.auth` for this deployment. |
-| `credential` | secret reference (`env:NAME` or `file:/path`) (optional) | unset | Overrides `providers.<slug>.credential` for this deployment. |
+| `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Overrides `providers.<slug>.credential` for this deployment. |
 | `region` | string (optional) | unset | Overrides `providers.<slug>.region` for this deployment. |
 | `api_version` | string (optional) | unset | Overrides `providers.<slug>.api_version` for this deployment. |
 

@@ -2,6 +2,7 @@
 
 The YAML never holds a secret, only a pointer to one. A value that does not look like a pointer is
 refused without echoing it, so pasting a real key into the file cannot leak it through an error.
+A provider credential may also be `adc`: no secret at all, the runtime's own cloud identity.
 """
 
 import re
@@ -12,6 +13,9 @@ from pathlib import Path
 REF_HELP = (
     "must be a secret reference: 'env:NAME' or 'file:/absolute/path' (never the secret itself)"
 )
+# Google application default credentials: the workload identity of the host, not a stored secret.
+ADC = "adc"
+CREDENTIAL_HELP = f"{REF_HELP}, or '{ADC}' for Google application default credentials"
 _ENV_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
@@ -41,6 +45,16 @@ def check_ref(value: object) -> str:
     if kind == "file" and rest.startswith("/") and len(rest) > 1:
         return value
     raise ValueError(REF_HELP)
+
+
+def check_credential_ref(value: object) -> str:
+    """A provider credential: a secret reference or `adc`. Raises WITHOUT the offending text."""
+    if value == ADC:
+        return ADC
+    try:
+        return check_ref(value)
+    except ValueError:
+        raise ValueError(CREDENTIAL_HELP) from None
 
 
 def resolve(ref: str, env: Mapping[str, str]) -> Secret:

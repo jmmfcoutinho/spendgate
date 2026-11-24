@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from spendgate.config import schema
-from spendgate.config.secrets import check_ref
+from spendgate.config.secrets import check_credential_ref, check_ref
 from spendgate.core.money import Money
 
 OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "configuration.md"
@@ -161,7 +161,9 @@ D: dict[str, str] = {
     "Provider.auth": "How the proxy authenticates to the provider.",
     "Provider.credential": (
         "Secret reference for the key or token. Not used with `sigv4`, which reads the standard "
-        "AWS credential chain."
+        "AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the "
+        "service-account JSON, or `adc` for application default credentials (workload "
+        "identity, the metadata server)."
     ),
     "Provider.region": "Provider region, where the adapter needs one (Bedrock, Azure).",
     "Provider.api_version": (
@@ -359,6 +361,22 @@ def render_type(field: FieldInfo, links: Callable[[str], str]) -> str:
     return _render(field.annotation, list(field.metadata), links)
 
 
+# AfterValidator function -> how a string it checks is described.
+_VALIDATED_STR: dict[object, str] = {
+    check_ref: "secret reference (`env:NAME` or `file:/path`)",
+    check_credential_ref: "secret reference (`env:NAME` or `file:/path`) or `adc`",
+    schema._decimal_text: "quoted decimal",
+}
+
+
+def _render_str(meta: list[Any]) -> str:
+    for m in meta:
+        if (text := _VALIDATED_STR.get(getattr(m, "func", None))) is not None:
+            return text
+    pattern, _ = _constraints(meta)
+    return pattern or "string"
+
+
 def _render(tp: Any, meta: list[Any], links: Callable[[str], str]) -> str:  # noqa: ANN401, PLR0911
     origin = get_origin(tp)
     if origin is Annotated:
@@ -387,12 +405,7 @@ def _render(tp: Any, meta: list[Any], links: Callable[[str], str]) -> str:  # no
     if tp is bool:
         return "boolean"
     if tp is str:
-        pattern, _ = _constraints(meta)
-        if any(getattr(m, "func", None) is check_ref for m in meta):
-            return "secret reference (`env:NAME` or `file:/path`)"
-        if any(getattr(m, "func", None) is schema._decimal_text for m in meta):
-            return "quoted decimal"
-        return pattern or "string"
+        return _render_str(meta)
     if tp is int:
         _, bound = _constraints(meta)
         return bound or "integer"

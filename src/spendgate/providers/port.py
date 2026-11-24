@@ -151,6 +151,7 @@ class Deployment:
     region: str | None = None
     api_version: str | None = None  # Azure OpenAI query version; None for the v1 path
     credential: str = field(default="", repr=False)  # secret or token; kept out of reprs and logs
+    ambient: bool = False  # no stored credential: the host's own cloud identity (Google ADC)
 
 
 @dataclass(frozen=True, slots=True)
