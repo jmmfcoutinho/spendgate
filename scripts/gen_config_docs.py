@@ -231,10 +231,12 @@ D: dict[str, str] = {
     "Routing.max_attempts": "Most deployments tried for one request.",
     "Routing.cooldown_seconds": (
         "How long a deployment is skipped after its circuit breaker opens, or after the "
-        "provider answers 429 for a quota or billing reason. A busy 429 cools it for its "
-        "`Retry-After` as given, or without one for a random 250 to 500 ms, and a call that "
-        "finds every deployment cooling waits up to 1 s for one to come back. A connect failure "
-        "alone does not cool a deployment. Must not exceed `max_cooldown_seconds`."
+        "provider answers 429 for a quota or billing reason or with an unreadable `Retry-After`. "
+        "A busy 429 cools it for its `Retry-After` as given (seconds or an HTTP-date), or "
+        "without one for a random 250 to 500 ms, doubled for each 429 in a row up to this value; "
+        "a call that finds every deployment cooling waits up to 1 s for one to come back. A "
+        "connect failure alone does not cool a deployment. Must not exceed "
+        "`max_cooldown_seconds`."
     ),
     "Routing.failure_threshold_pct": (
         "Failure percentage in the window that puts a deployment into cooldown."

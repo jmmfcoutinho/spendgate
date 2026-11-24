@@ -25,17 +25,30 @@ a third of all calls (712 of 2,098 in the report, 545 of 2,620 on a rerun) were 
   from a `random.Random` the router owns (tests inject a seeded one); the jitter keeps the
   deployments of one model from coming back at the same instant. `Retry-After: 0` gets the short
   draw, never zero.
+- The short draw escalates: each busy 429 that starts a new cooldown (the deployment had come back
+  and is throttled again) doubles it, up to `cooldown_seconds`, until a success resets it. A 429
+  that lands while the deployment is already cooling extends that cooldown without doubling.
+- `Retry-After` as an HTTP-date (RFC 9110) is read against the pipeline's injected clock: the
+  seconds until that date, rounded up, with the same caps; a date in the past counts as 0, so the
+  short draw. A hint header that is present but unreadable (garbage) may have asked for anything,
+  so it cools for the full `cooldown_seconds`.
 - A 429 that means quota or billing (`insufficient_quota` and the like) still cools for the full
   `cooldown_seconds`: it will not clear in a moment.
 - A cooldown that started from a closed breaker ends closed: the provider was busy, not broken, so
   no single probe is needed. A breaker that opened on failures still ends in half-open with one
-  probe, even when a 429 extended it.
+  probe, even when a 429 extended it, and a late result cannot close it without that probe.
+- A busy cooldown keeps the breaker's failure window (only a breaker trip clears it), so 429s
+  cannot keep a deployment that also answers 5xx below the failure threshold.
 - A result the tracker ignores (the deployment is cooling) no longer changes the deployment's
   cause, so a refusal while everything cools stays `upstream_throttled`.
-- When every untried candidate is cooling, the call waits for the soonest one to come back, at
-  most 1 s per call in total, and only while the wait ends before the request deadline
-  (`server.max_request_seconds`); then it tries it. A longer cooldown is refused at once, as
-  before. Quota faults and a half-open deployment whose probe is out are never waited for.
+- When every untried candidate is cooling, the call waits for the soonest one to come back, plus
+  a jitter of its own (0 to 250 ms from the router's RNG, clipped to the bound) so waiters do not
+  all wake and send together; at most 1 s per call in total, and only if a full 1 s is still left
+  before the request deadline (`server.max_request_seconds`) once the wait ends, so a call is
+  never sent with no time left. Then it tries it. A longer cooldown is refused at once, as
+  before. Only a deployment cooling on a busy 429 is waited for: never a quota fault, and never a
+  breaker opened on failures or a connect failure (waiting for it would hand the waiting call the
+  half-open probe, a new way to be charged a 5xx).
 - The wait sends nothing and happens inside the call's one hold: failover stays free (M-01,
   M-13), and no money rule changes.
 
@@ -46,7 +59,9 @@ a third of all calls (712 of 2,098 in the report, 545 of 2,620 on a rerun) were 
   `cooldown_seconds`. A call may take up to 1 s longer before it is served or refused.
 - In the load test's clean scenario (SQLite, 4 gateways, 8 x 50 callers) the `503
   upstream_unavailable` refusals went from 545 to 0 on the same seed.
-- A provider that throttles without `Retry-After` is retried sooner. The bound per call (one wait
-  of at most 1 s, then `routing.max_attempts`) and the jitter keep that from turning into a storm.
+- A provider that throttles without `Retry-After` is retried sooner at first. If it keeps
+  throttling, every return is met by a doubled cooldown (500 ms, 1 s, 2 s, ... up to
+  `cooldown_seconds`), and the callers waiting on it wake spread over up to 250 ms, so a busy
+  provider sees fewer retries over time rather than a burst every 250 to 500 ms.
 - No new config keys, error codes, endpoints or dependencies. The bounds are constants in
   `spendgate.core.health.HealthConfig` and `spendgate.pipeline.routing`.

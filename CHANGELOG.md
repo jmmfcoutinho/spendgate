@@ -108,11 +108,15 @@ All notable changes to this project are documented here. The format follows
   cooled its deployment for the full `routing.cooldown_seconds` and then let one probe through,
   so in the load test's clean scenario (3% injected 429s) a fifth to a third of all calls were
   refused with `503 upstream_unavailable`; now none are. A busy 429 cools for its `Retry-After` as given
-  (capped by `max_cooldown_seconds`) or, without one, for a random 250 to 500 ms, and the
-  deployment is open to every caller once that ends. A quota 429 still cools for
-  `cooldown_seconds`. A call that finds every deployment cooling waits up to 1 s, inside its
-  request deadline and its one hold, for the soonest to come back. A result that arrives while its
-  deployment cools no longer turns an `upstream_throttled` refusal into `upstream_unavailable`.
+  (capped by `max_cooldown_seconds`; an HTTP-date is now read too) or, without one, for a random
+  250 to 500 ms that doubles for each 429 in a row (up to `cooldown_seconds`) until a success,
+  and the deployment is open to every caller once that ends. A quota 429 or an unreadable
+  `Retry-After` cools for `cooldown_seconds`. A call that finds every deployment cooling on a
+  busy 429 waits up to 1 s (plus its own jitter, inside its one hold, and only with a full 1 s
+  left before its deadline) for the soonest to come back; a deployment whose breaker opened on
+  failures is never waited for. A busy cooldown keeps the breaker's failure window. A result
+  that arrives while its deployment cools no longer turns an `upstream_throttled` refusal into
+  `upstream_unavailable`, nor closes a failure-opened breaker without its probe.
   See [ADR-0021](docs/adr/0021-short-throttle-cooldown.md).
 
 ## [0.1.3] - 2026-11-24
