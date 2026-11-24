@@ -430,7 +430,7 @@ the other: if either ends on an unexpected exception it writes one `background_j
 at `ERROR` (`job`: `sweeper` or `alert_webhook`, `reason`: the exception class) and the other
 keeps running. Alert on it.
 
-The webhook is a notice, like the log line, never the record. A warning may be delivered more than
-once (a retry after the receiver processed a post but its answer was lost) or not at all: dedupe on
-`event_id`. A lost or dropped post changes nothing in the ledger; `spendgate status` and the admin API still show the
-threshold and the block.
+The webhook is a notice, like the log line, never the record. A warning may be delivered more
+than once (a retry after the receiver processed a post but its answer was lost) or not at all:
+dedupe on `event_id`. A lost or dropped post changes nothing in the ledger; `spendgate status`
+and the admin API still show the threshold and the block.

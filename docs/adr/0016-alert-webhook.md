@@ -26,8 +26,9 @@ the receiver is slow or down.
 - The handler only queues, in a bounded in-memory `asyncio.Queue`. A full queue drops the new
   warning; drops, failures and deliveries are counted in
   `spendgate_alert_webhooks_total{result}`. One background task, run beside the sweeper, posts in
-  order; a failure in either never stops the other. A network error, a timeout (bounding the whole attempt), a 429 or a 5xx is retried with
-  backoff 1, 2, 4, ... s capped at 30 s, through an injected sleeper; any other status is final.
+  order; a failure in either never stops the other and is logged as `background_job_failed`. A
+  network error, a timeout (bounding the whole attempt), a 429 or a 5xx is retried with backoff
+  1, 2, 4, ... s capped at 30 s, through an injected sleeper; any other status is final.
   A give-up writes one `alert_webhook_failed` line with the error class or status, never the URL.
 - `X-Spendgate-Signature: sha256=<hex>` is HMAC-SHA256 of the exact body bytes with
   `signing_secret`. The id and time are inside the signed body, so a receiver can drop replays.
