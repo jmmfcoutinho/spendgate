@@ -116,10 +116,7 @@ async def _applied(conn: Conn) -> dict[int, migrations.Applied]:
     if row is None or not row["found"]:
         return {}
     cursor = await conn.execute("SELECT * FROM schema_migrations")
-    return {
-        int(r["version"]): migrations.Applied(str(r["checksum"]), bool(r.get("compatible")))
-        for r in await cursor.fetchall()
-    }
+    return migrations.recorded(await cursor.fetchall())
 
 
 async def _migrate(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
@@ -149,7 +146,7 @@ async def _steps(conn: Conn, clock: Callable[[], int], *, apply: bool) -> None:
         async with conn.transaction():
             await conn.execute(_MIGRATE_LOCK)  # also waits out a migrator that is running now
             applied = await _applied(conn)
-            todo = migrations.pending(packaged, applied)
+            todo = migrations.pending_migrations(applied, packaged)
             if not apply:
                 migrations.require_current(todo, applied)
                 return
