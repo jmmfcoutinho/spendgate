@@ -255,6 +255,12 @@ def test_plain_http_only_for_loopback(tmp_path: Path) -> None:
     assert load(ok, env=ENV).routes["m"].deployments[0].base_url == "http://127.0.0.1:9000/v1"
 
 
+@pytest.mark.parametrize("url", ["http://x.test?x=@127.0.0.1/v1", "http://x.test#@localhost/v1"])
+def test_plain_http_is_judged_by_the_host_the_client_parses(tmp_path: Path, url: str) -> None:
+    bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", url))
+    assert "models.m.deployments.0.base_url: must be an https:// URL" in failure(bad)
+
+
 def test_missing_credential_for_api_key_auth(tmp_path: Path) -> None:
     text = BASE.replace(', credential: "env:OPENAI_API_KEY"', "")
     assert "models.m.deployments.0" in failure(write(tmp_path, text))
@@ -337,7 +343,15 @@ def test_the_alert_webhook_resolves_its_url_and_secret_as_secrets(tmp_path: Path
 
 
 @pytest.mark.parametrize(
-    "url", ["http://hooks.example.test/budget?token=fake-hook-token", "ftp://x.test/a", "https://"]
+    "url",
+    [
+        "http://hooks.example.test/budget?token=fake-hook-token",
+        "ftp://x.test/a",
+        "https://",
+        # An `@` after `?` or `#` is not userinfo: the host is x.test, not the loopback name.
+        "http://x.test?x=@127.0.0.1/hook",
+        "http://x.test#@localhost/",
+    ],
 )
 def test_the_alert_webhook_url_must_be_https_and_is_never_echoed(tmp_path: Path, url: str) -> None:
     message = failure(write(tmp_path, BASE + HOOK), HOOK_ENV | {"HOOK_URL": url})

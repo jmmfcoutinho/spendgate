@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from importlib import resources
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import ValidationError
@@ -25,7 +26,7 @@ from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
 from spendgate.core.policy import model_filter_matches
 
 _MS = 1000
-_LOOPBACK = ("localhost", "127.0.0.1", "[::1]")
+_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
 
 class ConfigError(Exception):
@@ -291,11 +292,16 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
 
 
 def _base_url_issue(url: str) -> str | None:
-    scheme, _, rest = url.partition("://")
-    host = rest.split("/", 1)[0].rsplit("@", 1)[-1].rsplit(":", 1)[0] if rest else ""
+    scheme = url.partition("://")[0]
+    # The host as the HTTP client parses it: a `?` or `#` ends the authority, so an `@` after
+    # one belongs to the query or fragment, not to a userinfo part.
+    try:
+        host = urlsplit(url).hostname or ""
+    except ValueError:  # e.g. an unclosed `[` in an IPv6 literal
+        host = ""
     if scheme == "https" and host:
         return None
-    if scheme == "http" and host in {h.rsplit(":", 1)[0] for h in _LOOPBACK} | set(_LOOPBACK):
+    if scheme == "http" and host in _LOOPBACK:
         return None  # plain HTTP only to this machine (tests, sidecars)
     return "must be an https:// URL (http:// only for localhost)"
 
