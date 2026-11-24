@@ -126,11 +126,12 @@ def bind_catalog_metrics(metrics: Metrics, settings: Settings, now: Clock) -> No
 
 
 def default_readiness(ledger: AdminLedger, settings: Settings, now: Clock) -> ReadinessChecks:
-    """Probes over the ledger: reachable, no global kill switch, database clock for skew.
+    """Probes over the ledger: reachable, database clock for skew, a global kill switch.
 
-    `ReadinessChecks.kill_switch_engaged` is synchronous but the ledger read is not, so the
-    reachability probe (which `/readyz` always awaits first) also refreshes the flag the sync
-    probe reports. A probe that fails leaves the flag as it was; `/readyz` is already 503 then.
+    The kill switch is only a warning on the admin detail (ADR-0015). `kill_switch_engaged` is
+    synchronous but the ledger read is not, so the reachability probe (which `/readyz` always
+    awaits first) also refreshes the flag the sync probe reports. A probe that fails leaves the
+    flag as it was; the warning is then not reported, and `/readyz` is 503 for the ledger.
     """
     engaged = False
 

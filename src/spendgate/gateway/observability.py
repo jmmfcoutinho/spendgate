@@ -1,9 +1,14 @@
 """Health endpoints and the /metrics endpoint factory (Starlette lives here, not in the pipeline).
 
 `/livez` says the process runs. `/readyz` says it can serve safely: ledger answers, catalog
-loaded, no global kill switch. Clock skew against the database clock and a stale catalog are
-warnings, not failures (T-CLK-03, T-CAT-03): the ledger uses its own clock, so skew degrades only
-local timing, and an old price list still prices every call.
+loaded. Clock skew against the database clock and a stale catalog are warnings, not failures
+(T-CLK-03, T-CAT-03): the ledger uses its own clock, so skew degrades only local timing, and an
+old price list still prices every call.
+
+A global kill switch is a warning too, never a failure (ADR-0015): it is engaged in the shared
+ledger, so it would turn every replica unready at once and the load balancer would drop them all.
+The pipeline already refuses each call with `kill_switch` (503) and a JSON body clients can read;
+an empty target pool would answer with the load balancer's own error instead.
 
 On the data port `/readyz` answers with the status alone (SR-06): every application can reach it,
 so it must not name the operator's state. Reasons and warnings are served to an admin key with
@@ -81,8 +86,6 @@ async def compute_readiness(checks: ReadinessChecks) -> ReadyStatus:
         reasons.append("ledger_unreachable")
     if not checks.catalog_loaded():
         reasons.append("catalog_not_loaded")
-    if checks.kill_switch_engaged():
-        reasons.append("kill_switch_engaged")
     if ledger_up:
         try:
             warning = clock_skew_warning(
@@ -92,6 +95,8 @@ async def compute_readiness(checks: ReadinessChecks) -> ReadyStatus:
             warning = "clock_probe_failed"
         if warning:
             warnings.append(warning)
+        if checks.kill_switch_engaged():
+            warnings.append("kill_switch_engaged: a global kill switch refuses every call")
     age = checks.catalog_age_days() if checks.catalog_age_days is not None else None
     if age is not None and age > checks.stale_after_days:
         warnings.append(f"catalog_stale: the price catalog is {int(age)} days old")

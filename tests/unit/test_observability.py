@@ -161,8 +161,16 @@ def test_readiness_ok_and_failures() -> None:
     assert ok.ready and not ok.warnings
     bad = asyncio.run(compute_readiness(_checks(ledger=False, catalog=False, kill=True)))
     assert not bad.ready
-    assert bad.reasons == ("ledger_unreachable", "catalog_not_loaded", "kill_switch_engaged")
+    assert bad.reasons == ("ledger_unreachable", "catalog_not_loaded")
     assert "postgres" not in str(bad.body())
+
+
+def test_readiness_with_a_global_kill_switch_engaged_is_ready_with_a_warning() -> None:
+    """ADR-0015: a kill switch never turns a replica unready; the admin detail names it."""
+    killed = asyncio.run(compute_readiness(_checks(kill=True)))
+    assert killed.ready and killed.reasons == ()
+    assert killed.warnings == ("kill_switch_engaged: a global kill switch refuses every call",)
+    assert killed.body() == {"status": "ready"}
 
 
 # T-CLK-03
