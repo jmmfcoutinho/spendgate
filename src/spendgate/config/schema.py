@@ -63,6 +63,11 @@ class Server(_Strict):
     body_read_timeout_seconds: PosInt = 30  # whole-body deadline: a stalled upload frees its slot
     max_request_seconds: PosInt = 900  # one call or stream, end to end (SR-13)
     max_concurrent_requests: PosInt = 128  # not in the docs; the pipeline needs a bound (5.1)
+    # Above common load balancer idle timeouts (60 s), so the balancer closes an idle connection
+    # first and never reuses one this side already dropped (ADR-0015).
+    keep_alive_seconds: PosInt = 75
+    # Drain deadline on SIGTERM; must end before the orchestrator's kill (ADR-0015).
+    graceful_shutdown_seconds: PosInt = 30
     key_pepper: SecretRef  # HMAC key for stored key secrets (threat model C-01)
 
 
