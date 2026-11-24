@@ -46,12 +46,14 @@ migration only added a nullable column.
   column or one with a default, a table without foreign keys, or a non-unique index.
 - A lint test (`tests/unit/test_migration_lint.py`) checks every migration after 0004: a Postgres
   `CHECK` added to an existing table (named or not, also inside `ADD COLUMN`) needs a name,
-  `NOT VALID` and its `VALIDATE` in a later file; a migration marked compatible may not drop a
-  table, view or column, rename, change a column type, set `NOT NULL`, drop a default, delete or
-  truncate rows, add a `NOT NULL` column without a default, add a constraint or foreign key, or
-  create a unique index. The patterns err towards a finding (a false alarm costs a reworded
-  migration). Both dialects must have the same versions, names and markers. Migrations 0001 to 0004
-  are never edited (their checksums are recorded in every ledger) and predate the rules.
+  `NOT VALID` and its `VALIDATE` in a later file; a migration marked compatible may not drop anything
+  but a constraint, an index or `NOT NULL` (a table, view, column, default, type, function,
+  trigger...), rename, change a column type, set `NOT NULL`, delete or truncate rows, add a
+  `NOT NULL` column without a default, add a constraint or foreign key, or create a unique index.
+  Comments, string literals and quoted names are read as such, and dollar-quoted bodies are linted
+  as code. The patterns err towards a finding (a false alarm costs a reworded migration). Both
+  dialects must have the same versions, names and markers. Migrations 0001 to 0004 are never edited
+  (their checksums are recorded in every ledger) and predate the rules.
 
 ## Consequences
 

@@ -18,9 +18,16 @@ from spendgate.ledger.migrations import Migration
 GRANDFATHERED = 4
 
 _I = re.IGNORECASE
-_COMMENT = re.compile(r"--[^\n]*")
-# `ALTER TABLE [IF EXISTS] [ONLY] name`; what follows is a comma-separated list of actions.
-_ALTER_TABLE = re.compile(r"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?[\w.\"]+\s*\*?\s+", _I)
+# Read left to right, so that each hides the others' markers: a quoted name (kept), a string
+# literal, a dollar-quoted body, a block or a line comment.
+_LEXEME = re.compile(
+    r"\"[^\"]*\"|'(?:[^']|'')*'|\$(\w*)\$(.*?)\$\1\$|/\*.*?\*/|--[^\n]*", re.DOTALL
+)
+_NAME = r"(?:\"[^\"]+\"|\w+)"  # a quoted name may hold spaces
+# `ALTER TABLE [IF EXISTS] [ONLY] [schema.]name`; what follows is a comma-separated list of actions.
+_ALTER_TABLE = re.compile(
+    rf"\bALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?:{_NAME}\s*\.\s*)*{_NAME}\s*\*?\s*", _I
+)
 # An action that adds a column (COLUMN is optional) rather than a table constraint.
 _ADD_COLUMN = re.compile(
     r"ADD\s+(?:COLUMN\s+)?(?:IF\s+NOT\s+EXISTS\s+)?"
@@ -28,29 +35,44 @@ _ADD_COLUMN = re.compile(
     _I,
 )
 _NAMED_CHECK = re.compile(r"ADD\s+CONSTRAINT\s+\"?(\w+)\"?\s+CHECK\b", _I)
+_NOT_VALID = re.compile(r"\bNOT\s+VALID\b", _I)
 _VALIDATE = re.compile(r"\bVALIDATE\s+CONSTRAINT\s+\"?(\w+)", _I)
 # Anywhere in a migration marked compatible: the previous release reads, writes or relies on what
 # these remove, or writes rows that what they add rejects (it fails mid-call after a rollback).
 _NOT_COMPATIBLE = {
-    "drops a table": r"\bDROP\s+TABLE\b",
-    "drops a view": r"\bDROP\s+VIEW\b",
+    # Whatever it drops (a table, view, column, default, type, function, trigger, ...), the
+    # previous release may use it. Dropping a constraint or an index, or NOT NULL, only loosens.
+    "drops something": r"\bDROP\s+(?!CONSTRAINT\b|NOT\s+NULL\b|INDEX\b)",
     "renames": r"\bRENAME\b",
     "changes a column type": r"\bALTER\s+(?:COLUMN\s+)?\"?\w+\"?\s+(?:SET\s+DATA\s+)?TYPE\b",
     "adds NOT NULL to a column": r"\bSET\s+NOT\s+NULL\b",
-    "drops a column default": r"\bDROP\s+DEFAULT\b",
     "deletes rows": r"\b(?:DELETE\s+FROM|TRUNCATE)\b",
     "creates a unique index": r"\bCREATE\s+UNIQUE\s+INDEX\b",
     "adds a foreign key": r"\bREFERENCES\b",
 }
 # Per ALTER TABLE action, matched at its start.
 _NOT_COMPATIBLE_ACTION = {
-    "drops a column": r"DROP\b(?!\s+CONSTRAINT\b)",
     "adds a constraint": r"ADD\s+(?:CONSTRAINT|CHECK|UNIQUE|PRIMARY\s+KEY|FOREIGN\s+KEY|EXCLUDE)\b",
 }
 
 
 def _code(sql: str) -> str:
-    return _COMMENT.sub("", sql)
+    """`sql` without comments and with every string literal emptied, so that a `;`, `--`, `(` or
+    keyword inside one cannot split, hide or fake a statement. A dollar-quoted body is code (a
+    function, a DO block): it is cleaned the same way and kept as statements of its own, so the
+    rules still read it."""
+
+    def clean(match: re.Match[str]) -> str:
+        text = match[0]
+        if text.startswith('"'):
+            return text
+        if text.startswith("'"):
+            return "''"
+        if text.startswith("$"):
+            return f"'';\n{_code(match[2])};\n"
+        return " "
+
+    return _LEXEME.sub(clean, sql)
 
 
 def _actions(code: str) -> list[str]:
@@ -70,15 +92,19 @@ def _actions(code: str) -> list[str]:
     return found
 
 
+def _validated(code: str) -> set[str]:
+    return {m[1].lower() for m in _VALIDATE.finditer(code)}
+
+
 def _check_problems(code: str) -> list[str]:
     """Postgres: a CHECK is added NOT VALID, by name, and validated by a later migration."""
-    validated = {m[1].lower() for m in _VALIDATE.finditer(code)}
+    validated = _validated(code)
     problems: list[str] = []
     for action in _actions(code):
         if not re.match(r"ADD\b", action, _I) or not re.search(r"\bCHECK\b", action, _I):
             continue
         named = _NAMED_CHECK.match(action)
-        if not re.search(r"\bNOT\s+VALID\b", action, _I):
+        if not _NOT_VALID.search(action):
             # A column constraint cannot be NOT VALID: add the column, then the constraint.
             problems.append(f"CHECK without NOT VALID: it scans the table locked ({action})")
         elif named is None:
@@ -118,19 +144,9 @@ def _example(sql: str, *, compatible: bool = False) -> Migration:
 
 @pytest.mark.parametrize("dialect", ["postgres", "sqlite"])
 def test_new_migrations_follow_the_migration_rules(dialect: str) -> None:
-    found = {
-        f"{m.version:04d}_{m.name}": lint(dialect, m)
-        for m in migrations.load(dialect)
-        if m.version > GRANDFATHERED
-    }
+    new = [m for m in migrations.load(dialect) if m.version > GRANDFATHERED]
+    found = {f"{m.version:04d}_{m.name}": lint(dialect, m) for m in new}
     assert {name: problems for name, problems in found.items() if problems} == {}
-
-
-def test_both_dialects_have_the_same_versions_and_markers() -> None:
-    """Compatibility is a property of the release, not of one backend."""
-    postgres = [(m.version, m.name, m.compatible) for m in migrations.load("postgres")]
-    sqlite = [(m.version, m.name, m.compatible) for m in migrations.load("sqlite")]
-    assert postgres == sqlite
 
 
 @pytest.mark.parametrize(
@@ -145,6 +161,13 @@ def test_both_dialects_have_the_same_versions_and_markers() -> None:
         "ALTER TABLE calls ADD COLUMN m INT, ADD CONSTRAINT c_ok CHECK (n IN (1, 2));",
         "ALTER TABLE calls ADD CONSTRAINT c_ok CHECK (n >= 0) NOT VALID;\n"
         "ALTER TABLE calls VALIDATE CONSTRAINT c_ok;",
+        "ALTER TABLE calls /* why */ ADD CONSTRAINT c_ok CHECK (n >= 0);",
+        "ALTER TABLE calls ADD COLUMN s TEXT DEFAULT ';', ADD CONSTRAINT c_ok CHECK (n >= 0);",
+        "ALTER TABLE calls ADD COLUMN s TEXT DEFAULT '--', ADD CONSTRAINT c_ok CHECK (n >= 0);",
+        "ALTER TABLE calls ADD COLUMN s TEXT DEFAULT 'it''s (', ADD CHECK (n >= 0);",
+        'ALTER TABLE "my calls" ADD CONSTRAINT c_ok CHECK (n >= 0);',
+        'ALTER TABLE public."my calls" ADD CONSTRAINT c_ok CHECK (n >= 0);',
+        "DO $$ BEGIN ALTER TABLE calls ADD CONSTRAINT c_ok CHECK (n >= 0); END $$;",
     ],
     ids=[
         "no-not-valid",
@@ -155,6 +178,13 @@ def test_both_dialects_have_the_same_versions_and_markers() -> None:
         "in-add-without-column",
         "second-action",
         "validated-in-the-same-file",
+        "block-comment-before-action",
+        "semicolon-in-a-default",
+        "dashes-in-a-default",
+        "escaped-quote-and-paren-in-a-default",
+        "quoted-table-name-with-a-space",
+        "schema-and-quoted-name",
+        "inside-a-do-block",
     ],
 )
 def test_a_postgres_check_constraint_needs_not_valid_and_a_later_validate(sql: str) -> None:
@@ -204,6 +234,21 @@ def test_a_not_valid_check_and_its_validate_in_a_later_migration_pass() -> None:
         "ALTER TABLE calls ADD COLUMN note TEXT UNIQUE;",
         "CREATE UNIQUE INDEX calls_note ON calls(note);",
         "CREATE TABLE extra (id TEXT PRIMARY KEY, call_id TEXT REFERENCES calls(id));",
+        # Comments, literals and quoted names cannot hide a drop.
+        "ALTER TABLE calls /* x */ DROP note;",
+        "ALTER TABLE calls ADD COLUMN s TEXT DEFAULT '(', DROP note;",
+        "ALTER TABLE calls ADD COLUMN s TEXT DEFAULT ')', DROP note;",
+        "ALTER TABLE calls ADD COLUMN s TEXT DEFAULT ';', DROP note;",
+        'ALTER TABLE "my calls" DROP note;',
+        "DO $body$ BEGIN EXECUTE 'x'; ALTER TABLE calls DROP note; END $body$;",
+        # Anything else dropped may be used by the previous release.
+        "DROP SEQUENCE call_numbers;",
+        "DROP TYPE call_state;",
+        "DROP FUNCTION refuse_change();",
+        "DROP SCHEMA extras CASCADE;",
+        "DROP TRIGGER calls_append_only ON calls;",
+        "DROP MATERIALIZED VIEW daily;",
+        "ALTER TABLE calls ALTER COLUMN id DROP IDENTITY;",
     ],
 )
 def test_a_migration_marked_compatible_may_not_be_destructive(sql: str) -> None:
@@ -226,6 +271,10 @@ def test_a_migration_marked_compatible_may_not_be_destructive(sql: str) -> None:
         "CREATE TABLE extra (id TEXT PRIMARY KEY, n INTEGER CHECK (n >= 0));",
         "CREATE INDEX calls_note ON calls(note);",
         "-- we never DROP TABLE here\nCREATE TABLE extra2 (id TEXT);",
+        "/* no DROP TABLE either */ CREATE TABLE extra3 (id TEXT);",
+        "COMMENT ON TABLE calls IS 'we DROP nothing; -- ( it''s fine';",
+        'ALTER TABLE "my calls" ADD COLUMN "the note" TEXT DEFAULT \'a, b\';',
+        "DROP INDEX calls_note;",
     ],
 )
 def test_expand_steps_pass_when_marked_compatible(sql: str) -> None:

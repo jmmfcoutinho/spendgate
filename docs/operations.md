@@ -96,8 +96,9 @@ are compatible.
 
 **Writing a migration** (contributors): add `NNNN_name.sql` for both dialects with the same number
 and name. Mark an expand step with the line `-- compatible_with_previous: true` in both files; a
-marked migration must not drop, rename, retype, drop a default, delete rows, add a `NOT NULL`
-column without a default, or tighten (add a constraint, a unique index or a foreign key). On
+marked migration must not drop anything but a constraint, an index or `NOT NULL`, rename, retype,
+delete rows, add a `NOT NULL` column without a default, or tighten (add a constraint, a unique index
+or a foreign key). On
 Postgres a `CHECK` is added by name and `NOT VALID`, then validated with `VALIDATE CONSTRAINT` in a
 later migration, so the table is not scanned under the lock that adding the constraint takes; a
 `CHECK` on a new column goes in its own `ADD CONSTRAINT`, since a column constraint cannot be
