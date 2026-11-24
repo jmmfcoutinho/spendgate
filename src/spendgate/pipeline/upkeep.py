@@ -28,8 +28,22 @@ async def heartbeat(
         for name, step in steps:
             try:
                 await step()
-            except Exception as exc:  # the next beat retries; only the type: messages may hold URLs
-                _log.error("heartbeat step failed step=%s reason=%s", name, type(exc).__name__)
+            except asyncio.CancelledError:
+                if _stopping():
+                    raise  # the loop itself was cancelled: stop
+                _failed(name, "CancelledError")  # a step's own inner await was cancelled
+            except Exception as exc:
+                _failed(name, type(exc).__name__)
+
+
+def _stopping() -> bool:
+    task = asyncio.current_task()
+    return task is None or task.cancelling() > 0
+
+
+def _failed(step: str, reason: str) -> None:
+    """The next beat retries. Only the type is logged: messages may hold URLs or ids."""
+    _log.error("heartbeat step failed step=%s reason=%s", step, reason)
 
 
 class Upkeep:
