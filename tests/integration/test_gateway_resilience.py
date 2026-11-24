@@ -4,6 +4,7 @@ turns pipeline facts into metrics and one log line per call."""
 
 import io
 import logging
+from collections.abc import Collection
 from pathlib import Path
 
 import pytest
@@ -12,28 +13,25 @@ from spendgate.core.outcomes import ReservationState
 from spendgate.gateway.logs import configure_json_logging
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.wiring import GatewayObserver, build_pipeline
-from spendgate.ledger.port import LedgerPort, LedgerUnavailable
+from spendgate.ledger.port import AttemptRecord, LedgerUnavailable, Settlement
 from spendgate.pipeline.pipeline import Pipeline
 from tests.fakes import Script
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import async_test, open_stack
 
 
-class SettleDown:
+class SettleDown(MoneyLedgerProxy):
     """A ledger whose `settle` always fails (the database died after the provider answered)."""
 
-    def __init__(self, inner: LedgerPort) -> None:
-        self._inner = inner
-
-    async def settle(self, *args: object) -> object:
+    async def settle(
+        self, request_id: str, charge_nano: int, attempts: tuple[AttemptRecord, ...], now: int
+    ) -> Settlement:
         raise LedgerUnavailable("gone")
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
 
 
 @async_test
 async def test_failed_settle_leaves_the_hold_for_the_sweeper_to_charge(tmp_path: Path) -> None:
-    async with open_stack(tmp_path, wrap_ledger=SettleDown) as s:  # type: ignore[arg-type]
+    async with open_stack(tmp_path, wrap_ledger=SettleDown) as s:
         r = await s.chat()
         assert r.status_code == 200  # the caller still gets the answer the provider billed for
         rid = r.headers["x-spendgate-request-id"]
@@ -66,25 +64,19 @@ async def test_heartbeat_renews_leases_each_interval(tmp_path: Path) -> None:
     beats: list[float] = []
     renewed: list[tuple[str, int]] = []
 
-    class Spy:
-        def __init__(self, inner: LedgerPort) -> None:
-            self._inner = inner
-
+    class Spy(MoneyLedgerProxy):
         async def renew_all(
-            self, instance: str, ids: object, now: int, lease_ms: int
+            self, instance: str, ids: Collection[str], now: int, lease_ms: int
         ) -> tuple[str, ...]:
             renewed.append((instance, lease_ms))
             return ()
-
-        def __getattr__(self, name: str) -> object:
-            return getattr(self._inner, name)
 
     async def sleep(seconds: float) -> None:
         beats.append(seconds)
         if len(beats) == 3:
             raise StopAsyncIteration  # ends the loop; the real sleep would simply be cancelled
 
-    async with open_stack(tmp_path, wrap_ledger=Spy) as s:  # type: ignore[arg-type]
+    async with open_stack(tmp_path, wrap_ledger=Spy) as s:
         with pytest.raises(StopAsyncIteration):
             await s.pipeline.heartbeat(sleep)
         assert beats == [20.0, 20.0, 20.0]  # lease 60 s / 3

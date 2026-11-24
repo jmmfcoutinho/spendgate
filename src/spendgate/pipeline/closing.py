@@ -18,7 +18,7 @@ from spendgate.core.limits import Admit, LimitStore
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.key_types import Principal
-from spendgate.ledger.port import BudgetRoom, LedgerPort, Settlement
+from spendgate.ledger.port import BudgetRoom, MoneyLedger, Settlement
 from spendgate.pipeline import steps, tracing
 from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.model import Clock, Inbound, Observer, SettledEvent, report_ledger
@@ -54,7 +54,7 @@ class Call:
 
 class Closer:
     def __init__(  # noqa: PLR0913, PLR0917 - the closer's collaborators
-        self, settings: Settings, ledger: LedgerPort, limits: LimitStore, observer: Observer,
+        self, settings: Settings, ledger: MoneyLedger, limits: LimitStore, observer: Observer,
         now: Clock, sleep: Sleeper = asyncio.sleep, tracer: tracing.Tracer | None = None,
     ) -> None:  # fmt: skip
         self._settings, self._ledger, self._limits = settings, ledger, limits

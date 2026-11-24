@@ -10,8 +10,8 @@ import pytest
 from spendgate.core.outcomes import ReservationState
 from spendgate.gateway.app import create_app
 from spendgate.gateway.logs import JsonFormatter
-from spendgate.gateway.maintenance import Maintenance
-from spendgate.ledger.port import LedgerPort, SweepResult
+from spendgate.gateway.maintenance import MaintainedLedger, Maintenance
+from spendgate.ledger.port import SweepResult
 from spendgate.ledger.usage import RetentionResult
 from tests.integration.harness import async_test, open_stack
 from tests.integration.stream_rig import chat_chunk
@@ -24,7 +24,7 @@ DAY_S = 86_400
 class Spy:
     """The real ledger with counted calls and optional failures."""
 
-    def __init__(self, inner: LedgerPort) -> None:
+    def __init__(self, inner: MaintainedLedger) -> None:
         self._inner = inner
         self.sweeps = 0
         self.retentions: list[int] = []
@@ -109,7 +109,7 @@ async def test_a_hold_that_is_still_leased_is_left_alone(tmp_path: Path) -> None
 async def test_retention_runs_on_the_first_pass_then_once_a_day(tmp_path: Path) -> None:
     async with open_stack(tmp_path) as s:
         spy = Spy(s.ledger)
-        upkeep = Maintenance(spy, s.settings, s.clock.now, logger_with(Lines()))  # type: ignore[arg-type]
+        upkeep = Maintenance(spy, s.settings, s.clock.now, logger_with(Lines()))
         await upkeep.tick()
         s.clock.advance(seconds=3_600)
         await upkeep.tick()
@@ -125,7 +125,7 @@ async def test_ledger_errors_are_logged_never_raised_and_retried(tmp_path: Path)
     async with open_stack(tmp_path) as s:
         spy, lines = Spy(s.ledger), Lines()
         spy.fail_sweep = spy.fail_retention = True
-        upkeep = Maintenance(spy, s.settings, s.clock.now, logger_with(lines))  # type: ignore[arg-type]
+        upkeep = Maintenance(spy, s.settings, s.clock.now, logger_with(lines))
         await upkeep.tick()  # must not raise
         events = [line for line in lines.lines]
         assert any('"sweep_failed"' in e for e in events)

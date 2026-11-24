@@ -10,9 +10,10 @@ from pathlib import Path
 from spendgate.core.budgets import Period
 from spendgate.core.outcomes import ReservationState
 from spendgate.core.sessions import SessionDefaults
-from spendgate.ledger.port import BudgetRoom, BudgetTotals, LedgerPort, Settlement
+from spendgate.ledger.port import BudgetRoom, BudgetTotals, MoneyLedger, Settlement
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.pipeline.closing import Closer
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import NOW_MS, Stack, async_test, open_stack, usd
 
 USER = [{"role": "user", "content": "hi"}]
@@ -57,25 +58,22 @@ async def test_a_stream_reports_only_applicable_budgets(tmp_path: Path) -> None:
         assert remaining.startswith("9.") and remaining.endswith(" USD")
 
 
-class CountTotals:
+class CountTotals(MoneyLedgerProxy):
     """The real ledger, counting `totals` reads (what the headers used to read, under lock)."""
 
     reads: list[str]
 
     def __init__(self, inner: SqliteLedger) -> None:
-        self._inner = inner
+        super().__init__(inner)
         CountTotals.reads = []
 
     async def totals(self, scope_id: str, now: int) -> tuple[BudgetTotals, ...]:
         CountTotals.reads.append(scope_id)
-        return await self._inner.totals(scope_id, now)
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return await self.inner.totals(scope_id, now)
 
 
-def counting(inner: SqliteLedger) -> LedgerPort:
-    return CountTotals(inner)  # type: ignore[return-value]
+def counting(inner: SqliteLedger) -> MoneyLedger:
+    return CountTotals(inner)
 
 
 @async_test

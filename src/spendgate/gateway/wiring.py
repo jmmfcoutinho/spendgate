@@ -16,7 +16,7 @@ from spendgate.gateway.logs import log_call, log_event, log_internal
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.observability import ReadinessChecks
 from spendgate.ledger.admin_port import AdminLedger
-from spendgate.ledger.port import LedgerPort, PoolStats
+from spendgate.ledger.port import MoneyLedger, PoolStats
 from spendgate.pipeline.adapters import build_providers
 from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import (
@@ -208,7 +208,7 @@ def default_readiness(ledger: AdminLedger, settings: Settings, now: Clock) -> Re
 
 
 def build_pipeline(  # noqa: PLR0913 - the gateway's composition root
-    settings: Settings, ledger: LedgerPort, keys: KeyVerifier, sender: Sender, *,
+    settings: Settings, ledger: MoneyLedger, keys: KeyVerifier, sender: Sender, *,
     metrics: Metrics | None = None, logger: logging.Logger | None = None,
     providers: Mapping[str, Provider] | None = None, now_ms: Clock = system_ms,
     tracer: Tracer | None = None,

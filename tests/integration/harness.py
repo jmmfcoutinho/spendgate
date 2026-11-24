@@ -26,7 +26,7 @@ from spendgate.gateway.app import create_app
 from spendgate.gateway.wiring import default_readiness
 from spendgate.ledger.key_types import KeySpec
 from spendgate.ledger.keys import KeyService
-from spendgate.ledger.port import LedgerPort, ScopeRow
+from spendgate.ledger.port import MoneyLedger, ScopeRow
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.pipeline.adapters import build_providers
 from spendgate.pipeline.faults import InternalEvent
@@ -250,7 +250,7 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
     tpm: int | None = None, max_concurrent: int | None = None,
     allowed_models: tuple[str, ...] | None = None, per_call: int | None = None,
     pipeline_kwargs: dict[str, object] | None = None,
-    wrap_ledger: Callable[[SqliteLedger], LedgerPort] | None = None,
+    wrap_ledger: Callable[[SqliteLedger], MoneyLedger] | None = None,
     providers: Mapping[str, Provider] | None = None,
 ) -> AsyncIterator[Stack]:  # fmt: skip
     fake = fake or FakeUpstream()

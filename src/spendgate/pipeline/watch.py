@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from spendgate.core.failures import StopReason
 from spendgate.core.policy import KeyPolicy, KillSwitch, matching_kill_switch
-from spendgate.ledger.port import Held, LedgerPort
+from spendgate.ledger.port import Held, MoneyLedger
 
 _MS_PER_S = 1000
 
@@ -39,7 +39,7 @@ def stop_reason(
     return None
 
 
-async def session_ends_at(ledger: LedgerPort, held: Held) -> int | None:
+async def session_ends_at(ledger: MoneyLedger, held: Held) -> int | None:
     """When the held call's session runs out of wall-clock time, if it has such a limit."""
     if held.session_scope_id is None:
         return None

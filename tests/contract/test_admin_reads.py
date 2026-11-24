@@ -1,7 +1,6 @@
 """The ledger reads and changes added for the admin API, on every adapter."""
 
 import time
-from typing import cast
 
 import pytest
 
@@ -15,8 +14,8 @@ from tests.contract.rig import T0, E, Rig, attempt
 
 
 def led(rig: Rig) -> AdminLedger:
-    """The rig types its ledger as the money port; every adapter also implements the admin one."""
-    return cast(AdminLedger, rig.ledger)
+    """The rig's ledger: every adapter implements the admin port."""
+    return rig.ledger
 
 
 PEPPER = b"test-pepper-0123456789abcdef"

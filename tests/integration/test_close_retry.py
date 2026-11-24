@@ -10,8 +10,17 @@ import asyncio
 from pathlib import Path
 
 from spendgate.core.outcomes import ReservationState
-from spendgate.ledger.port import LedgerPort, LedgerUnavailable
+from spendgate.ledger.port import (
+    AttemptRecord,
+    Held,
+    HoldRequest,
+    LedgerUnavailable,
+    MoneyLedger,
+    Refused,
+    Settlement,
+)
 from spendgate.ledger.sqlite import SqliteLedger
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import Stack, async_test, open_stack
 
 
@@ -19,17 +28,15 @@ async def no_sleep(seconds: float) -> None:
     return None
 
 
-class Partial:
+class Partial(MoneyLedgerProxy):
     """A partial stand-in ledger: `wrap` is the `wrap_ledger` hook, the rest is the real one."""
 
-    _inner: LedgerPort
+    def __init__(self) -> None:
+        """No ledger yet: the stack hands it over through `wrap`."""
 
-    def wrap(self, inner: SqliteLedger) -> LedgerPort:
-        self._inner = inner
-        return self  # type: ignore[return-value]
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+    def wrap(self, inner: SqliteLedger) -> MoneyLedger:
+        self.inner = inner
+        return self
 
 
 class SettleDown(Partial):
@@ -38,10 +45,12 @@ class SettleDown(Partial):
     def __init__(self) -> None:
         self.down = True
 
-    async def settle(self, *args: object) -> object:
+    async def settle(
+        self, request_id: str, charge_nano: int, attempts: tuple[AttemptRecord, ...], now: int
+    ) -> Settlement:
         if self.down:
             raise LedgerUnavailable("gone")
-        return await self._inner.settle(*args)  # type: ignore[arg-type]
+        return await self.inner.settle(request_id, charge_nano, attempts, now)
 
 
 class HoldThenFail(Partial):
@@ -50,14 +59,16 @@ class HoldThenFail(Partial):
     def __init__(self) -> None:
         self.release_down = False
 
-    async def hold(self, request: object) -> object:
-        await self._inner.hold(request)  # type: ignore[arg-type]
+    async def hold(self, request: HoldRequest) -> Held | Refused:
+        await self.inner.hold(request)
         raise LedgerUnavailable("commit reply lost")
 
-    async def release(self, *args: object) -> object:
+    async def release(
+        self, request_id: str, attempts: tuple[AttemptRecord, ...], now: int
+    ) -> Settlement:
         if self.release_down:
             raise LedgerUnavailable("down")
-        return await self._inner.release(*args)  # type: ignore[arg-type]
+        return await self.inner.release(request_id, attempts, now)
 
 
 class GiveBackLedger(HoldThenFail):
@@ -67,9 +78,9 @@ class GiveBackLedger(HoldThenFail):
         super().__init__()
         self.gate = asyncio.Event()
 
-    async def hold(self, request: object) -> object:
+    async def hold(self, request: HoldRequest) -> Held | Refused:
         await self.gate.wait()
-        await self._inner.hold(request)  # type: ignore[arg-type]
+        await self.inner.hold(request)
         raise LedgerUnavailable("commit reply lost")
 
 

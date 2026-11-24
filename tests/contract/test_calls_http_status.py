@@ -1,11 +1,9 @@
 """`calls.http_status` (ADR-0010): provider status per attempt, range-checked, every adapter."""
 
-from typing import cast
-
 import pytest
 
 from spendgate.core.outcomes import Outcome
-from spendgate.ledger.admin_port import AdminLedger, CallFilters
+from spendgate.ledger.admin_port import CallFilters
 from tests.contract.rig import T0, E, Rig, attempt
 
 
@@ -22,9 +20,9 @@ def test_calls_http_status_round_trips_per_attempt_and_null_is_allowed(rig: Rig)
     )  # fmt: skip
     rows = rig.run(rig.ledger.get_calls("A"))
     assert [(c.attempt, c.http_status) for c in rows] == [(1, 429), (2, None), (3, 200)]
-    last = rig.run(cast(AdminLedger, rig.ledger).get_call("A"))
+    last = rig.run(rig.ledger.get_call("A"))
     assert last is not None and last["http_status"] == 200
-    listed = rig.run(cast(AdminLedger, rig.ledger).list_calls(CallFilters(), before=None, limit=10))
+    listed = rig.run(rig.ledger.list_calls(CallFilters(), before=None, limit=10))
     assert sorted(str(c["http_status"]) for c in listed) == ["200", "429", "None"]
 
 

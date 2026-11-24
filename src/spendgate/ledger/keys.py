@@ -34,6 +34,7 @@ from typing import Final
 
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.policy import KeyPolicy
+from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.key_types import (
     AdminScope,
     KeyKind,
@@ -43,7 +44,6 @@ from spendgate.ledger.key_types import (
     Principal,
     StoredKey,
 )
-from spendgate.ledger.port import LedgerPort
 
 PREFIX_HEX: Final = 12
 SECRET_HEX: Final = 48
@@ -99,7 +99,7 @@ class KeyService:
 
     def __init__(
         self,
-        ledger: LedgerPort,
+        ledger: AdminLedger,
         pepper: bytes,
         *,
         ttl_ms: int = 5_000,

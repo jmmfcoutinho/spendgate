@@ -8,7 +8,7 @@ fixed sets in the code (`op`, `step`), never anything from the request.
 import asyncio
 import io
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Collection
 from pathlib import Path
 
 import pytest
@@ -21,14 +21,17 @@ from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.wiring import GatewayObserver, PooledLedger, bind_runtime_metrics
 from spendgate.ledger.port import (
     AttemptRecord,
+    Held,
     HoldRequest,
-    LedgerPort,
     LedgerUnavailable,
+    MoneyLedger,
     PoolStats,
+    Refused,
     Settlement,
 )
 from spendgate.pipeline.model import LedgerEvent, SettledEvent
 from tests.fakes import FakeUpstream
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.fakes.script import Script
 from tests.integration.harness import Stack, async_test, open_stack
 from tests.integration.test_gateway_refusals import Stalled
@@ -43,40 +46,39 @@ def metered() -> tuple[Metrics, GatewayObserver]:
     return metrics, GatewayObserver(metrics, logger)
 
 
-class Flaky:
+class Flaky(MoneyLedgerProxy):
     """The real ledger, with chosen money calls failing as an unreachable database would."""
 
-    def __init__(self, inner: LedgerPort) -> None:
-        self._inner = inner
+    def __init__(self, inner: MoneyLedger) -> None:
+        super().__init__(inner)
         self.fail_hold = self.fail_settle = self.fail_renew = False
 
-    async def hold(self, request: HoldRequest) -> object:
+    async def hold(self, request: HoldRequest) -> Held | Refused:
         if self.fail_hold:
             raise LedgerUnavailable("ledger error: connection refused")
-        return await self._inner.hold(request)
+        return await self.inner.hold(request)
 
     async def settle(
         self, request_id: str, charge_nano: int, attempts: tuple[AttemptRecord, ...], now: int
     ) -> Settlement:
         if self.fail_settle:
             raise LedgerUnavailable("ledger error: connection refused")
-        return await self._inner.settle(request_id, charge_nano, attempts, now)
+        return await self.inner.settle(request_id, charge_nano, attempts, now)
 
-    async def renew_all(self, *args: object) -> tuple[str, ...]:
+    async def renew_all(
+        self, instance: str, ids: Collection[str], now: int, lease_ms: int
+    ) -> tuple[str, ...]:
         if self.fail_renew:
             raise LedgerUnavailable("ledger error: connection refused")
-        return await self._inner.renew_all(*args)  # type: ignore[arg-type]
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return await self.inner.renew_all(instance, ids, now, lease_ms)
 
 
-def flaky_rig() -> tuple[list[Flaky], Callable[[LedgerPort], LedgerPort]]:
+def flaky_rig() -> tuple[list[Flaky], Callable[[MoneyLedger], MoneyLedger]]:
     made: list[Flaky] = []
 
-    def wrap(ledger: LedgerPort) -> LedgerPort:
+    def wrap(ledger: MoneyLedger) -> MoneyLedger:
         made.append(Flaky(ledger))
-        return made[0]  # type: ignore[return-value]
+        return made[0]
 
     return made, wrap
 
@@ -145,9 +147,9 @@ async def test_m12_a_hold_past_its_deadline_counts_as_a_ledger_error(tmp_path: P
     metrics, obs = metered()
     stalled: list[Stalled] = []
 
-    def wrap(ledger: LedgerPort) -> LedgerPort:
+    def wrap(ledger: MoneyLedger) -> MoneyLedger:
         stalled.append(Stalled(ledger))
-        return stalled[0]  # type: ignore[return-value]
+        return stalled[0]
 
     quick: dict[str, object] = {"hold_seconds": 0.05, "observer": obs}
     async with open_stack(tmp_path, wrap_ledger=wrap, pipeline_kwargs=quick) as s:
@@ -202,7 +204,7 @@ async def test_failed_sweeps_and_retention_count_ledger_errors(tmp_path: Path) -
     async with open_stack(tmp_path) as s:
         spy = Spy(s.ledger)
         spy.fail_sweep = spy.fail_retention = True
-        upkeep = Maintenance(spy, s.settings, s.clock.now, logger_with(Lines()), metrics)  # type: ignore[arg-type]
+        upkeep = Maintenance(spy, s.settings, s.clock.now, logger_with(Lines()), metrics)
         await upkeep.tick()
     assert metrics.ledger_errors.value(op="sweep") == 1
     assert metrics.ledger_errors.value(op="retention") == 1

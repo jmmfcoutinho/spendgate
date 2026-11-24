@@ -19,9 +19,9 @@ from hypothesis import strategies as st
 
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.policy import KeyPolicy
+from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.key_types import AdminScope, KeyKind, KeyRecord, Principal, StoredKey
 from spendgate.ledger.keys import KeyService, format_key, hash_secret, parse_key
-from spendgate.ledger.port import LedgerPort
 from spendgate.pipeline.auth import presented_key
 from tests.fuzz.conftest import Case, run_fuzz
 
@@ -74,7 +74,7 @@ class StubLedger:
 
 
 SERVICE = KeyService(
-    cast(LedgerPort, StubLedger()), PEPPER, ttl_ms=0
+    cast(AdminLedger, StubLedger()), PEPPER, ttl_ms=0
 )  # no cache: every call verifies
 
 _LOOKALIKES = [
