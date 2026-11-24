@@ -375,7 +375,8 @@ def test_the_alert_webhook_needs_references_not_values(tmp_path: Path) -> None:
 
 
 def test_the_alert_webhook_signing_secret_must_be_utf8_text(tmp_path: Path) -> None:
-    env = HOOK_ENV | {"HOOK_SECRET": "fake\udcff"}  # an undecodable environment byte, escaped
+    # An undecodable environment byte, as Python escapes it.
+    env = HOOK_ENV | {"HOOK_SECRET": "fake\udcff"}  # pragma: allowlist secret
     message = failure(write(tmp_path, BASE + HOOK), env)
     assert "alerts.webhook.signing_secret: must be UTF-8 text" in message
     assert "fake" not in message
