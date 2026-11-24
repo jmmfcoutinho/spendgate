@@ -45,9 +45,12 @@ async def test_create_a_key_spend_and_see_it_in_usage(
         sent = await a.stack.post("/v1/chat/completions", body, key=secret)
         assert sent.status_code == 200, sent.text
         charged = sent.headers["x-spendgate-cost"].split(" ")[0]
+        # An absolute time: a duration such as 7d is counted back from the real clock, which
+        # moves past the harness's fixed call time and would leave the call outside the window.
         code, out, _ = await cli(
-            capsys, config, "usage", "--local", "--by", "service,model", "--since", "7d"
-        )
+            capsys, config, "usage", "--local", "--by", "service,model",
+            "--since", "2026-11-16T00:00:00Z",
+        )  # fmt: skip
         assert code == 0
         assert "openai/gpt-6-luna" in out and charged in out and "CALLS" in out
         code, out, _ = await cli(capsys, config, "usage", "--local", "--json", "--by", "model")
