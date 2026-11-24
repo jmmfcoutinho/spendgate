@@ -25,7 +25,7 @@
 - **Providers:** one small adapter per provider (OpenAI, Azure OpenAI, Anthropic, Bedrock, Google, Azure Speech, ElevenLabs).
 - **Ledger:** SQLite for one host, Postgres for shared use, behind one contract tested identically on both.
 - **Prices are data:** `catalog/prices.yaml`, with a JSON Schema. A new model is a data edit.
-- **Small and auditable** (checked in CI): modules ≤ 400 lines and functions ≤ 50 (the total-size limit was dropped by [ADR-0007](adr/0007-drop-the-total-size-limit.md)), ≤ 6 base dependencies, no ORM, no Redis, no telemetry, and a one-page `how-money-is-protected.md` naming the files and tests behind each guarantee.
+- **Small and auditable** (hard limits checked in CI): modules ≤ 400 formatted lines and functions ≤ 50, with `# fmt: skip` on tables only (the total-size limit was dropped by [ADR-0007](adr/0007-drop-the-total-size-limit.md)), ≤ 6 base dependencies, no ORM, no Redis, no telemetry, and a one-page `how-money-is-protected.md` naming the files and tests behind each guarantee.
 
 ## Design documents
 

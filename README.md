@@ -10,8 +10,8 @@ minor versions. v0.1 targets local deployments: one machine, Docker Compose, SQL
 spendgate is a small, auditable guard for LLM spending: an OpenAI- and Anthropic-compatible proxy
 plus a Python SDK and a no-server library mode. Before a call is forwarded it holds the worst-case
 cost in every budget the call belongs to, refuses anything it cannot price, and settles the real
-cost exactly once afterwards. Small means about 12.7k product lines today, provider adapters not
-counted, as measured by `scripts/lightweight_report.py`.
+cost exactly once afterwards. Small means about 16.9k formatted product lines today, provider
+adapters not counted, as measured by `scripts/lightweight_report.py`.
 
 ## What it guarantees
 
