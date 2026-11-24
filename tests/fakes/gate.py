@@ -17,6 +17,7 @@ class Gate:
         self.opened = threading.Event()
         self.threads: list[int] = []
         self.fail = fail
+        self.timed_out = False  # the gate was never opened: the loop was blocked meanwhile
         self._lock = threading.Lock()
 
     @property
@@ -28,6 +29,7 @@ class Gate:
             self.threads.append(threading.get_ident())
         self.entered.set()
         if not self.opened.wait(GATE_TIMEOUT_S):
+            self.timed_out = True
             raise TimeoutError("the refresh blocked the event loop")
         if self.fail:
             raise RuntimeError("the identity provider refused")  # an operator fault

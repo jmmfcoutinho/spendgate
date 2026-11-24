@@ -1,10 +1,9 @@
-"""Credential refreshes off the event loop, one at a time per credential.
+"""Credential refreshes off the event loop, one in flight per credential.
 
 Token sources (Entra ID, google-auth, the AWS credential chain) refresh with blocking network
 calls of 100 ms to several seconds. Made on the event loop, one refresh stalls every request the
-process is serving. `Refreshes` runs the blocking call in a worker thread and holds an
-`asyncio.Lock` per credential, so N requests that find the same token stale wait for one refresh
-instead of starting N.
+process is serving. `Refreshes` runs the blocking call in a worker thread, and every caller that
+finds the same credential stale awaits that one refresh instead of starting its own.
 """
 
 import asyncio
@@ -12,23 +11,34 @@ from collections.abc import Callable
 
 
 class Refreshes:
-    """Per-credential locks for `Provider.prepare`; one instance per adapter instance."""
+    """Single-flight refreshes for `Provider.prepare`; one instance per adapter instance."""
 
     def __init__(self) -> None:
-        self._locks: dict[str, asyncio.Lock] = {}  # keyed by a scope or digest, never a secret
+        # One in-flight refresh per key (a scope or digest, never a secret), dropped when done.
+        self._flights: dict[str, asyncio.Future[object]] = {}
 
     async def ensure(
         self, key: str, stale: Callable[[], bool], refresh: Callable[[], object]
     ) -> None:
-        """Run `refresh` in a worker thread when `stale()` holds, one at a time per `key`.
+        """Run `refresh` in a worker thread when `stale()` holds, at most one at a time per `key`.
 
-        `stale` runs on the event loop, so it must only read a cache. It is asked again under the
-        lock: a caller that waited finds the token the first caller fetched. A raise from
-        `refresh` propagates (fail closed); nothing is cached, so the next caller tries again.
+        `stale` runs on the event loop, so it must only read a cache. Callers that find a refresh
+        in flight await it. The refresh is shielded: a cancelled caller (a client that left) does
+        not end it, and the next caller joins it instead of starting a second worker thread. A
+        raise from `refresh` reaches every waiting caller (fail closed); nothing is cached, so
+        the next call after it tries again.
         """
         if not stale():
             return
-        lock = self._locks.setdefault(key, asyncio.Lock())
-        async with lock:
-            if stale():
-                await asyncio.to_thread(refresh)
+        flight = self._flights.get(key)
+        if flight is None or flight.get_loop() is not asyncio.get_running_loop():
+            flight = asyncio.ensure_future(asyncio.to_thread(refresh))
+            self._flights[key] = flight
+            flight.add_done_callback(lambda done: self._land(key, done))
+        await asyncio.shield(flight)
+
+    def _land(self, key: str, done: asyncio.Future[object]) -> None:
+        if self._flights.get(key) is done:
+            del self._flights[key]
+        if not done.cancelled():
+            done.exception()  # retrieved: a failure nobody awaits any more is no loop warning

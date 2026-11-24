@@ -290,13 +290,21 @@ class GoogleProvider:
             return url, headers | {"x-goog-api-key": d.credential}
         if d.auth is not AuthMode.BEARER_TOKEN:
             raise ValueError(f"google does not support auth mode {d.auth.value}")
-        creds = self._credentials(d)
+        creds = self._readied(d)
         if not d.region or not _SAFE.fullmatch(d.region) or not creds.project_id:
             raise ValueError("a Vertex deployment needs a region and a credential project")
         where = f"projects/{creds.project_id}/locations/{d.region}/publishers/google/models"
         return f"{base}/v1/{where}/{d.model}:{method}", headers | {
             "authorization": f"Bearer {creds.token}"
         }
+
+    def _readied(self, d: Deployment) -> Credentials:
+        """What `prepare` readied, without asking `valid` again: a token google-auth marks
+        invalid is still minutes from expiry (its refresh threshold), so it is safe to sign
+        with, and a refresh here would block the loop. A direct caller without `prepare` has
+        nothing cached and loads inline."""
+        creds = self._cache.get(_digest(d))
+        return creds if creds is not None and creds.token else self._credentials(d)
 
     def _credentials(self, d: Deployment) -> Credentials:
         key = _digest(d)

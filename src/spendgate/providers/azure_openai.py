@@ -122,7 +122,11 @@ class AzureOpenAIProvider:
             return {"api-key": deployment.credential}
         if deployment.auth is AuthMode.BEARER_TOKEN:
             # A configured credential is a ready-made token; none means Entra ID via azure-identity.
-            token = deployment.credential or self._tokens.bearer(_scope(deployment))
+            scope = _scope(deployment)
+            # What `prepare` readied, while unexpired; a direct caller without it fetches inline.
+            token = (
+                deployment.credential or self._tokens.cached(scope) or self._tokens.bearer(scope)
+            )
             return {"Authorization": f"Bearer {token}"}
         raise ValueError(f"azure_openai does not support auth mode {deployment.auth.value}")
 
