@@ -31,6 +31,8 @@ dependencies = [
 [project.optional-dependencies]
 postgres = [
     "psycopg[binary,pool]>=3.3.8",
+    # 3.3 reads the DSN and connection options per connection (rotated passwords, IAM tokens).
+    "psycopg-pool>=3.3.0",
 ]
 tokenizer = [
     "tiktoken>=0.14.0",

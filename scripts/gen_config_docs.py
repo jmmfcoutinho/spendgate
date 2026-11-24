@@ -125,6 +125,17 @@ D: dict[str, str] = {
         "that is behind and says to run `spendgate migrate` (or `serve --migrate`): see "
         "[upgrades](operations.md#upgrades-and-rollbacks)."
     ),
+    "Ledger.pool_min": (
+        "Postgres only: connections each instance keeps open (default 1). Not used by SQLite."
+    ),
+    "Ledger.pool_max": (
+        "Postgres only: most connections each instance opens (default 10). Size the server's "
+        "`max_connections` for this times the number of instances, plus migrations and admin."
+    ),
+    "Ledger.pool_timeout_seconds": (
+        "Postgres only: how long a call waits for a free pooled connection (default 10) before "
+        "it is refused with `ledger_unavailable`."
+    ),
     "SqliteLedger.kind": "Always `sqlite`.",
     "SqliteLedger.path": (
         "Database file. A relative path is relative to the config file. The file must be mode "
@@ -137,6 +148,26 @@ D: dict[str, str] = {
         "idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the "
         "URL or the server sets them: "
         "see [Postgres connections](operations.md#postgres-connections)."
+    ),
+    "PostgresLedger.auth": (
+        "Sign in with a short-lived token from the host's cloud identity instead of a password; "
+        "the DSN then names the user and carries no password. See "
+        "[cloud identity](operations.md#cloud-identity-for-the-database)."
+    ),
+    "RdsIamAuth.kind": (
+        "`rds_iam`: an Amazon RDS or Aurora IAM auth token, signed with the standard AWS "
+        "credential chain. Needs the `bedrock` extra (botocore)."
+    ),
+    "RdsIamAuth.region": "AWS region of the database. Default: the AWS chain's region.",
+    "EntraAuth.kind": (
+        "`entra`: a Microsoft Entra ID token from `DefaultAzureCredential` (managed or "
+        "workload identity, environment) for Azure Database for PostgreSQL. Needs the `azure` "
+        "extra."
+    ),
+    "EntraAuth.scope": "Token audience. The default is the one Azure documents for PostgreSQL.",
+    "CloudSqlIamAuth.kind": (
+        "`cloudsql_iam`: a Google access token from application default credentials, for "
+        "Cloud SQL IAM database sign-in. Needs the `google` extra."
     ),
     # Fx
     "Fx.rates": (
@@ -336,6 +367,7 @@ _PATTERNS = {
     "^[a-z][a-z0-9_]*/.+$": "catalog id `provider/model`",
     "^[A-Za-z0-9][A-Za-z0-9._-]*$": "name",
     r"^\d{4}-\d{2}-\d{2}$": "date `YYYY-MM-DD`",
+    "^[a-z0-9-]+$": "region name",
 }
 
 

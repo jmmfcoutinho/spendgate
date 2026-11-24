@@ -4,11 +4,17 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
+from spendgate.cli.client import EXIT_CONFIG, CliError
 from spendgate.config import Settings
+from spendgate.config.schema import EntraAuth, PostgresLedger, RdsIamAuth
 from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.keys import KeyService
 from spendgate.pipeline.model import Clock
+
+if TYPE_CHECKING:  # the Postgres modules need the optional extra
+    from spendgate.ledger import postgres
 
 
 def system_ms() -> int:
@@ -21,6 +27,31 @@ class Runtime:
     ledger: AdminLedger
     keys: KeyService
     now: Clock
+
+
+async def _postgres(settings: Settings, dsn: str, *, migrate: bool) -> "postgres.PostgresLedger":
+    from spendgate.ledger.postgres import PostgresLedger as Ledger  # noqa: PLC0415 - optional
+    from spendgate.ledger.postgres_auth import db_tokens  # noqa: PLC0415 - optional extra
+
+    cfg = settings.config.ledger
+    auth = cfg.backend.auth if isinstance(cfg.backend, PostgresLedger) else None
+    password = None
+    if auth is not None:
+        region = auth.region if isinstance(auth, RdsIamAuth) else None
+        scope = auth.scope if isinstance(auth, EntraAuth) else ""
+        try:
+            password = db_tokens(auth.kind, dsn, region=region, scope=scope).password
+        except ValueError as exc:  # the DSN does not fit token auth: a config error, no traceback
+            raise CliError(EXIT_CONFIG, f"{settings.source}: {exc}") from None
+    return await Ledger.open(
+        dsn,
+        currency=settings.ledger_currency,
+        min_size=cfg.pool_min,
+        max_size=cfg.pool_max,
+        pool_timeout=float(cfg.pool_timeout_seconds),
+        password=password,
+        migrate=migrate,
+    )
 
 
 @asynccontextmanager
@@ -41,13 +72,8 @@ async def open_runtime(
         ledger = sqlite
         closer: Callable[[], Awaitable[None] | None] = sqlite.close
     elif settings.ledger_dsn is not None:
-        from spendgate.ledger.postgres import PostgresLedger  # noqa: PLC0415 - optional extra
-
-        pg = await PostgresLedger.open(
-            settings.ledger_dsn.reveal(), currency=currency, migrate=migrate
-        )
-        ledger = pg
-        closer = pg.aclose
+        pg = await _postgres(settings, settings.ledger_dsn.reveal(), migrate=migrate)
+        ledger, closer = pg, pg.aclose
     else:
         raise ValueError("the ledger backend has no location")
     try:

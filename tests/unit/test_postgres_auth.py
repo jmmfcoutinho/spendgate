@@ -1,0 +1,186 @@
+"""Database tokens for `ledger.backend.auth`: fake identities, no network."""
+
+import asyncio
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+import pytest
+
+from spendgate.ledger.port import LedgerUnavailable
+from spendgate.ledger.postgres import PostgresLedger
+from spendgate.ledger.postgres_auth import (
+    CLOUDSQL_SCOPE,
+    RDS_TOKEN_SECONDS,
+    REFRESH_MARGIN_SECONDS,
+    UNKNOWN_EXPIRY_SECONDS,
+    DbTokens,
+    cloudsql_fetch,
+    db_tokens,
+    entra_fetch,
+    rds_fetch,
+)
+
+pytestmark = pytest.mark.anyio
+
+DSN = "postgresql://spendgate@db.example.test:6432/spendgate?sslmode=verify-full"
+NOW = 1_800_000_000.0
+TOKEN = "fake-db-token-0000"  # noqa: S105  # pragma: allowlist secret
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = NOW
+
+    def __call__(self) -> float:
+        return self.now
+
+
+class Fetches:
+    """A fake token generator: numbered tokens, each valid for `lifetime` seconds."""
+
+    def __init__(self, clock: Clock, lifetime: float = 3600) -> None:
+        self.clock, self.lifetime, self.count = clock, lifetime, 0
+
+    def __call__(self) -> tuple[str, float]:
+        self.count += 1
+        return f"{TOKEN}-{self.count}", self.clock() + self.lifetime
+
+
+async def test_a_token_is_reused_until_it_nears_expiry_then_fetched_again() -> None:
+    clock = Clock()
+    fetch = Fetches(clock)
+    tokens = DbTokens("entra", fetch, clock=clock)
+    assert await tokens.password() == f"{TOKEN}-1"
+    clock.now += 3600 - REFRESH_MARGIN_SECONDS - 1
+    assert await tokens.password() == f"{TOKEN}-1" and fetch.count == 1
+    clock.now += 1  # inside the margin: replaced before any connection logs in with it
+    assert await tokens.password() == f"{TOKEN}-2" and fetch.count == 2
+
+
+async def test_concurrent_connections_share_one_fetch() -> None:
+    clock = Clock()
+    fetch = Fetches(clock)
+    tokens = DbTokens("rds_iam", fetch, clock=clock)
+    got = await asyncio.gather(*(tokens.password() for _ in range(8)))
+    assert set(got) == {f"{TOKEN}-1"} and fetch.count == 1
+
+
+async def test_a_failed_fetch_is_ledger_unavailable_naming_only_the_class() -> None:
+    def broken() -> tuple[str, float]:
+        raise RuntimeError("https://db/?X-Amz-Signature=secret-ish")
+
+    with pytest.raises(LedgerUnavailable) as info:
+        await DbTokens("rds_iam", broken).password()
+    assert "RuntimeError" in str(info.value) and "Signature" not in str(info.value)
+    assert info.value.__cause__ is None and info.value.__suppress_context__
+    with pytest.raises(LedgerUnavailable, match="empty token"):
+        await DbTokens("entra", lambda: ("", NOW + 3600), clock=Clock()).password()
+
+
+async def test_the_token_never_shows_in_the_repr() -> None:
+    clock = Clock()
+    tokens = DbTokens("entra", Fetches(clock), clock=clock)
+    await tokens.password()
+    assert TOKEN not in repr(tokens) and repr(tokens) == "DbTokens(entra)"
+
+
+class FakeRds:
+    def __init__(self) -> None:
+        self.asked: list[tuple[str, int, str]] = []
+
+    def generate_db_auth_token(self, DBHostname: str, Port: int, DBUsername: str) -> str:
+        self.asked.append((DBHostname, Port, DBUsername))
+        return TOKEN
+
+
+def test_rds_tokens_are_signed_for_the_dsn_host_port_and_user() -> None:
+    client = FakeRds()
+    token, expires = rds_fetch(DSN, "eu-west-1", client=client, clock=Clock())()
+    assert token == TOKEN and expires == NOW + RDS_TOKEN_SECONDS
+    assert client.asked == [("db.example.test", 6432, "spendgate")]
+
+
+@pytest.mark.parametrize(
+    ("dsn", "problem"),
+    [
+        ("postgresql://spendgate:pw@db/x", "must not carry a password"),  # pragma: allowlist secret
+        ("postgresql://db/x", "must name the database user"),
+        ("host=/run/postgresql user=spendgate dbname=x", "database host name"),
+    ],
+)
+def test_token_auth_refuses_a_dsn_that_cannot_use_it(dsn: str, problem: str) -> None:
+    with pytest.raises(ValueError, match=problem):
+        rds_fetch(dsn, None, client=FakeRds())
+
+
+@dataclass(frozen=True)
+class AccessToken:
+    token: str
+    expires_on: int
+
+
+def test_entra_tokens_come_from_the_credential_for_the_configured_scope() -> None:
+    asked: list[str] = []
+
+    class Credential:
+        def get_token(self, *scopes: str) -> AccessToken:
+            asked.extend(scopes)
+            return AccessToken(TOKEN, int(NOW) + 3600)
+
+    fetch = entra_fetch(DSN, "https://example.test/.default", credential=Credential())
+    assert fetch() == (TOKEN, NOW + 3600) and asked == ["https://example.test/.default"]
+
+
+class GoogleCreds:
+    def __init__(self, expiry: datetime | None) -> None:
+        self.token: str | None = None
+        self.expiry = expiry
+        self.refreshes = 0
+
+    def refresh(self, request: object) -> None:
+        self.refreshes += 1
+        self.token = TOKEN
+
+
+def test_cloud_sql_tokens_are_refreshed_google_access_tokens() -> None:
+    expiry = datetime.fromtimestamp(NOW + 3600, UTC).replace(tzinfo=None)  # google-auth: naive UTC
+    creds = GoogleCreds(expiry)
+    assert cloudsql_fetch(DSN, credentials=creds)() == (TOKEN, NOW + 3600)
+    no_expiry = GoogleCreds(None)
+    token, expires = cloudsql_fetch(DSN, credentials=no_expiry, clock=Clock())()
+    assert token == TOKEN and expires == NOW + UNKNOWN_EXPIRY_SECONDS
+    assert CLOUDSQL_SCOPE.endswith("sqlservice.login")
+
+
+def test_cloud_sql_uses_application_default_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    import google.auth  # noqa: PLC0415 - the google extra is installed for tests
+
+    creds = GoogleCreds(None)
+    monkeypatch.setattr(google.auth, "default", lambda scopes: (creds, "p"))
+    assert cloudsql_fetch(DSN)()[0] == TOKEN and creds.refreshes == 1
+
+
+def test_db_tokens_builds_each_kind_and_refuses_others() -> None:
+    for kind in ("rds_iam", "entra", "cloudsql_iam"):
+        assert repr(db_tokens(kind, DSN, region="eu-west-1", scope="s")) == f"DbTokens({kind})"
+    with pytest.raises(ValueError, match="unknown"):
+        db_tokens("kerberos", DSN)
+
+
+# --- the ledger side: a password per connection --------------------------------------------------
+
+
+async def test_every_new_connection_asks_for_the_current_password() -> None:
+    asked: list[int] = []
+
+    async def password() -> str:
+        asked.append(1)
+        return TOKEN
+
+    ledger = PostgresLedger(DSN, "USD", lambda: "id", password=password)
+    first = await ledger._connect_kwargs()
+    second = await ledger._connect_kwargs()
+    assert first["password"] == second["password"] == TOKEN and len(asked) == 2
+    assert first["autocommit"] is True and first["keepalives"] == "1"
+    plain = await PostgresLedger(DSN, "USD", lambda: "id")._connect_kwargs()
+    assert "password" not in plain

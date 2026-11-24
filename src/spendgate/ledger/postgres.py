@@ -12,12 +12,16 @@ correctness; it would only save duplicate scans, so it is not used.
 
 Every pooled connection is bounded (`SESSION_DEFAULTS`, `TCP_DEFAULTS`) so that a locked row or a
 silent server ends in `LedgerUnavailable` instead of holding a call; what the operator set wins.
+
+The pool asks for the password each time it opens a connection, never once at start: `password`
+(an IAM token source, `postgres_auth`) is awaited per connection. Open connections keep their
+login.
 """
 
 import asyncio
 import contextlib
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import Final, Self
 
 import psycopg
@@ -45,6 +49,7 @@ from spendgate.ledger.postgres_driver import (
 from spendgate.ledger.sql import Flow, q
 
 _CONNECT_TIMEOUT_S = 10
+type Password = Callable[[], Awaitable[str]]  # the login password for one new connection
 # Server-side bounds for each pooled connection. lock_timeout stays above deadlock_timeout (1 s by
 # default) so a deadlock is still reported as one and retried; a lock or statement timeout is not
 # retried (postgres_driver). Set only where the server reports the built-in default, so a value from
@@ -187,9 +192,11 @@ class PostgresLedger(LedgerEngine):
         min_size: int = 1,
         max_size: int = 10,
         pool_timeout: float = 10.0,
+        password: Password | None = None,
     ) -> None:
         super().__init__(currency, new_id)
         self._dsn = dsn
+        self._password = password
         self._tcp = tcp_options_for(dsn)
         self._sizes = (min_size, max_size)
         self._pool_timeout = pool_timeout
@@ -212,13 +219,15 @@ class PostgresLedger(LedgerEngine):
         max_size: int = 10,
         pool_timeout: float = 10.0,
         migrate: bool = True,
+        password: Password | None = None,
     ) -> Self:
         """Migrate (or with `migrate` False refuse a schema that is behind, `SchemaBehind`) and
         check the ledger currency. Never touches a reservation."""
         try:
+            login = {"password": await password()} if password is not None else {}
             # TCP options only: a migration may wait for a peer's lock or run long.
             async with await AsyncConnection.connect(
-                make_conninfo(dsn, **tcp_options_for(dsn)),
+                make_conninfo(dsn, **tcp_options_for(dsn), **login),
                 autocommit=True,
                 row_factory=dict_row,
                 connect_timeout=_CONNECT_TIMEOUT_S,
@@ -234,7 +243,20 @@ class PostgresLedger(LedgerEngine):
             min_size=min_size,
             max_size=max_size,
             pool_timeout=pool_timeout,
+            password=password,
         )
+
+    async def _connect_kwargs(self) -> dict[str, object]:
+        """Pool `kwargs` hook, called for each new connection: the login password is current."""
+        kwargs: dict[str, object] = {
+            "autocommit": True,  # transactions are explicit, as the flows ask for them
+            "row_factory": dict_row,
+            "connect_timeout": _CONNECT_TIMEOUT_S,
+            **self._tcp,
+        }
+        if self._password is not None:
+            kwargs["password"] = await self._password()
+        return kwargs
 
     @property
     def loop(self) -> asyncio.AbstractEventLoop | None:
@@ -267,12 +289,7 @@ class PostgresLedger(LedgerEngine):
                 max_size=high,
                 timeout=self._pool_timeout,
                 open=False,
-                kwargs={
-                    "autocommit": True,  # transactions are explicit, as the flows ask for them
-                    "row_factory": dict_row,
-                    "connect_timeout": _CONNECT_TIMEOUT_S,
-                    **self._tcp,
-                },
+                kwargs=self._connect_kwargs,
                 configure=bound_session,  # no `check`: see postgres_driver (ConnectionDropped)
             )
         pool = self._pool
