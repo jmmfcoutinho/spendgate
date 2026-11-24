@@ -153,8 +153,8 @@ def _exhausted_message(scope: str, remaining: Money, hold: Money) -> str:
     # gives the caller nothing to change.
     return (
         f"The worst-case hold for this call ({hold.format()}) exceeds the remaining budget for "
-        f"{scope} ({remaining.format()}). Set max_tokens (or max_output_tokens) to lower the "
-        "hold, or raise the cap."
+        f"{scope} ({remaining.format()}). Set or lower max_tokens (or max_output_tokens) to "
+        "lower the hold, or raise the cap."
     )
 
 

@@ -63,6 +63,7 @@ def test_over_budget_is_refused_before_the_provider(tmp_path: Path) -> None:
         reply = client.post(CHAT, json=BODY)
     assert reply.status_code == 402
     assert error_code(reply) == "budget_exhausted"
+    fake.assert_no_contact()
 
 
 def test_refusal_with_room_left_names_the_worst_case_hold_in_library_mode(
@@ -76,7 +77,7 @@ def test_refusal_with_room_left_names_the_worst_case_hold_in_library_mode(
     assert error["details"]["remaining"] == "0.000001000 USD"
     assert f"worst-case hold for this call ({error['details']['hold']})" in error["message"]
     assert "max_tokens" in error["message"] and "is exhausted" not in error["message"]
-    assert fake.calls == 0
+    fake.assert_no_contact()
 
 
 def test_refusal_with_nothing_left_keeps_the_exhausted_message_in_library_mode(
@@ -89,7 +90,6 @@ def test_refusal_with_nothing_left_keeps_the_exhausted_message_in_library_mode(
     assert reply.status_code == 402 and error["code"] == "budget_exhausted"
     assert error["message"] == "Budget for org:local is exhausted."
     assert error["details"]["remaining"] == "0.000000000 USD"
-    assert fake.calls == 0
     fake.assert_no_contact()
 
 
