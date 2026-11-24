@@ -4,10 +4,16 @@ Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retent
 and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
 the [configuration reference](configuration.md).
 
-Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY` and, if the
-admin listener is not on the default `127.0.0.1:8081`, `--url` or `SPENDGATE_URL`. On the host that
-runs the proxy, add `--local` instead: it opens the ledger from `--config` directly and needs no
-key (in Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output.
+Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
+address is `--url`, else `SPENDGATE_URL`, else the listener in `--config` (`server.admin.listen`,
+or `server.listen` when the admin API shares the data port; a `0.0.0.0` listener is reached on
+loopback), else `http://127.0.0.1:8080` when there is no config file. An address is taken from the
+config only when it is on this machine (`127.0.0.0/8`, `::1`, `localhost` or a bind-all listener);
+any other host exits with code 3: pass `--url` or set `SPENDGATE_URL` for a remote admin API. On the host that runs the
+proxy, add `--local` instead: it opens the ledger from `--config` directly and needs no key (in
+Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output. These
+three flags belong to the admin commands; `serve`, `migrate` and `check-config` take only
+`--config`. `spendgate --version` prints the installed version.
 Exit codes: 0 ok, 1 refused by the server, 2 bad command line, 3 bad configuration, 4 no or wrong
 admin key, 5 cannot reach the API or the ledger.
 

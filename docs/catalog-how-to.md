@@ -80,8 +80,8 @@ Check without starting the proxy:
 spendgate check-config --config spendgate.yaml
 ```
 
-It fails on a bad entry (naming the file and field, never the value) and warns when a routed model
-has no price in force. In library mode, pass the file as `catalog=` and every priced model of a
+It fails on a bad entry (naming the file and field, never the value), and when a routed model has
+no price in force it fails with one error naming the model (`models.<alias>.catalog_id`). In library mode, pass the file as `catalog=` and every priced model of a
 provider you hold a key for is routed.
 
 ## 4. Changing a price or retiring a model

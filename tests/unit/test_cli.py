@@ -1,13 +1,29 @@
 """CLI pieces that need no ledger: parsing, amounts, durations, tables, exit code for usage."""
 
+import argparse
+import asyncio
+import importlib.metadata
+from pathlib import Path
+
+import httpx
 import pytest
 
+from spendgate import package_version
 from spendgate.cli import main
-from spendgate.cli.client import EXIT_REFUSED, CliError
-from spendgate.cli.commands import amount, until
-from spendgate.cli.entry import build_parser
+from spendgate.cli.client import EXIT_REFUSED, Client, CliError
+from spendgate.cli.commands import COMMANDS, amount, until
+from spendgate.cli.entry import admin_url, build_parser, resolve_defaults
 from spendgate.cli.render import money, table
-from spendgate.cli.serve import Listen, parse_listen
+from spendgate.cli.serve import Listen, parse_listen, run_check_config
+from spendgate.gateway.admin_http import AdminContext
+
+CONFIG = """\
+server: {{key_pepper: "env:SPENDGATE_KEY_PEPPER", {server}}}
+ledger: {{currency: USD, backend: {{kind: sqlite, path: ./l.db}}}}
+providers: {{openai: {{base_url: "https://api.openai.com/v1", credential: "env:FAKE_OPENAI_KEY"}}}}
+models:
+    m: {{catalog_id: openai/gpt-6-luna, deployments: [{{provider: openai}}, {{provider: openai}}]}}
+"""
 
 
 def test_every_documented_command_parses() -> None:
@@ -59,3 +75,165 @@ def test_table_aligns_columns_and_money_prints_amount_and_currency() -> None:
 def test_listen_addresses_split_host_and_port() -> None:
     assert parse_listen("127.0.0.1:8080") == Listen("127.0.0.1", 8080)
     assert parse_listen("[::1]:9") == Listen("::1", 9)
+
+
+def _args(*argv: str) -> argparse.Namespace:
+    args = build_parser().parse_args(argv)
+    resolve_defaults(args)
+    return args
+
+
+def test_version_flag_prints_the_installed_version(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"spendgate {importlib.metadata.version('spendgate')}"
+
+
+def test_the_admin_context_reports_the_installed_version_by_default() -> None:
+    assert package_version() == importlib.metadata.version("spendgate") != "0.0.0"
+    made = AdminContext(None, None, None, None, 0)  # type: ignore[arg-type]
+    assert made.version == package_version()
+
+
+@pytest.mark.parametrize("command", ["check-config", "serve", "migrate"])
+def test_process_commands_take_only_config_and_not_admin_flags(
+    command: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    with pytest.raises(SystemExit):
+        main([command, "--help"])
+    shown = capsys.readouterr().out
+    assert "--config" in shown
+    assert not {"--url", "--local", "--json"} & set(shown.replace("[", " ").split())
+    for flag in ("--url", "--local", "--json"):
+        with pytest.raises(SystemExit) as exc:
+            build_parser().parse_args([command, flag, *(["x"] if flag == "--url" else [])])
+        assert exc.value.code == 2
+    capsys.readouterr()
+
+
+def test_admin_url_defaults_to_the_admin_listener_in_the_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("SPENDGATE_URL", raising=False)
+    monkeypatch.delenv("SPENDGATE_CONFIG", raising=False)
+    path = tmp_path / "spendgate.yaml"
+    for server, url in (
+        ("listen: 127.0.0.1:8080", "http://127.0.0.1:8080"),  # the README: one shared port
+        ("listen: 0.0.0.0:7000", "http://127.0.0.1:7000"),
+        ("listen: '[::]:7000'", "http://[::1]:7000"),
+        ("listen: 0.0.0.0:80, admin: {listen: 127.0.0.1:9091}", "http://127.0.0.1:9091"),
+    ):
+        path.write_text(CONFIG.format(server=server), encoding="utf-8")
+        assert admin_url(_args("status", "--config", str(path))) == url
+    assert admin_url(_args("status", "--config", str(path), "--url", "http://h:1")) == "http://h:1"
+    monkeypatch.setenv("SPENDGATE_URL", "http://env:2")
+    assert admin_url(_args("status", "--config", str(path))) == "http://env:2"
+
+
+def test_admin_url_without_a_config_falls_back_unless_one_was_named(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("SPENDGATE_URL", raising=False)
+    monkeypatch.delenv("SPENDGATE_CONFIG", raising=False)
+    monkeypatch.chdir(tmp_path)  # no spendgate.yaml here
+    assert admin_url(_args("status")) == "http://127.0.0.1:8080"
+    assert admin_url(_args("status", "--config", "missing.yaml")) == 3
+    assert "missing.yaml" in capsys.readouterr().err
+
+
+def test_hints_repeat_the_flags_the_user_typed() -> None:
+    assert _args("kill", "on", "--reason", "r").again == ""
+    local = _args("kill", "on", "--local", "--config", "my conf.yaml", "--reason", "r")
+    assert local.again == " --local --config 'my conf.yaml'"
+    assert _args("kill", "on", "--url", "http://h:1", "--reason", "r").again == " --url http://h:1"
+
+
+def test_check_config_prints_each_error_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("SPENDGATE_KEY_PEPPER", "pepper-value")
+    monkeypatch.delenv("FAKE_OPENAI_KEY", raising=False)
+    path = tmp_path / "spendgate.yaml"
+    unpriced = "    u: {catalog_id: openai/gpt-0-nothing, deployments: [{provider: openai}]}\n"
+    path.write_text(CONFIG.format(server="listen: 127.0.0.1:8080") + unpriced, encoding="utf-8")
+    assert run_check_config(str(path)) == 3
+    lines = capsys.readouterr().err.splitlines()
+    assert len(lines) == len(set(lines)) == 2  # three deployments share one missing credential
+    assert all(line.startswith("error: ") for line in lines)
+    assert any("gpt-0-nothing" in line for line in lines)
+
+
+@pytest.mark.parametrize("listen", ["evil.example:80", "10.0.0.5:80", "'[2001:db8::1]:80'"])
+def test_admin_url_from_the_config_must_be_on_loopback(
+    listen: str,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.delenv("SPENDGATE_URL", raising=False)
+    monkeypatch.setenv("SPENDGATE_ADMIN_KEY", "sga-fake-not-a-key")  # pragma: allowlist secret
+    path = tmp_path / "spendgate.yaml"
+    path.write_text(CONFIG.format(server=f"listen: {listen}"), encoding="utf-8")
+
+    def no_client(*_: object, **__: object) -> None:
+        raise AssertionError("no request may be made")
+
+    monkeypatch.setattr(httpx, "AsyncClient", no_client)
+    assert main(["status", "--config", str(path)]) == 3
+    assert "pass --url or set SPENDGATE_URL" in capsys.readouterr().err
+    for ok in ("127.0.0.2:9", "localhost:9", "'[::1]:9'"):
+        path.write_text(CONFIG.format(server=f"listen: {ok}"), encoding="utf-8")
+        assert isinstance(admin_url(_args("status", "--config", str(path))), str)
+
+
+def test_hints_never_repeat_url_credentials_and_quote_the_id() -> None:
+    url = "http://ops:pw@h:1/x"  # pragma: allowlist secret
+    assert _args("kill", "on", "--url", url, "--reason", "r").again == " --url http://h:1/x"
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"id": "ks 1"})
+
+    async def run() -> str:
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(answer), base_url="http://a"
+        ) as h:
+            _, text = await COMMANDS["kill on"](Client(h), _args("kill", "on", "--reason", "r"))
+        return text
+
+    assert asyncio.run(run()).endswith("spendgate kill off 'ks 1'")
+
+
+@pytest.mark.parametrize("lookup", [b"[]", b"not json", b'{"no": "path"}'])
+def test_keys_create_prints_the_secret_when_the_scope_lookup_misbehaves(lookup: bytes) -> None:
+    made: dict[str, object] = {
+        "id": "k1",
+        "name": "n",
+        "scope_id": "s1",
+        "prefix": "p",
+        "expires_at": None,
+    }
+    made |= {"revoked": False, "secret": "sg-fake-secret"}  # pragma: allowlist secret
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request.method)
+        return (
+            httpx.Response(200, json=made)
+            if request.method == "POST"
+            else httpx.Response(200, content=lookup)
+        )
+
+    async def run(*argv: str) -> str:
+        args = _args("keys", "create", "--scope", "org:a", *argv)
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(answer), base_url="http://a"
+        ) as h:
+            _, text = await COMMANDS["keys create"](Client(h), args)
+        return text
+
+    text = asyncio.run(run())
+    assert "sg-fake-secret" in text and "s1" in text
+    seen.clear()
+    assert "sg-fake-secret" in asyncio.run(run("--json"))
+    assert seen == ["POST"]  # --json prints the API's data: no lookup for the table

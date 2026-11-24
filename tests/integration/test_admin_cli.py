@@ -1,6 +1,8 @@
 """The CLI end to end: create a key, spend through the gateway against the fake, read it back."""
 
+import argparse
 import asyncio
+import importlib.metadata
 import json
 import os
 from pathlib import Path
@@ -12,7 +14,8 @@ from spendgate.cli import main
 from spendgate.cli.client import Client, CliError
 from spendgate.cli.commands import COMMANDS
 from spendgate.gateway.admin import create_admin_app
-from tests.integration.harness import ENV, async_test
+from spendgate.ledger.key_types import AdminScope
+from tests.integration.harness import ENV, NOW_MS, PEPPER, async_test
 from tests.integration.test_admin_support import open_admin
 
 SCOPE = "org:acme/user:u1"
@@ -55,6 +58,10 @@ async def test_create_a_key_spend_and_see_it_in_usage(
         assert "openai/gpt-6-luna" in out and charged in out and "CALLS" in out
         code, out, _ = await cli(capsys, config, "usage", "--local", "--json", "--by", "model")
         assert json.loads(out)["rows"][0]["cost"]["amount"] == charged
+        # The SCOPE column is the path a person typed, not the scope's id.
+        code, out, _ = await cli(capsys, config, "keys", "list", "--local")
+        scope_id = (await a.ok("GET", f"/admin/v1/scopes/{SCOPE}"))["id"]
+        assert code == 0 and SCOPE in out and str(scope_id) not in out
         # The write went through the same ledger function, so it is audited under actor `cli`.
         audit = await a.ok("GET", "/admin/v1/audit", params={"actor": "cli"})
         assert [e["action"] for e in audit["data"]] == ["key.create"]  # type: ignore[attr-defined]
@@ -86,13 +93,14 @@ async def test_local_commands_budgets_kill_and_status(
             "--until", "30d", "--reason", "launch",
         )  # fmt: skip
         assert code == 0 and "5.000000000 USD" in out
-        code, out, _ = await cli(
-            capsys, config, "kill", "on", "--local", "--reason", "drill", "--json"
-        )
-        switch = json.loads(out)["id"]
+        code, out, _ = await cli(capsys, config, "kill", "on", "--local", "--reason", "drill")
+        switch = out.split()[2]
+        # The hint repeats --local and --config, so pasting it lifts this switch.
+        assert out.strip().endswith(f"spendgate kill off {switch} --local --config {config}")
         assert (await a.stack.chat()).status_code == 503
         code, out, _ = await cli(capsys, config, "status", "--local")
         assert code == 0 and switch in out and "kill switches: 1" in out
+        assert f"spendgate {importlib.metadata.version('spendgate')}," in out  # not 0.0.0
         assert (await cli(capsys, config, "kill", "off", "--local", switch))[0] == 0
         assert (await a.stack.chat()).status_code == 200
 
@@ -146,3 +154,26 @@ async def test_http_transport_authenticates_with_the_admin_key_and_maps_refusals
                 await COMMANDS["status"](Client(anon), None)  # type: ignore[arg-type]
             assert caught.value.code == 4
         assert os.environ.get("SPENDGATE_ADMIN_KEY") != a.secret
+
+
+@async_test
+async def test_keys_create_prints_the_secret_when_the_admin_key_cannot_read_scopes(
+    tmp_path: Path,
+) -> None:
+    async with open_admin(tmp_path) as a:
+        writer = await a.stack.ledger.create_admin_key(
+            a.stack.scope.id, "writer", frozenset({AdminScope.KEYS_WRITE}),
+            pepper=PEPPER, actor="boot", now=NOW_MS,
+        )  # fmt: skip
+        headers = {"Authorization": f"Bearer {writer.secret}"}
+        transport = httpx.ASGITransport(app=create_admin_app(a.ctx, shared_port=True))
+        args = argparse.Namespace(
+            scope=SCOPE, name="w", expires=None, models=None, rpm=None, tpm=None,
+            max_concurrent=None, max_output_tokens=None,
+        )  # fmt: skip
+        async with httpx.AsyncClient(
+            transport=transport, base_url="http://a", headers=headers
+        ) as h:
+            made, text = await COMMANDS["keys create"](Client(h), args)
+        # No usage:read: the SCOPE column falls back to the id, and the secret still prints.
+        assert str(made["secret"]) in text and str(made["scope_id"]) in text
