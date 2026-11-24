@@ -129,7 +129,9 @@ still being renewed by a live instance is left alone. A failing pass is logged a
 can reach a separate admin port, or needing an admin key with `usage:read` on a shared port.
 Probes `GET /livez` and `GET /readyz` are on the data port; `/readyz` answers with the status code
 and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days) are at
-`GET /admin/v1/readiness` with a `usage:read` admin key. Names:
+`GET /admin/v1/readiness` with a `usage:read` admin key. Label values never come from the
+request: `model` is always the routed catalog id (`unknown` on a refusal that names no routed
+model), and `scope` is the key's scope path (`unknown` if it could not be read). Names:
 
 | Metric | Meaning |
 |---|---|

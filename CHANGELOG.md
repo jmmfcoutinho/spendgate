@@ -153,6 +153,9 @@ All notable changes to this project are documented here. The format follows
   could refuse a flagship call with 4.99 USD left. The code and status are unchanged, and
   `details.hold` now carries the hold in the same format as `details.remaining`. A budget with
   nothing left keeps the old message.
+- `spendgate_requests_total` on refused calls no longer takes its `model` label from the request
+  body. It is the routed model's catalog id, as on settled calls, or `unknown` when the request
+  names no routed model, so clients cannot create a new series per model string they send.
 
 ## [0.1.1] - 2026-11-20
 

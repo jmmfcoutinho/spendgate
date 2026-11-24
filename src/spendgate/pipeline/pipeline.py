@@ -340,11 +340,8 @@ class Pipeline:
         inbound: Inbound | None = None, status: int | None = None,
     ) -> Reply:  # fmt: skip
         """A refusal as a reply; nothing was held or sent. Cost header: zero, in ledger money."""
-        model = inbound.body.get("model") if inbound is not None else None
-        event = RefusedEvent(
-            rid, refusal.code, endpoint.path, model if isinstance(model, str) else None,
-            who.key_id if who else None,
-        )  # fmt: skip
+        model = steps.routed_model(self.settings.routes, inbound.body) if inbound else None
+        event = RefusedEvent(rid, refusal.code, endpoint.path, model, who.key_id if who else None)
         with contextlib.suppress(Exception):
             self._observer.on_refused(event)
         zero = Money.zero(self.settings.ledger_currency)

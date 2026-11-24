@@ -132,7 +132,7 @@ async def test_gateway_observer_feeds_metrics_and_one_log_line(tmp_path: Path) -
         await s.chat("nope")
         model = "openai/gpt-6-luna"
         assert metrics.requests.value(outcome="ok", model=model) == 1
-        assert metrics.requests.value(outcome="model_not_allowed", model="nope") == 1
+        assert metrics.requests.value(outcome="model_not_allowed", model="unknown") == 1
         assert metrics.throttles.value(model=model, deployment="alpha/0") == 1
         assert metrics.cooldowns.value(deployment="alpha/0") == 1
         assert metrics.spend_nano.value(model=model, scope="org:acme/user:u1") == 3500
