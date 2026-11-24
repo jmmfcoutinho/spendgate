@@ -181,6 +181,18 @@ type = "forbidden"
 source_modules = ["spendgate.pipeline"]
 forbidden_modules = ["starlette", "uvicorn"]
 
+# Direct imports only: cli imports gateway (which uses Starlette) to serve it, and the layers and
+# independence contracts already keep every other package from reaching gateway.
+[[tool.importlinter.contracts]]
+name = "only the gateway imports Starlette"
+type = "forbidden"
+source_modules = [
+  "spendgate.core", "spendgate.ledger", "spendgate.providers", "spendgate.config",
+  "spendgate.client", "spendgate.pipeline", "spendgate.local", "spendgate.cli",
+]
+forbidden_modules = ["starlette"]
+allow_indirect_imports = true
+
 [tool.uv]
 # Supply-chain cooldown: ignore releases newer than this date when resolving (move it forward
 # deliberately, at least 7 days behind today, matching the Dependabot cooldown).
