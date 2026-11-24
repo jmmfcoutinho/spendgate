@@ -222,6 +222,13 @@ All notable changes to this project are documented here. The format follows
   parent budgets as the backstop (README, design summary, threat model TH-09). Overruns are
   described as recorded, exposed as metrics and shown in status. The README states the current
   product size.
+- Budget warnings: one WARNING log line on the `spendgate.budget` logger when a budget crosses its
+  soft threshold (`soft_threshold`), when an overrun takes it above its cap (`cap_breached`) and
+  when that breach blocks a `strict_overrun` budget until `ack-overrun` (`blocked`). Each is
+  written once per budget and period, from what `hold` and `settle` return, with budget facts
+  only (`budget_id`, `scope_path`, `period`, `period_start`, `spent`, `cap`, `currency`). Before,
+  the soft threshold was only stored and a breach was only a metric. See
+  [operations](docs/operations.md#metrics-and-logs).
 
 ## [0.1.1] - 2026-11-20
 
