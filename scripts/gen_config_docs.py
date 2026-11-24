@@ -112,7 +112,8 @@ D: dict[str, str] = {
     "PostgresLedger.dsn": (
         "Secret reference to the connection URL, password included. Use `sslmode=verify-full` "
         "when the server is on another host. Each connection gets lock, statement and "
-        "idle-in-transaction timeouts and TCP keepalives unless the URL or the server sets them: "
+        "idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the "
+        "URL or the server sets them: "
         "see [Postgres connections](operations.md#postgres-connections)."
     ),
     # Fx

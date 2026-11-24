@@ -246,8 +246,11 @@ All notable changes to this project are documented here. The format follows
 - A call no longer waits indefinitely on the ledger. The hold transaction is bounded at 10 s and
   then refused with `ledger_unavailable` (503) without contacting the provider; a hold that
   commits after that is released at 0. Postgres connections get `lock_timeout` 2 s,
-  `statement_timeout` 5 s, `idle_in_transaction_session_timeout` 10 s and TCP keepalives, unless
-  the DSN or the server already sets them; a lock or statement timeout is not retried. See
+  `statement_timeout` 5 s (60 s for usage reports, call and audit lists and retention batches),
+  `idle_in_transaction_session_timeout` 10 s, TCP keepalives and `tcp_user_timeout` 30 s, unless
+  the DSN or the server already sets them; a lock or statement timeout is not retried. At most 2
+  callers per pooled connection wait for one; more are refused at once. Lease renewal skips a
+  hold whose row another transaction has locked instead of waiting for it. See
   [Postgres connections](docs/operations.md#postgres-connections) and
   [ADR-0012](docs/adr/0012-bounded-ledger-waits.md).
 

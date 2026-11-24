@@ -114,13 +114,15 @@ spendgate usage --by tag --tag import --basis usage
 `--basis charged` (default) sums the money booked to budgets; `usage` sums the cost of the usage the provider reported, so a call with no reported usage adds 0 and the total is a lower bound. The same
 data is `GET /admin/v1/usage`; one call is `GET /admin/v1/calls/{request_id}` (a streaming reply
 carries its request id in `X-Spendgate-Request-Id`). Both need an admin key with `usage:read`
-([admin API](admin-openapi.yaml)).
+([admin API](admin-openapi.yaml)). On Postgres a report statement may run for 60 s (see
+[Postgres connections](#postgres-connections)).
 
 ## Retention
 
 Call records older than `ledger.retention_days` (default 90) are deleted by a job that `serve`
 runs once a day, starting at its first pass. Whole UTC days are kept or deleted together, finished
-reservations and sessions go with them, and pending holds never do. Consequences:
+reservations and sessions go with them, and pending holds never do. On Postgres each batch
+statement may run for 60 s (see [Postgres connections](#postgres-connections)). Consequences:
 
 - Usage reports cover the retention window only; a `since` before it is refused rather than
   silently truncated.
@@ -141,9 +143,16 @@ server ends quickly instead of holding the call:
 | Setting | Default | Effect |
 |---|---|---|
 | `lock_timeout` | `2s` | A row lock held longer by another session (an open `psql` transaction, a long admin change) fails the hold |
-| `statement_timeout` | `5s` | A single statement that runs longer is cancelled |
+| `statement_timeout` | `5s`; `60s` for usage reports, call and audit lists and retention batches | A single statement that runs longer is cancelled |
 | `idle_in_transaction_session_timeout` | `10s` | The server closes a connection left inside a transaction |
 | `keepalives`, `keepalives_idle`, `keepalives_interval`, `keepalives_count` | `1`, `15`, `5`, `3` | TCP keepalives: a dead server or a dropped network is noticed in about 30 s |
+| `tcp_user_timeout` | `30000` (ms) | Data the server never acknowledges (a `COMMIT` to a silent host) is given up after 30 s instead of the kernel's ~15 min of retransmission |
+
+The pool also lets at most 2 callers per connection (20 with the default 10 connections) queue for
+a free connection; one more is refused with `ledger_unavailable` at once instead of queueing
+behind a stalled server. Lease renewal skips a hold whose row another transaction has locked (it
+is being settled, released or expired), so a long lock never fails the heartbeat or stops a stream.
+
 
 A lock timeout (SQLSTATE 55P03) or a cancelled statement (57014) is refused as
 `ledger_unavailable` and not retried: a row held for 2 s is most likely still held a moment
@@ -155,8 +164,8 @@ because they may wait for another instance's migration. The reasoning is in
 
 **Overriding.** A value you set wins. The timeouts are applied only where the server still
 reports its built-in default, so anything set in the URL, `PGOPTIONS`, `ALTER ROLE ... SET`,
-`ALTER DATABASE ... SET` or `postgresql.conf` is kept. Keepalive options named in the URL are
-kept too. In the URL, server settings go in `options` (URL-encoded) and libpq options are plain
+`ALTER DATABASE ... SET` or `postgresql.conf` is kept, also for reports (a `statement_timeout`
+you set is not raised to 60 s for them). TCP options named in the URL are kept too. In the URL, server settings go in `options` (URL-encoded) and libpq options are plain
 parameters (the password is left out of this example):
 
 ```text
