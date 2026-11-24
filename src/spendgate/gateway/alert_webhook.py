@@ -106,6 +106,11 @@ class WebhookAlerts(logging.Handler):
         except asyncio.QueueFull:
             self._metrics.alert_webhooks.inc(result="dropped")
 
+    @property
+    def logger(self) -> logging.Logger:
+        """Where this handler's own events go (`spendgate.call`), never the budget logger."""
+        return self._logger
+
     def pending(self) -> int:
         """Warnings queued and not yet taken by the poster."""
         return self._queue.qsize()
@@ -211,7 +216,21 @@ def with_alerts(job: Job, alerts: WebhookAlerts | None) -> Job:
         return job
 
     async def both() -> None:
-        # A cancel reaches both; an exception in one leaves the other running.
-        await asyncio.gather(job(), alerts.run(), return_exceptions=True)
+        # A cancel reaches both; an exception in one leaves the other running, and is logged.
+        await asyncio.gather(
+            _logged("sweeper", job(), alerts.logger),
+            _logged("alert_webhook", alerts.run(), alerts.logger),
+            return_exceptions=True,  # only if logging itself fails: still wait for the other
+        )
 
     return both
+
+
+async def _logged(name: str, work: Coroutine[object, object, None], logger: logging.Logger) -> None:
+    """Run one background job; an exception ends it with one ERROR line, the class only."""
+    try:
+        await work
+    except Exception as exc:  # CancelledError is not an Exception: a cancel still stops it
+        log_event(
+            logger, "background_job_failed", logging.ERROR, job=name, reason=type(exc).__name__
+        )

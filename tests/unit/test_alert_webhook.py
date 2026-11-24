@@ -412,6 +412,14 @@ def test_a_raising_poster_leaves_the_job_beside_it_running() -> None:
         return still, both.exception() is None
 
     assert asyncio.run(go()) == (True, True)
+    (line,) = (json.loads(x) for x in rig.log.getvalue().splitlines())
+    assert (line["event"], line["level"], line["job"], line["reason"]) == (
+        "background_job_failed",
+        "ERROR",
+        "alert_webhook",
+        "RuntimeError",
+    )
+    assert "poster bug" not in rig.log.getvalue()  # the class only, never the message
 
 
 def test_a_raising_job_leaves_the_poster_beside_it_running() -> None:
@@ -436,3 +444,10 @@ def test_a_raising_job_leaves_the_poster_beside_it_running() -> None:
 
     asyncio.run(go())
     assert rig.count("delivered") == 1
+    (line,) = (json.loads(x) for x in rig.log.getvalue().splitlines())
+    assert (line["event"], line["job"], line["reason"]) == (
+        "background_job_failed",
+        "sweeper",
+        "RuntimeError",
+    )
+    assert "sweeper bug" not in rig.log.getvalue()

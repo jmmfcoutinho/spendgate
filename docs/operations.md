@@ -319,9 +319,9 @@ Alert on `spendgate_overruns_total`, on a growing `spendgate_holds_in_flight` th
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,
 `request_id`, `key_prefix`, `scope_path`, `model`, `deployment`, `outcome`, token counts, `cost`,
 `currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`, for internal errors
-`where`, `error_class`, `frames`, `charged`, and the budget-warning fields below (`budget_id`,
-`scope_kind`, `period`, `period_start`, `spent`, `cap`). Prompts, response bodies, headers and secrets are
-never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
+`where`, `error_class`, `frames`, `charged`, `job` (a background job that failed), and the
+budget-warning fields below (`budget_id`, `scope_kind`, `period`, `period_start`, `spent`, `cap`).
+Prompts, response bodies, headers and secrets are never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
 Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
 start.
 
@@ -425,7 +425,10 @@ A warning that gives up writes one `alert_webhook_failed` line on `spendgate.cal
 error class or `status`, and `http_status`). When `queue_size` warnings are waiting, a new one is
 dropped; warnings still queued when the server stops, or raised by the calls it settles while
 stopping, are dropped too. Both count as `spendgate_alert_webhooks_total{result="dropped"}`: alert
-on any increase, and on `failed`.
+on any increase, and on `failed`. The poster and the sweeper run side by side and neither stops
+the other: if either ends on an unexpected exception it writes one `background_job_failed` line
+at `ERROR` (`job`: `sweeper` or `alert_webhook`, `reason`: the exception class) and the other
+keeps running. Alert on it.
 
 The webhook is a notice, like the log line, never the record. A warning may be delivered more than
 once (a retry after the receiver processed a post but its answer was lost) or not at all: dedupe on
