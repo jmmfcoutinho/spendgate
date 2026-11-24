@@ -109,6 +109,15 @@ All notable changes to this project are documented here. The format follows
 
 - Weekly fuzz workflow (`.github/workflows/fuzz.yml`): every `tests/fuzz` target in long mode
   for 60 seconds with a new seed each run, one JSON report per target uploaded.
+- Budget warnings: one WARNING log line on the `spendgate.budget` logger when a budget crosses its
+  soft threshold (`soft_threshold`), when an overrun takes it above its cap (`cap_breached`) and
+  when that breach blocks a `strict_overrun` budget until `ack-overrun` (`blocked`). They come
+  from what `hold` and `settle` return: `soft_threshold` once per budget period, `cap_breached`
+  once per crossing of the cap, `blocked` once per review flag. Budget facts only (`budget_id`,
+  `scope_path`, `scope_kind`, `period`, `period_start`, `spent`, `cap`, `currency`); a session
+  budget is named by its key's scope, never by the session or key id. Before,
+  the soft threshold was only stored and a breach was only a metric. See
+  [operations](docs/operations.md#metrics-and-logs).
 
 ### Changed
 

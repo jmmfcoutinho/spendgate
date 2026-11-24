@@ -90,6 +90,34 @@ class SoftWarning:
     effective_cap_nano: int
 
 
+class AlertKind(StrEnum):
+    """Budget transitions worth an operator warning (operations.md, "Budget warnings")."""
+
+    SOFT_THRESHOLD = "soft_threshold"  # usage crossed `soft_pct` of the effective cap
+    CAP_BREACHED = "cap_breached"  # an overrun took `spent + held` above the cap: per crossing
+    BLOCKED = "blocked"  # that breach flagged a `strict_overrun` budget for review
+
+
+@dataclass(frozen=True, slots=True)
+class BudgetAlert:
+    """One transition of one budget period, reported by the ledger in the transaction that made it.
+
+    The ledger reports each transition once (a soft threshold per period, a breach per crossing,
+    a block per review flag): a repeat of the same call reports nothing. A session
+    budget names its parent scope and sets `session`: a session path holds the key id and the
+    caller-chosen session id, which are not budget facts.
+    """
+
+    kind: AlertKind
+    budget_id: str
+    scope_path: str
+    period: Period
+    period_start: int
+    spent_nano: int  # spent + held at the transition: what the threshold or cap is compared to
+    cap_nano: int  # the effective cap (cap plus active grants)
+    session: bool = False  # the budget belongs to a session under `scope_path`
+
+
 @dataclass(frozen=True, slots=True)
 class Admission:
     refusal: Refusal | None

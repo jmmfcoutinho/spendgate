@@ -4,11 +4,12 @@ Every transition starts with the state-guarded UPDATE on the reservation row; 0 
 terminal transition already happened, which makes each one idempotent per request id.
 """
 
-from spendgate.core.budgets import Budget, effective_cap
+from spendgate.core.budgets import AlertKind, Budget, BudgetAlert, effective_cap
 from spendgate.core.outcomes import Outcome, ReservationState
 from spendgate.ledger import sql
 from spendgate.ledger.common import (
     attempt_params,
+    budget_alert,
     call_params,
     i,
     lock_budget,
@@ -47,23 +48,27 @@ def settle_flow(
     items = yield q(sql.ITEMS_OF, id=request_id)
     held = max((i(it, "held_nano") for it in items), default=0)
     over = max(0, charge - held)
-    flagged: list[str] = []
+    alerts: list[BudgetAlert] = []
     for item in items:  # ascending budget id
         budget = yield from _locked(item)
+        start = i(item, "period_start")
         yield q(
             sql.PERIOD_BOOK,
             budget_id=budget.id,
-            period_start=i(item, "period_start"),
+            period_start=start,
             held=i(item, "held_nano"),
             charge=charge,
             over=over,
         )
         if over:
             yield q(sql.ITEM_OVERRUN, id=request_id, budget_id=budget.id, over=over)
-            if (yield from _flag_breach(budget, i(item, "period_start"), now)):
-                flagged.append(budget.id)
+            added = charge - i(item, "held_nano")  # what this booking added to spent + held
+            alerts += yield from _breach(budget, start, added, now)
     yield from _insert_calls(rows[0], request_id, attempts, held, over)
-    return Settlement(True, ReservationState.SETTLED, charge, over, review_flagged=tuple(flagged))
+    return Settlement(
+        True, ReservationState.SETTLED, charge, over, review_flagged=_blocked(alerts),
+        alerts=tuple(alerts),
+    )  # fmt: skip
 
 
 def _insert_calls(
@@ -105,15 +110,32 @@ def _state_of(request_id: str) -> Flow[ReservationState]:
     return ReservationState(s(rows[0], "state"))
 
 
-def _flag_breach(budget: Budget, start: int, now: int) -> Flow[bool]:
-    """`strict_overrun`: an overrun that leaves `S + H` above the effective cap needs review."""
-    if not budget.strict_overrun:
-        return False
+def _breach(budget: Budget, start: int, added: int, now: int) -> Flow[list[BudgetAlert]]:
+    """An overrun that leaves `S + H` above the effective cap: alert, and flag a strict budget.
+
+    `cap_breached` is reported only by the booking that crossed the cap (`S + H` was within it
+    before `added`): once per crossing. Overruns while above the cap do not repeat it; a period
+    that dips back within the cap and crosses again reports a new crossing. `blocked` follows
+    `BUDGET_FLAG`, which sets `review_required_at` only once until `ack-overrun`.
+    """
     rows = yield q(sql.PERIOD_GET, budget_id=budget.id, period_start=start)
     used = i(rows[0], "spent_nano") + i(rows[0], "held_nano")
-    if used <= effective_cap(budget, now):
-        return False
-    return bool((yield q(sql.BUDGET_FLAG, id=budget.id, now=now)))
+    cap = effective_cap(budget, now)
+    if used <= cap:
+        return []
+    kinds: list[AlertKind] = []
+    if used - added <= cap:
+        kinds.append(AlertKind.CAP_BREACHED)
+    if budget.strict_overrun and (yield q(sql.BUDGET_FLAG, id=budget.id, now=now)):
+        kinds.append(AlertKind.BLOCKED)
+    alerts: list[BudgetAlert] = []
+    for kind in kinds:
+        alerts.append((yield from budget_alert(kind, budget, start, used, cap)))
+    return alerts
+
+
+def _blocked(alerts: list[BudgetAlert]) -> tuple[str, ...]:
+    return tuple(a.budget_id for a in alerts if a.kind is AlertKind.BLOCKED)
 
 
 def _consuming(attempts: tuple[AttemptRecord, ...]) -> AttemptRecord:
@@ -146,7 +168,7 @@ def _late_settle(
     if not updated:  # another late settle won the race
         return Settlement(False, ReservationState.EXPIRED)
     yield q(sql.RES_LATE, id=request_id, charged=max(held, charge))
-    flagged = yield from _book_late(request_id, items if over else [], over, now)
+    alerts = yield from _book_late(request_id, items if over else [], over, now)
     res = (yield q(sql.RES_GET, id=request_id))[0]
     meta = HoldMeta.from_json(s(res, "meta"))
     for a in attempts:
@@ -165,21 +187,21 @@ def _late_settle(
                 ),
             )
     return Settlement(
-        True, ReservationState.EXPIRED, over, over, late=True, review_flagged=tuple(flagged)
-    )
+        True, ReservationState.EXPIRED, over, over, late=True, review_flagged=_blocked(alerts),
+        alerts=tuple(alerts),
+    )  # fmt: skip
 
 
-def _book_late(request_id: str, items: list[Row], over: int, now: int) -> Flow[list[str]]:
+def _book_late(request_id: str, items: list[Row], over: int, now: int) -> Flow[list[BudgetAlert]]:
     """Add only the overrun to spent (the hold was already charged in full by the sweeper)."""
-    flagged: list[str] = []
+    alerts: list[BudgetAlert] = []
     for item in items:
         budget = yield from _locked(item)
         start = i(item, "period_start")
         yield q(sql.PERIOD_LATE, budget_id=budget.id, period_start=start, over=over)
         yield q(sql.ITEM_OVERRUN, id=request_id, budget_id=budget.id, over=over)
-        if (yield from _flag_breach(budget, start, now)):
-            flagged.append(budget.id)
-    return flagged
+        alerts += yield from _breach(budget, start, over, now)
+    return alerts
 
 
 def release_flow(

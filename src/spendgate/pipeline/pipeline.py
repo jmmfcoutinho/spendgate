@@ -26,6 +26,7 @@ from spendgate.ledger.ids import new_id
 from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
 from spendgate.pipeline import answers, intake, replies, steps
+from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.auth import authenticate
 from spendgate.pipeline.closing import Call, Closer, Sleeper
 from spendgate.pipeline.faults import InternalEvent, fault_of
@@ -227,6 +228,7 @@ class Pipeline:
             return self._refuse(call.id, call.inbound.endpoint, held, call.principal, call.inbound)
         self._owned.add(call.id)  # renewed by the heartbeat until its one transition is made
         book.budget_ids = frozenset(item.budget_id for item in held.items)
+        log_alerts(held.alerts, self.settings.ledger_currency)  # soft-threshold crossings
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._observer.on_held(
                 HeldEvent(call.id, prepared.route.catalog_id, prepared.pricing.worst)

@@ -10,7 +10,7 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from spendgate.core.budgets import Budget, Period, ScopeKind, SoftWarning
+from spendgate.core.budgets import Budget, BudgetAlert, Period, ScopeKind, SoftWarning
 from spendgate.core.errors import Refusal
 from spendgate.core.outcomes import Outcome, ReservationState
 from spendgate.core.policy import KeyPolicy, KillSwitch, Plan
@@ -139,6 +139,7 @@ class Held:
     items: tuple[HeldItem, ...]
     session_scope_id: str | None
     warnings: tuple[SoftWarning, ...] = ()
+    alerts: tuple[BudgetAlert, ...] = ()  # soft-threshold crossings this hold made, once per period
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +202,7 @@ class Settlement:
     overrun_nano: int = 0
     late: bool = False
     review_flagged: tuple[str, ...] = ()  # budgets that a breach overrun just flagged
+    alerts: tuple[BudgetAlert, ...] = ()  # cap crossings and blocks this settlement made
 
 
 @dataclass(frozen=True, slots=True)

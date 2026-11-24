@@ -2,7 +2,15 @@
 
 from dataclasses import dataclass
 
-from spendgate.core.budgets import Admission, ScopeKind, check_admission, period_start
+from spendgate.core.budgets import (
+    Admission,
+    AlertKind,
+    Budget,
+    BudgetAlert,
+    ScopeKind,
+    check_admission,
+    period_start,
+)
 from spendgate.core.errors import ErrorCode, LimitName, Refusal
 from spendgate.core.policy import (
     KillSwitch,
@@ -15,6 +23,7 @@ from spendgate.ledger import sql
 from spendgate.ledger.common import (
     HOUR_MS,
     Ctx,
+    budget_alert,
     ensure_period,
     i,
     lock_budget,
@@ -48,7 +57,7 @@ class _Session:
     existed: bool  # False = created in this transaction, so a rollback removes it
 
 
-type _Check = tuple[str, int, Admission]  # budget id, period start, verdict
+type _Check = tuple[Budget, int, Admission]  # budget, period start, verdict
 
 
 def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
@@ -88,7 +97,7 @@ def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
         verdict = check_admission(budget, state, req.worst_nano, req.now, ctx.currency)
         if verdict.refusal is not None:
             return (yield from _refuse(req, verdict.refusal, list(owners), session))
-        checks.append((budget_id, start, verdict))
+        checks.append((budget, start, verdict))
     if not checks:  # no active budget would mean no limit at all: fail closed (ADR-0003)
         yield Tx.ROLLBACK  # drop a session row created above
         return _forbidden("no_budget", "No active budget applies to this key.", leaf.path)
@@ -265,17 +274,22 @@ def _admit(
     req: HoldRequest, leaf: _Scope, session: _Session | None, checks: list[_Check]
 ) -> Flow[Held]:
     items: list[HeldItem] = []
-    for budget_id, start, verdict in checks:
-        soft = req.now if verdict.warning is not None else None
+    alerts: list[BudgetAlert] = []
+    for budget, start, verdict in checks:
+        warning = verdict.warning
         yield q(
             sql.PERIOD_HOLD,
-            budget_id=budget_id,
+            budget_id=budget.id,
             period_start=start,
             worst=req.worst_nano,
             excess=verdict.excess_nano,
-            soft=soft,
+            soft=req.now if warning is not None else None,
         )
-        items.append(HeldItem(budget_id, start, req.worst_nano))
+        items.append(HeldItem(budget.id, start, req.worst_nano))
+        if warning is not None:  # soft_alerted_at, written above, keeps it once per period
+            kind = AlertKind.SOFT_THRESHOLD
+            used, cap = warning.used_nano, warning.effective_cap_nano
+            alerts.append((yield from budget_alert(kind, budget, start, used, cap)))
     lease_until = req.now + req.lease_ms
     yield q(
         sql.RES_INSERT,
@@ -299,6 +313,5 @@ def _admit(
     if session is not None:
         yield q(sql.SESSION_TOUCH, id=session.scope.id, now=req.now)
     warnings = tuple(v.warning for _, _, v in checks if v.warning is not None)
-    return Held(
-        req.request_id, lease_until, tuple(items), session.scope.id if session else None, warnings
-    )
+    session_id = session.scope.id if session else None
+    return Held(req.request_id, lease_until, tuple(items), session_id, warnings, tuple(alerts))
