@@ -177,8 +177,13 @@ printf '%s' "$ANTHROPIC_API_KEY" > secrets/anthropic_api_key
 openssl rand -hex 32 | tr -d '\n' > secrets/spendgate_key_pepper
 : > secrets/spendgate_database_url; : > secrets/postgres_password
 chmod 700 secrets && chmod 644 secrets/*
-docker compose up -d --build
+docker compose build
+docker compose run --rm spendgate migrate
+docker compose up -d
 ```
+
+Migrating is its own step: `migrate` creates the ledger now and upgrades it after you install a new
+release (see [Upgrades and rollbacks](../operations.md#upgrades-and-rollbacks)).
 
 **Verify** the guard and the perimeter (the demo app prints both; exit code 0 means the perimeter holds):
 
@@ -210,11 +215,12 @@ guard to every process on the host.
 
 To use the released image instead of building one, verify it first (see
 [Container image](#container-image)), then pull it by the digest `cosign verify` printed, tag it with
-the name Compose expects and start without `--build`:
+the name Compose expects, migrate, and start without building:
 
 ```bash
 docker pull "ghcr.io/jmmfcoutinho/spendgate@$digest"     # $digest from the verify step
 docker tag "ghcr.io/jmmfcoutinho/spendgate@$digest" spendgate:core
+docker compose run --rm spendgate migrate
 docker compose up -d
 ```
 
@@ -224,6 +230,7 @@ own digest:
 ```bash
 docker pull "ghcr.io/jmmfcoutinho/spendgate@$digest"     # the -full image's digest
 docker tag "ghcr.io/jmmfcoutinho/spendgate@$digest" spendgate:full
+SPENDGATE_VARIANT=full docker compose run --rm spendgate migrate
 SPENDGATE_VARIANT=full docker compose up -d
 ```
 

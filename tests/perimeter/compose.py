@@ -107,7 +107,11 @@ class Compose:
         self.run("up", "-d", "--wait", *extra, *services)
 
     def start_stack(self, *, postgres: bool) -> None:
-        """Everything that should stay up, then the demo app, which runs once and exits."""
+        """Migrate as the README does, then everything that should stay up, then the demo app,
+        which runs once and exits."""
+        self.started = True
+        self.run("build", "spendgate")
+        self.run("run", "--rm", "spendgate", "migrate")  # `serve` on Postgres does not migrate
         self.up("spendgate", "app", "fake-provider", *(("db",) if postgres else ()))
         self.run("up", "-d", "--no-deps", "demo")  # no --wait: it exits by design
 

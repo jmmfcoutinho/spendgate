@@ -9,6 +9,8 @@ server:
 ledger:
   currency: EUR
   backend: { kind: postgres, dsn: file:/run/secrets/spendgate_database_url }   # the DSN carries the password
+  # auto_migrate is false for Postgres: `serve` refuses a schema that is behind. Upgrade with
+  # `docker compose --profile postgres run --rm spendgate migrate` before `up` (see README.md).
   lease_seconds: 60
   retention_days: 90
 
