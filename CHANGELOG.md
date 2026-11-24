@@ -131,10 +131,11 @@ All notable changes to this project are documented here. The format follows
 - The admin API refuses to create a budget whose `model_filter` matches no routed catalog id
   (`invalid_request`, `param: model_filter`): such a budget would never apply. The filter is a
   case-sensitive glob over the catalog id (such as `openai/gpt-6-*`), never the alias; the
-  configuration reference, the OpenAPI document and the operations guide now say so.
+  configuration reference, the OpenAPI document and the operations guide now say so
+  ([ADR-0011](docs/adr/0011-model-filter-validation-and-late-settle-reservation.md)).
 - `spendgate check-config` and `spendgate serve` warn about each `bootstrap.budgets` entry whose
   `model_filter` matches no routed catalog id. A warning, not an error: the configuration still
-  loads.
+  loads (ADR-0011).
 
 ### Fixed
 
@@ -167,7 +168,7 @@ All notable changes to this project are documented here. The format follows
   `charged_nano` (as the ledger's `get_reservation` reads it) to the hold plus the late overrun,
   in the same transaction. Before, the reservation kept showing only the swept hold
   while the budget and the call row already carried the overrun. Reporting only: the money
-  booked to the budgets was already correct.
+  booked to the budgets was already correct (ADR-0011).
 
 ## [0.1.1] - 2026-11-20
 
