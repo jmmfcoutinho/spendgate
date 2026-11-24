@@ -185,6 +185,11 @@ All notable changes to this project are documented here. The format follows
 - The hint after `kill on` repeats the `--local`, `--config` and `--url` flags the command was
   given (without any user name or password in the URL), so `kill off` reaches the same ledger or
   API.
+- PyPI project links (homepage, documentation, changelog, issues) and classifiers; CI and PyPI
+  badges on the README.
+- The release workflow creates the GitHub Release for the tag, with the tag's CHANGELOG section
+  as its notes.
+- README links are absolute, so they work on the PyPI project page.
 
 ## [0.1.1] - 2026-11-20
 
