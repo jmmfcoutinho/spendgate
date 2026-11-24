@@ -247,7 +247,9 @@ and for sweeper rows (`expired`).
 A provider's error answer records the protocol code it maps to (protocol.md section 4.2, e.g.
 `upstream_throttled`, `upstream_unavailable`, `invalid_request`). An attempt the gateway ended
 while it was in flight records its outcome (`cancelled`, `timeout` for the request deadline,
-`internal_error`). Every other value is one of these:
+`internal_error`). Read `error_code` together with `outcome`: the same value can appear under
+different outcomes (`internal_error` is both a protocol code and an outcome), and the outcome, not
+the code, decides the charge. Every other value is one of these:
 
 | Value | Written when | Sent? |
 |---|---|---|
@@ -267,7 +269,7 @@ while it was in flight records its outcome (`cancelled`, `timeout` for the reque
 | `too_many_redirects` | the provider redirected too often | yes |
 | `transport_error` | any other HTTP client error | yes |
 | `unexpected_error` | an exception that is not an HTTP client error, while sending or reading | yes |
-| `response_too_large` | a buffered answer was larger than the 64 MiB cap | yes |
+| `response_too_large` | a buffered answer was larger than its cap (64 MiB; 1 MiB for an error answer to a streaming request) | yes |
 | `stream_malformed` | a stream had bad framing, a bad checksum or encoding, or ended inside an event | yes |
 | `stream_limit_exceeded` | a stream crossed an SSE line, event, count, size or frame limit (C-22) | yes |
 | `relay_error` | the stream relay could not be created or raised while relaying | yes |

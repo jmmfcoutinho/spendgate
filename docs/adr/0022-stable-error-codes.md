@@ -5,11 +5,12 @@
 
 ## Context
 
-`calls.error_code` said why an attempt failed, but its values were free strings from four places:
+`calls.error_code` said why an attempt failed, but its values were free strings from five places:
 stop reasons spelled inline (`lease_expiring`, `max_duration`, `client_gone`), gateway faults
-(`relay_error`, `adapter_error`), protocol `ErrorCode` values for provider answers, and, for
-transport and stream failures, the Python class name of the exception (`ReadTimeout`,
-`ConnectError`, `StreamLimitExceeded`). Class names belong to the HTTP client library and can
+(`relay_error`, `adapter_error`), protocol `ErrorCode` values for provider answers, the outcome
+of an attempt the gateway ended in flight (`settle.decide` wrote `outcome.value`: `cancelled`,
+`timeout`, `internal_error`), and, for transport and stream failures, the Python class name of
+the exception (`ReadTimeout`, `ConnectError`, `StreamLimitExceeded`). Class names belong to the HTTP client library and can
 change in any upgrade; nothing listed the values, so the column could not be relied on by the
 admin API's readers or by a usage query (issue #37).
 
