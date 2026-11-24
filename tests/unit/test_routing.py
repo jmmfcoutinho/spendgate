@@ -6,8 +6,12 @@ from pathlib import Path
 import httpx
 
 from spendgate.config import Settings
-from spendgate.pipeline.candidates import Cause, Router
+from spendgate.core.errors import ErrorCode
+from spendgate.core.health import HealthConfig
+from spendgate.pipeline.candidates import Cause, Router, retry_hint
+from spendgate.pipeline.routing import MAX_WAIT_MS
 from spendgate.pipeline.transport import classify
+from spendgate.providers.port import UpstreamError
 from tests.conftest import FakeClock
 from tests.unit.test_pipeline_steps import settings as make_settings
 
@@ -135,3 +139,58 @@ def test_never_sent_versus_sent_table() -> None:
         classify(httpx.ConnectTimeout("x")).timeout and not classify(httpx.ConnectTimeout("x")).sent
     )
     assert classify(httpx.ConnectError("secret-host.test")).kind == "ConnectError"  # no message
+
+
+def test_the_wait_bound_outlasts_a_no_hint_cooldown() -> None:
+    assert HealthConfig().throttle_max_ms <= MAX_WAIT_MS
+
+
+def test_soonest_never_waits_for_a_failing_or_unreachable_deployment(tmp_path: Path) -> None:
+    """Waiting for a breaker would hand its half-open probe to the waiting call."""
+    r, s = router(tmp_path)
+    a, b = r.targets("alpha")
+    for _ in range(s.health.min_requests):
+        r.failed(a, NOW)
+    assert a.shared.cause is Cause.FAILING and r.soonest((a,), set(), NOW) is None
+    r.cool(b, NOW, None, Cause.UNREACHABLE)
+    assert r.soonest((b,), set(), NOW) is None
+    r.cool(a, NOW, None, Cause.THROTTLED)  # a 429 on a failure-opened breaker: still a breaker
+    assert not a.shared.health.busy and r.soonest((a,), set(), NOW) is None
+
+
+def test_each_waiter_draws_its_own_jitter_from_the_router_rng(tmp_path: Path) -> None:
+    s = make_settings(tmp_path)
+    first = Router(s.routes, s.health, random.Random(9).randint)  # noqa: S311 - jitter
+    again = Router(s.routes, s.health, random.Random(9).randint)  # noqa: S311 - jitter
+    drawn = [first.jitter() for _ in range(20)]
+    assert drawn == [again.jitter() for _ in range(20)]
+    assert all(0 <= ms <= s.health.throttle_min_ms for ms in drawn) and len(set(drawn)) > 1
+
+
+def _throttled(seconds: int | None = None) -> UpstreamError:
+    return UpstreamError(ErrorCode.UPSTREAM_THROTTLED, True, 429, seconds)
+
+
+def test_retry_hint_reads_an_http_date_against_the_clock() -> None:
+    at = {"Retry-After": "Tue, 17 Nov 2026 00:00:03 GMT"}
+    epoch = 1_794_873_600_000  # 2026-11-17T00:00:00Z
+    assert retry_hint(_throttled(), at, epoch) == (3, False)
+    assert retry_hint(_throttled(), at, epoch + 2_500) == (1, False)  # rounded up
+    assert retry_hint(_throttled(), at, epoch + 60_000) == (0, False)  # past: the short draw
+    assert retry_hint(_throttled(), {"retry-after": "Sat, 01 Jan 2028 00:00:00 GMT"}, epoch) == (
+        86_400,
+        False,
+    )  # capped at a day, like delta-seconds
+    assert retry_hint(_throttled(7), at, epoch) == (7, False)  # the adapter's seconds win
+
+
+def test_retry_hint_marks_a_garbage_header_unreadable() -> None:
+    assert retry_hint(_throttled(), {"Retry-After": "soon-ish"}, NOW) == (None, True)
+    assert retry_hint(_throttled(), {"retry-after-ms": "-5"}, NOW) == (None, True)
+    assert retry_hint(_throttled(), {}, NOW) == (None, False)  # no header: the short draw
+
+
+def test_an_unreadable_retry_after_cools_for_the_breaker_cooldown(tmp_path: Path) -> None:
+    r, s = router(tmp_path)
+    a = r.targets("alpha")[0]
+    assert r.cool(a, NOW, None, Cause.THROTTLED, unknown=True) == s.health.cooldown_ms

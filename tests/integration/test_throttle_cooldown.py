@@ -8,6 +8,7 @@ and moves the stack's fake clock: no test really sleeps.
 """
 
 import asyncio
+import email.utils
 from pathlib import Path
 
 import httpx
@@ -17,7 +18,7 @@ from spendgate.core.outcomes import Outcome, ReservationState
 from spendgate.pipeline.routing import MAX_WAIT_MS
 from tests.conftest import FakeClock
 from tests.fakes import Script
-from tests.integration.harness import Stack, async_test, open_stack
+from tests.integration.harness import NOW_MS, Stack, async_test, open_stack
 
 Alpha_CALL = 3500  # nano USD: 10 input and 5 output tokens at the catalog price
 SHORT = HealthConfig()
@@ -76,7 +77,9 @@ async def test_m01_a_call_waits_for_a_cooling_deployment_inside_its_one_hold(
         assert first.status_code == 429 and hosts(s) == ["a", "b"] and sleeps.taken == []
         second = await s.chat()  # a and b are both cooling: wait for the soonest, then go
         assert second.status_code == 200, second.text
-        assert len(sleeps.taken) == 1 and sleeps.taken[0] * 1000 <= SHORT.throttle_max_ms
+        soonest = min(a.cooldown_ms or 0 for a in s.observer.attempts[:2])
+        assert len(sleeps.taken) == 1  # the soonest plus this waiter's own jitter
+        assert soonest <= sleeps.taken[0] * 1000 <= soonest + SHORT.throttle_min_ms
         assert len(hosts(s)) == 3
         calls = await s.ledger.get_calls(rid_of(second))
         assert [(c.attempt, c.outcome, c.charged_nano) for c in calls] == [
@@ -128,10 +131,11 @@ async def test_a_retry_after_beyond_the_wait_bound_is_refused_at_once(tmp_path: 
 
 
 @async_test
-async def test_the_wait_stays_inside_the_request_deadline(tmp_path: Path) -> None:
-    """A 1 s cooldown is within the wait bound but not within a 1 s request deadline."""
+async def test_the_wait_leaves_a_full_wait_bound_before_the_deadline(tmp_path: Path) -> None:
+    """A 1 s cooldown fits the wait bound, but waiting it out of a 1.5 s deadline would leave
+    the call 0.5 s to be sent and maybe charged in full: refused free instead."""
     sleeps = Sleeps()
-    kwargs: dict[str, object] = {"sleep": sleeps, "max_request_seconds": 1.0}
+    kwargs: dict[str, object] = {"sleep": sleeps, "max_request_seconds": 1.5}
     async with open_stack(tmp_path, pipeline_kwargs=kwargs) as s:
         sleeps.clock = s.clock
         s.fake.enqueue(Script(status=429, retry_after="1"))
@@ -169,3 +173,36 @@ async def test_a_wait_that_ends_with_nothing_back_is_refused_free(tmp_path: Path
         assert r.status_code == 429 and code_of(r) == "upstream_throttled"
         assert len(taken) >= 1 and sum(taken) * 1000 <= MAX_WAIT_MS
         assert s.fake.calls == 1 and await s.totals() == (0, 0)
+
+
+def http_date(ms: int) -> str:
+    return email.utils.formatdate(ms / 1000, usegmt=True)
+
+
+@async_test
+async def test_an_http_date_retry_after_is_read_against_the_injected_clock(tmp_path: Path) -> None:
+    async with open_stack(tmp_path) as s:
+        s.fake.enqueue(Script(status=429, retry_after=http_date(NOW_MS + 3_000)))
+        r = await s.chat("alpha-one")
+        assert [a.cooldown_ms for a in s.observer.attempts] == [3_000]
+        assert r.status_code == 429 and r.headers["retry-after"] == "3"
+
+
+@async_test
+async def test_a_past_http_date_retry_after_gets_the_short_cooldown(tmp_path: Path) -> None:
+    async with open_stack(tmp_path) as s:
+        s.fake.enqueue(Script(status=429, retry_after=http_date(NOW_MS - 60_000)))
+        await s.chat("alpha-one")
+        cooled = s.observer.attempts[0].cooldown_ms
+        assert cooled is not None
+        assert SHORT.throttle_min_ms <= cooled <= SHORT.throttle_max_ms
+
+
+@async_test
+async def test_a_garbage_retry_after_cools_for_the_full_cooldown(tmp_path: Path) -> None:
+    """Nobody knows what an unreadable hint asked for: the breaker cooldown, not the short one."""
+    async with open_stack(tmp_path, cooldown=5) as s:
+        s.fake.enqueue(Script(status=429, retry_after="in a little while"))
+        r = await s.chat("alpha-one")
+        assert [a.cooldown_ms for a in s.observer.attempts] == [5_000]
+        assert r.status_code == 429 and r.headers["retry-after"] == "5"

@@ -25,7 +25,7 @@ from spendgate.core.catalog import Catalog
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.port import AttemptRecord
-from spendgate.pipeline.candidates import Cause, Router, Target
+from spendgate.pipeline.candidates import Cause, Router, Target, retry_hint
 from spendgate.pipeline.faults import Fault, fault_of
 from spendgate.pipeline.model import AttemptEvent, Clock, Observer, Sender
 from spendgate.pipeline.settle import Book, Flight, Reading, attempt_record, read_usage
@@ -145,14 +145,18 @@ class Forwarder:
     def _pause(self, job: Job, tried: set[str], waited: int, start: int) -> int | None:
         """Ms to wait for the soonest cooling candidate, or None: refuse now.
 
-        Bounded per request by `MAX_WAIT_MS` and by the request deadline; every pause is at
+        Each waiter adds its own jitter, so callers waiting on one deployment do not all wake
+        and send in the same instant; the pause is still clipped to what is left of
+        `MAX_WAIT_MS`. A wait must leave a full `MAX_WAIT_MS` before the request deadline, or
+        the call could be sent with no time left and be charged in full. Every pause is at
         least 1 ms and adds to `waited`, so the loop ends even if the clock stands still.
         """
-        now = self._now()
-        pause = self._router.soonest(job.targets, tried, now)
-        if pause is None or waited + pause > MAX_WAIT_MS:
+        now, left = self._now(), MAX_WAIT_MS - waited
+        soonest = self._router.soonest(job.targets, tried, now)
+        if soonest is None or soonest > left:
             return None
-        if self._deadline_ms is not None and now + pause >= start + self._deadline_ms:
+        pause = min(soonest + self._router.jitter(), left)
+        if self._deadline_ms is not None and now + pause + MAX_WAIT_MS > start + self._deadline_ms:
             return None
         return pause
 
@@ -347,12 +351,13 @@ class Forwarder:
         if err.not_processed(free):
             quota = err.code is ErrorCode.UPSTREAM_UNAVAILABLE  # e.g. insufficient_quota on a 429
             cause = Cause.QUOTA if quota else Cause.THROTTLED
-            cooldown = self._router.cool(target, now, err.retry_after_seconds, cause)
+            retry_s, unknown = retry_hint(err, response.headers, now)
+            cooldown = self._router.cool(target, now, retry_s, cause, unknown=unknown)
             self._record(
                 job, book, target, started, err.outcome(free), status, not_processed=True,
                 cooldown_ms=cooldown, error_code=err.code.value,
             )  # fmt: skip
-            return _Retry(cause, err.retry_after_seconds)
+            return _Retry(cause, retry_s)
         self._feed_health(target, status, now)
         self._record(
             job, book, target, started, err.outcome(free), status, not_processed=False,

@@ -8,12 +8,14 @@ errors. The pipeline never branches on `Provider.name` and calls nothing but thi
 refresh) lives in the async `prepare`, which the pipeline awaits just before each `translate`.
 """
 
+import email.utils
 import functools
 import json
 import math
 import re
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field, fields
+from datetime import UTC
 from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
@@ -70,9 +72,11 @@ def _header(headers: Mapping[str, str], name: str) -> str | None:
 def retry_after_seconds(headers: Mapping[str, str]) -> int | None:
     """`Retry-After` as whole seconds (rounded up, capped at a day); None for anything else.
 
-    Delta-seconds only (a decimal fraction is rounded up). An HTTP-date, a sign or a non-ASCII
-    digit (`isdigit` accepts "²", `int` rejects it) is "no hint": the pipeline uses its cooldown.
-    Never raises.
+    Delta-seconds only (a decimal fraction is rounded up). An HTTP-date needs the clock, so it is
+    None here and the pipeline reads it with `retry_after_date_ms` against its injected clock. A
+    sign, a non-ASCII digit (`isdigit` accepts "²", `int` rejects it) or other garbage is also
+    None here; the pipeline then sees the header present but unreadable (`has_retry_after`) and
+    cools for its full `cooldown_seconds`. Never raises.
     """
     raw = _header(headers, "retry-after")
     if raw is None:
@@ -85,6 +89,32 @@ def retry_after_seconds(headers: Mapping[str, str]) -> int | None:
         return _MAX_RETRY_SECONDS
     seconds = int(whole) + (1 if fraction.strip("0") else 0)  # round up: never retry early
     return min(seconds, _MAX_RETRY_SECONDS)
+
+
+def has_retry_after(headers: Mapping[str, str]) -> bool:
+    """Whether the answer carries any retry hint header, readable or not."""
+    return any(k.lower() in {"retry-after", "retry-after-ms"} for k in headers)
+
+
+def retry_after_date_ms(headers: Mapping[str, str]) -> int | None:
+    """An HTTP-date `Retry-After` (RFC 9110 10.2.3) as epoch milliseconds; None otherwise.
+
+    Any of the three date forms `email.utils` reads; a zone-less date is taken as UTC (the RFC
+    requires GMT). Never raises.
+    """
+    raw = _header(headers, "retry-after")
+    if raw is None or _DELTA.fullmatch(raw.strip()) is not None:
+        return None
+    try:
+        when = email.utils.parsedate_to_datetime(raw.strip())
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=UTC)
+    try:
+        return int(when.timestamp() * 1000)
+    except (OverflowError, OSError, ValueError):
+        return None
 
 
 def retry_after_ms_seconds(headers: Mapping[str, str]) -> int | None:
