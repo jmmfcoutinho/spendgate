@@ -142,7 +142,7 @@ def test_logs_drop_unknown_fields_and_are_json_lines() -> None:
 
 
 def _checks(
-    *, ledger: bool = True, catalog: bool = True, kill: bool = False, db: int = 1_000_000,
+    *, ledger: bool = True, catalog: bool = True, kill: bool | None = False, db: int = 1_000_000,
     now: int = 1_000_000,
 ) -> ReadinessChecks:  # fmt: skip
     async def ledger_ok() -> bool:
@@ -171,6 +171,11 @@ def test_readiness_with_a_global_kill_switch_engaged_is_ready_with_a_warning() -
     assert killed.ready and killed.reasons == ()
     assert killed.warnings == ("kill_switch_engaged: a global kill switch refuses every call",)
     assert killed.body() == {"status": "ready"}
+
+
+def test_a_failed_kill_switch_probe_is_a_warning_and_never_fails_readiness() -> None:
+    unknown = asyncio.run(compute_readiness(_checks(kill=None)))
+    assert unknown.ready and unknown.warnings == ("kill_switch_probe_failed",)
 
 
 # T-CLK-03

@@ -55,7 +55,7 @@ class ReadinessChecks:
 
     ledger_ok: LedgerProbe
     catalog_loaded: Callable[[], bool]
-    kill_switch_engaged: Callable[[], bool]
+    kill_switch_engaged: Callable[[], bool | None]  # None: the probe failed
     db_now_ms: DbClockProbe
     now_ms: Now
     skew_threshold_ms: int = field(default=CLOCK_SKEW_THRESHOLD_MS)
@@ -95,7 +95,10 @@ async def compute_readiness(checks: ReadinessChecks) -> ReadyStatus:
             warning = "clock_probe_failed"
         if warning:
             warnings.append(warning)
-        if checks.kill_switch_engaged():
+        engaged = checks.kill_switch_engaged()
+        if engaged is None:
+            warnings.append("kill_switch_probe_failed")
+        elif engaged:
             warnings.append("kill_switch_engaged: a global kill switch refuses every call")
     age = checks.catalog_age_days() if checks.catalog_age_days is not None else None
     if age is not None and age > checks.stale_after_days:

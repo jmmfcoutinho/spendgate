@@ -130,15 +130,17 @@ def default_readiness(ledger: AdminLedger, settings: Settings, now: Clock) -> Re
 
     The kill switch is only a warning on the admin detail (ADR-0015). `kill_switch_engaged` is
     synchronous but the ledger read is not, so the reachability probe (which `/readyz` always
-    awaits first) also refreshes the flag the sync probe reports. A probe that fails leaves the
-    flag as it was; the warning is then not reported, and `/readyz` is 503 for the ledger.
+    awaits first) also refreshes the flag the sync probe reports: None when that read failed.
     """
-    engaged = False
+    engaged: bool | None = False
 
     async def ledger_ok() -> bool:
         nonlocal engaged
         await ledger.get_scope("readyz-probe")  # a cheap read; raises when the store is down
-        engaged = await ledger.global_kill_engaged()
+        try:
+            engaged = await ledger.global_kill_engaged()
+        except Exception:
+            engaged = None  # a warning only: the kill switch never decides readiness
         return True
 
     def catalog_days() -> float | None:

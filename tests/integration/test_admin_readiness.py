@@ -39,6 +39,20 @@ async def test_t_obs_03_data_port_readyz_names_no_reason_warning_or_detail(
 
 
 @async_test
+async def test_a_failing_kill_switch_read_is_a_warning_and_readyz_stays_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken() -> bool:
+        raise RuntimeError("kill switch table unreadable")
+
+    async with open_admin(tmp_path) as a:
+        monkeypatch.setattr(a.stack.ledger, "global_kill_engaged", broken)
+        assert (await a.stack.client.get("/readyz")).status_code == 200
+        detail = await a.ok("GET", "/admin/v1/readiness")
+        assert detail["reasons"] == [] and "kill_switch_probe_failed" in detail["warnings"]  # type: ignore[operator]
+
+
+@async_test
 async def test_t_obs_03_readiness_detail_needs_usage_read(tmp_path: Path) -> None:
     async with open_admin(tmp_path) as a:
         assert (await a.call("GET", "/admin/v1/readiness", key="")).status_code == 401
