@@ -1,7 +1,8 @@
 """The HTTP adapter: a thin Starlette app over `Pipeline`. Every decision lives in the pipeline.
 
-Each route is one line naming its endpoint. Observability endpoints come from
-`gateway.observability`; the admin API is in `gateway.admin`.
+The POST routes come from `pipeline.model.ENDPOINTS`, so the gateway and library mode serve the
+same endpoints. Observability endpoints come from `gateway.observability`; the admin API is in
+`gateway.admin`.
 """
 
 import asyncio
@@ -22,17 +23,7 @@ from spendgate.gateway.observability import (
     readyz_endpoint,
 )
 from spendgate.pipeline.intake import ClientGone
-from spendgate.pipeline.model import (
-    CHAT,
-    EMBEDDINGS,
-    MESSAGES,
-    RESPONSES,
-    SPEECH,
-    TRANSCRIPTIONS,
-    ByteStream,
-    Endpoint,
-    Reply,
-)
+from spendgate.pipeline.model import ENDPOINTS, ByteStream, Endpoint, Reply
 from spendgate.pipeline.pipeline import Pipeline
 
 _ANY = ["GET", "POST", "PUT", "PATCH", "DELETE"]
@@ -156,13 +147,9 @@ def create_app(
             await asyncio.gather(*jobs, return_exceptions=True)
             await pipeline.aclose()
 
-    routes = [
-        Route(CHAT.path, _post(pipeline, CHAT), methods=["POST"]),
-        Route(RESPONSES.path, _post(pipeline, RESPONSES), methods=["POST"]),
-        Route(EMBEDDINGS.path, _post(pipeline, EMBEDDINGS), methods=["POST"]),
-        Route(TRANSCRIPTIONS.path, _post(pipeline, TRANSCRIPTIONS), methods=["POST"]),
-        Route(SPEECH.path, _post(pipeline, SPEECH), methods=["POST"]),
-        Route(MESSAGES.path, _post(pipeline, MESSAGES), methods=["POST"]),
+    # One POST route per data-plane endpoint: a new endpoint in `ENDPOINTS` is served here too.
+    routes = [Route(e.path, _post(pipeline, e), methods=["POST"]) for e in ENDPOINTS.values()]
+    routes += [
         Route("/v1/models", _models(pipeline), methods=["GET"]),
         Route("/v1/models/{model_id:path}", _models(pipeline), methods=["GET"]),
         Route("/livez", livez_endpoint(), methods=["GET"]),
