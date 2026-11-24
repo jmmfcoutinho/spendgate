@@ -2,42 +2,50 @@
 
 `serve` verified the key and then `handle` verified it again with a later clock reading; the
 closer kept every scope chain for the life of the process; and the heartbeat ended at the first
-step that raised (the gateway) or swallowed it without a trace (library mode).
+step that raised (the gateway) or swallowed it without a trace (library mode). One verification
+remains, plus a cheap re-check after the upload that the same key is still active.
 """
 
 import asyncio
 import dataclasses
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 import pytest
 
-from spendgate.core.errors import Refusal
+from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.money import Money
-from spendgate.ledger.key_types import Principal
+from spendgate.ledger.key_types import KeySpec, Principal
+from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import LedgerPort, ScopeRow
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.local.runtime import Runtime
 from spendgate.pipeline.closing import CHAIN_TTL_MS
-from spendgate.pipeline.model import KeyVerifier
+from spendgate.pipeline.model import CHAT, KeyVerifier
 from tests.conftest import FakeClock
-from tests.integration.harness import NOW_MS, async_test, open_stack
+from tests.integration.harness import NOW_MS, PEPPER, Stack, async_test, open_stack
 from tests.integration.test_local_support import settings_in
 
 _LOGGER = "spendgate.pipeline"
 
 
 class CountingVerifier:
-    """A `KeyVerifier` spy: counts verifications and passes them on."""
+    """A `KeyVerifier` spy: counts verifications and re-checks and passes them on."""
 
     def __init__(self, inner: KeyVerifier) -> None:
         self._inner = inner
         self.calls = 0
+        self.rechecks = 0
 
     async def verify_api(self, raw: str, now: int) -> Principal | Refusal:
         self.calls += 1
         return await self._inner.verify_api(raw, now)
+
+    async def still_active(self, principal: Principal, now: int) -> bool:
+        self.rechecks += 1
+        return await self._inner.still_active(principal, now)
 
 
 @async_test
@@ -46,9 +54,105 @@ async def test_serve_verifies_the_key_once_per_request(tmp_path: Path) -> None:
         spy = CountingVerifier(s.keys)
         s.pipeline._keys = spy
         assert (await s.chat()).status_code == 200
-        assert spy.calls == 1
+        assert (spy.calls, spy.rechecks) == (1, 1)
         assert (await s.chat()).status_code == 200
-        assert spy.calls == 2
+        assert (spy.calls, spy.rechecks) == (2, 2)
+
+
+class SlowUpload:
+    """A request body that sends its first half, waits until the test opens `gate`, then ends."""
+
+    def __init__(self, raw: bytes) -> None:
+        half = len(raw) // 2
+        self.parts = [raw[:half], raw[half:]]
+        self.waiting, self.gate = asyncio.Event(), asyncio.Event()
+
+    def __aiter__(self) -> "SlowUpload":
+        return self
+
+    async def __anext__(self) -> bytes:
+        if len(self.parts) == 1:
+            self.waiting.set()
+            await self.gate.wait()
+        if not self.parts:
+            raise StopAsyncIteration
+        return self.parts.pop(0)
+
+
+async def upload_while(s: Stack, meanwhile: Callable[[str], Awaitable[object]]) -> tuple[int, str]:
+    """Serve one chat whose upload stalls halfway while `meanwhile(key_id)` runs; (status, code)."""
+    spy = CountingVerifier(s.keys)
+    s.pipeline._keys = spy
+    who = await s.keys.verify_api(s.secret, s.clock.now())
+    assert isinstance(who, Principal)
+    body = {"model": "alpha", "max_tokens": 100, "messages": [{"role": "user", "content": "hi"}]}
+    upload = SlowUpload(json.dumps(body).encode())
+    headers = {"authorization": f"Bearer {s.secret}", "content-type": "application/json"}
+    call = asyncio.ensure_future(s.pipeline.serve(CHAT, headers, upload))
+    await asyncio.wait_for(upload.waiting.wait(), 5)
+    await meanwhile(who.key_id)
+    upload.gate.set()
+    reply = await asyncio.wait_for(call, 5)
+    assert (spy.calls, spy.rechecks) == (1, 1)  # one full verification, one cheap re-check
+    return reply.status, json.loads(reply.body).get("error", {}).get("code", "")
+
+
+@async_test
+async def test_a_key_revoked_during_a_slow_upload_is_refused_before_the_hold(
+    tmp_path: Path,
+) -> None:
+    async with open_stack(tmp_path) as s:
+
+        async def revoke(key_id: str) -> None:
+            await s.keys.revoke_key(key_id, actor="test", now=s.clock.now())
+
+        status, code = await upload_while(s, revoke)
+        assert (status, code) == (401, ErrorCode.UNAUTHORIZED.value)
+        s.assert_no_contact()
+        assert await s.totals() == (0, 0)  # nothing was held
+
+
+@async_test
+async def test_a_key_that_expires_during_a_slow_upload_is_refused_before_the_hold(
+    tmp_path: Path,
+) -> None:
+    async with open_stack(tmp_path) as s:
+
+        async def rotate_and_wait(key_id: str) -> None:
+            await s.keys.rotate_key(key_id, grace_ms=1_000, actor="test", now=s.clock.now())
+            s.clock.advance(ms=1_000)  # the old key's grace period ends while the body is sent
+
+        status, code = await upload_while(s, rotate_and_wait)
+        assert (status, code) == (401, ErrorCode.UNAUTHORIZED.value)
+        s.assert_no_contact()
+        assert await s.totals() == (0, 0)
+
+
+@async_test
+async def test_an_active_key_passes_the_re_check_after_a_slow_upload(tmp_path: Path) -> None:
+    async with open_stack(tmp_path) as s:
+
+        async def nothing(_key_id: str) -> None:
+            return None
+
+        status, _code = await upload_while(s, nothing)
+        assert status == 200
+
+
+@async_test
+async def test_still_active_reads_the_key_by_id_when_its_prefix_was_pushed_out(
+    tmp_path: Path,
+) -> None:
+    async with open_stack(tmp_path) as s:
+        keys = KeyService(s.ledger, PEPPER, max_entries=1)
+        who = await keys.verify_api(s.secret, NOW_MS)
+        assert isinstance(who, Principal)
+        other = await keys.create_key(KeySpec(s.scope.id, "other"), actor="test", now=NOW_MS)
+        assert isinstance(await keys.verify_api(other.secret, NOW_MS), Principal)  # evicts `who`
+        assert who.key_id not in keys._prefixes
+        assert await keys.still_active(who, NOW_MS)
+        await s.ledger.revoke_key(who.key_id, actor="test", now=NOW_MS)  # behind the cache's back
+        assert not await keys.still_active(who, NOW_MS)
 
 
 class MovableScopes:
@@ -163,3 +267,43 @@ async def test_library_mode_runs_the_supervised_heartbeat_and_logs_a_failed_swee
         assert len(failures) == 1 and "sweep" in failures[0].getMessage()
     finally:
         await runtime.aclose()
+
+
+async def no_wait(_seconds: float) -> None:
+    return None
+
+
+@async_test
+async def test_cancelling_the_heartbeat_while_a_step_is_blocked_stops_it(tmp_path: Path) -> None:
+    async with open_stack(tmp_path) as s:
+        entered, never = asyncio.Event(), asyncio.Event()
+
+        async def blocked() -> None:
+            entered.set()
+            await never.wait()
+
+        beat = asyncio.ensure_future(s.pipeline.heartbeat(no_wait, also=[("blocked", blocked)]))
+        await asyncio.wait_for(entered.wait(), 5)
+        beat.cancel()
+        await asyncio.gather(beat, return_exceptions=True)
+        assert beat.cancelled()
+
+
+@async_test
+async def test_a_step_that_raises_cancelled_error_by_itself_does_not_end_the_heartbeat(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    async with open_stack(tmp_path) as s:
+        runs = [0]
+
+        async def stray_cancel() -> None:
+            runs[0] += 1
+            if runs[0] == 1:
+                raise asyncio.CancelledError  # an inner await was cancelled, not the heartbeat
+
+        _slept, sleep = beats_then_stop(3)
+        with caplog.at_level(logging.ERROR, logger=_LOGGER), pytest.raises(asyncio.CancelledError):
+            await s.pipeline.heartbeat(sleep, also=[("stray", stray_cancel)])
+        assert runs == [3]
+        failures = [r for r in caplog.records if r.name == _LOGGER]
+        assert len(failures) == 1 and "CancelledError" in failures[0].getMessage()
