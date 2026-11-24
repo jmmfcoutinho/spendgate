@@ -58,7 +58,8 @@ async def test_a_refused_routed_model_is_labelled_with_its_catalog_id(tmp_path: 
 
 
 @async_test
-async def test_session_user_and_tag_headers_never_become_labels(tmp_path: Path) -> None:
+async def test_session_user_and_tag_headers_still_never_become_labels(tmp_path: Path) -> None:
+    # Pins behaviour that already held before issue #17; it guards against a regression.
     metrics, obs = observer()
     headers = {
         SESSION_HEADER: "sess-fake-4711", USER_HEADER: "user-fake-4711",
