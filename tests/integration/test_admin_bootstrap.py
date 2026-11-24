@@ -1,6 +1,7 @@
 """The config `bootstrap` section: create-only, idempotent, secrets only when created."""
 
 import re
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -178,5 +179,14 @@ async def test_bootstrap_warns_when_an_existing_key_has_other_session_settings(
         assert api[0].policy.session_defaults is None  # create-only: never applied
         serve.print_bootstrap(report)
         assert "warning: bootstrap: key app-key" in capsys.readouterr().err
+        # Rotate, then fix the new key: the old one warns only while its grace period runs.
+        new = await keys.rotate_key(api[0].id, grace_ms=1000, actor="op", now=NOW_MS + 3)
+        wanted = SessionDefaults(max_steps=5, max_new_sessions_per_hour=60, required=True)
+        policy = replace(new.record.policy, session_defaults=wanted)
+        await keys.set_key_policy(policy, actor="op", now=NOW_MS + 4)
+        (old,) = (await apply_bootstrap(changed, ledger, keys, NOW_MS + 5)).warnings
+        assert api[0].id in old and new.record.id not in old
+        after = await apply_bootstrap(changed, ledger, keys, NOW_MS + 3 + 1000)
+        assert after.warnings == []  # an expired key takes no calls: nothing to report
     finally:
         ledger.close()

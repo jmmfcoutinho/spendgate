@@ -117,22 +117,24 @@ async def _key(
     kind = KeyKind.ADMIN if k.admin_scopes is not None else KeyKind.API
     existing = [r for r in await ledger.list_keys(scope.id, kind=kind) if r.name == k.name]
     if existing:  # a revoked key is not recreated either
-        _warn_session_drift(k, path, existing, report)
+        _warn_session_drift(k, path, existing, now, report)
         return
     made = await keys.create_key(_spec(k, scope), actor=ACTOR, now=now)
     report.keys.append(CreatedKey(k.name, kind.value, path, made.secret))
 
 
 def _warn_session_drift(
-    k: BootstrapKey, path: str, existing: list[KeyRecord], report: BootstrapReport
+    k: BootstrapKey, path: str, existing: list[KeyRecord], now: int, report: BootstrapReport
 ) -> None:
     """Create-only would keep an old key's session settings silently; `session_required` is a
-    security setting, so a difference from the config is reported, never applied."""
+    security setting, so a difference from the config is reported, never applied. Revoked and
+    expired keys (the old key after a rotation) take no calls, so they are not reported."""
     if k.admin_scopes is not None:
         return
     wanted = _session_defaults(k)
     for rec in existing:
-        if rec.revoked_at is None and rec.policy.session_defaults != wanted:
+        live = rec.revoked_at is None and (rec.expires_at is None or now < rec.expires_at)
+        if live and rec.policy.session_defaults != wanted:
             report.warnings.append(
                 f"key {k.name} ({path}) exists with other session_required or session_defaults "
                 f"than the config; bootstrap applies them only when it creates a key: change the "
