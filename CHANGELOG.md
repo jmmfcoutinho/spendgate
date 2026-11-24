@@ -206,6 +206,20 @@ All notable changes to this project are documented here. The format follows
   published; stale paths and wording fixed in the catalog schema page, the design summary (name
   check done), decision D4 (`ledger.currency` is required) and the example config header (which
   secrets must exist before `check-config`).
+- An import-linter contract, "only the gateway imports Starlette", so no package but
+  `spendgate.gateway` can import Starlette directly.
+- Operations guidance for draining on restart (a `preStop` wait, a grace period sized to
+  `server.max_request_seconds`, and the lease and sweep window after a kill) and for a verified
+  TLS Postgres connection (`sslmode=verify-full`).
+- Library mode: why an autonomous agent with shell access can undo it, and to use the proxy with
+  the perimeter instead.
+- The docs now match the code: the request path authenticates before it reads the body (SR-01),
+  steps 3 to 6 run in `pipeline/steps.py` on `core` rules, the modules that import Starlette are
+  listed, and the architecture status and ADR list are current for v0.1.1.
+- Session limits are documented as applying to calls that send `X-Spendgate-Session`, with the
+  parent budgets as the backstop (README, design summary, threat model TH-09). Overruns are
+  described as recorded, exposed as metrics and shown in status. The README states the current
+  product size.
 
 ## [0.1.1] - 2026-11-20
 
