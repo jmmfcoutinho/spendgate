@@ -19,18 +19,18 @@ from dataclasses import replace
 
 from spendgate.config import Settings
 from spendgate.core.errors import ErrorCode, Refusal, Shape
-from spendgate.core.health import HealthConfig
 from spendgate.core.limits import Admit, InMemoryLimitStore, LimitStore
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.ids import new_id
 from spendgate.ledger.key_types import Principal
-from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
-from spendgate.pipeline import answers, candidates, intake, replies, steps
+from spendgate.ledger.port import Held, LedgerPort
+from spendgate.pipeline import answers, candidates, intake, replies, steps, tracing
 from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.auth import authenticate, recheck
 from spendgate.pipeline.closing import Call, Closer, Sleeper
 from spendgate.pipeline.faults import InternalEvent, fault_of
+from spendgate.pipeline.holding import HOLD_SECONDS, Holder
 from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import (
     Clock,
@@ -54,16 +54,7 @@ from spendgate.pipeline.upkeep import Step, Upkeep, heartbeat
 from spendgate.pipeline.watch import StreamFacts, session_ends_at
 from spendgate.providers.port import Provider, SseLimits
 
-_LEDGER_RETRY_SECONDS = 5
-# How long a call waits for its hold. Above the Postgres lock and statement timeouts (2 s, 5 s),
-# so those usually answer first; this catches the rest (pool wait, slow server, SQLite busy).
-HOLD_SECONDS = 10.0
 _MS = 1000
-_LEDGER_DOWN = Refusal(
-    ErrorCode.LEDGER_UNAVAILABLE,
-    "The ledger is unavailable; try again.",
-    retry_after_seconds=_LEDGER_RETRY_SECONDS,
-)
 _INTERNAL = answers.INTERNAL
 
 
@@ -95,7 +86,7 @@ class Pipeline:
         gate: intake.Gate | None = None, stream_limits: SseLimits = STREAM_LIMITS,
         ping_seconds: float = PING_SECONDS, sleep: Sleeper = asyncio.sleep,
         max_request_seconds: float | None = None, body_timeout_seconds: float | None = None,
-        hold_seconds: float = HOLD_SECONDS,
+        hold_seconds: float = HOLD_SECONDS, tracer: tracing.Tracer | None = None,
     ) -> None:  # fmt: skip
         missing = {r.catalog_id.partition("/")[0] for r in settings.routes.values()} - set(
             providers
@@ -112,25 +103,26 @@ class Pipeline:
         )  # fmt: skip
         self._max_request_s = max_request_seconds or server.max_request_seconds
         self._body_timeout_s = body_timeout_seconds or server.body_read_timeout_seconds
-        self._hold_s = hold_seconds
         self._ledger, self._keys, self._providers = ledger, keys, providers
         self._limits = limits or InMemoryLimitStore()
         self._now, self._new_id = now_ms, new_request_id
         self._observer = observer or NoopObserver()
+        self._tracer: tracing.Tracer = tracing.Guarded(tracer) if tracer else tracing.NoTracer()
         self._instance = instance or instance_id()
-        health: HealthConfig = settings.health
-        self._router = candidates.Router(settings.routes, health)
+        self._router = candidates.Router(settings.routes, settings.health)
         self._forwarder = Forwarder(
             sender, self._router, settings.catalog, now_ms, self._observer,
             settings.config.routing.max_attempts, stream_limits, sleep, self._max_request_s * _MS,
         )  # fmt: skip
-        self._closer = Closer(settings, ledger, self._limits, self._observer, now_ms, sleep)
+        obs, tracer_ = self._observer, self._tracer
+        self._closer = Closer(settings, ledger, self._limits, obs, now_ms, sleep, tracer_)
         self._owned: set[str] = set()  # holds this pipeline is still responsible for closing
         self._leases = Leases(settings.lease_ms, settings.heartbeat_ms)
         self._upkeep = Upkeep(
             ledger, self._closer, self._leases, self._owned, now_ms, self._instance,
-            settings.lease_ms,
+            settings.lease_ms, self._observer,
         )  # fmt: skip
+        self._holder = Holder(ledger, self._closer, obs, tracer_, now_ms, self._spawn, hold_seconds)
         self._ping_seconds = ping_seconds
         self._tasks: set[asyncio.Future[object]] = set()
 
@@ -207,7 +199,7 @@ class Pipeline:
         )
         if isinstance(admit, Refusal):
             return self._refuse(rid, endpoint, admit, who, inbound)
-        call = Call(rid, inbound, who, prepared, admit, now)
+        call = Call(rid, inbound, who, prepared, admit, now, self._tracer.parent(inbound.headers))
         try:
             return await self._hold_and_forward(call)
         except Exception as exc:
@@ -226,7 +218,7 @@ class Pipeline:
             call.id, self._instance, call.started,
         )  # fmt: skip
         book = Book(prepared.pricing, targets[0].label)
-        held = await self._hold(request, call, book)
+        held = await self._holder.hold(request, call, book)
         if not isinstance(held, Held):
             await self._closer.free_limits(call.admit)
             return self._refuse(call.id, call.inbound.endpoint, held, call.principal, call.inbound)
@@ -243,43 +235,6 @@ class Pipeline:
         )  # fmt: skip
         return await self._forward_and_settle(call, job, book, held)
 
-    async def _hold(self, request: HoldRequest, call: Call, book: Book) -> Held | Refusal:
-        """The admission transaction, shielded and bounded: neither a cancel nor the deadline may
-        strand a committed hold."""
-        task = asyncio.ensure_future(self._ledger.hold(request))
-        deadline = asyncio.timeout(self._hold_s)
-        try:
-            async with deadline:
-                result = await asyncio.shield(task)
-        except asyncio.CancelledError:
-            self._spawn(
-                self._give_back(task, call, book)
-            )  # before the upstream call: released at 0
-            raise
-        except ConflictError:
-            return _INTERNAL
-        except Exception:
-            if deadline.expired():
-                # Too slow: refuse now. The task runs on, bounded by the ledger's own timeouts,
-                # and whatever it commits is released at 0; the caller frees the limits.
-                self._spawn(self._give_back(task, replace(call, admit=None), book))
-            else:  # the transaction may have committed: end it free, never swept at full
-                await self._closer.release_unsent(call.id, book)
-            return _LEDGER_DOWN
-        return result.refusal if isinstance(result, Refused) else result
-
-    async def _give_back(
-        self, task: "asyncio.Future[Held | Refused]", call: Call, book: Book
-    ) -> None:
-        """A cancel or the deadline cut the hold short: if it may commit, release it (unsent)."""
-        try:
-            result = await task
-        except Exception:
-            result = None  # ambiguous: release is state-guarded, harmless if nothing committed
-        if result is None or isinstance(result, Held):
-            await self._closer.release_unsent(call.id, book)
-        await self._closer.free_limits(call.admit)
-
     # --- step 8 and 9 -------------------------------------------------------------------------
 
     async def _forward_and_settle(self, call: Call, job: Job, book: Book, held: Held) -> Reply:
@@ -291,8 +246,10 @@ class Pipeline:
             if job.request.stream:  # headers go out before the cost exists: room after the hold
                 pre = await self._closer.room_left(call.principal.scope_id, held.rooms)
                 standing = await self._standing(call, held)
-            async with asyncio.timeout(self._max_request_s):  # SR-13: no call runs forever
-                result = await self._forwarder.run(job, book)
+            with self._tracer.span(tracing.FORWARD, call.trace, call.tags) as span:
+                async with asyncio.timeout(self._max_request_s):  # SR-13: no call runs forever
+                    result = await self._forwarder.run(job, book)
+                span.set("spendgate.attempts", len(book.attempts) + (book.flight is not None))
         except asyncio.CancelledError:
             interrupted = Outcome.CANCELLED  # after send: the full hold; before: released
             raise
@@ -442,7 +399,11 @@ class Pipeline:
             ("renew_leases", self.renew_leases),
             ("watch_streams", self.watch_streams),
         ]
-        await heartbeat(self.settings.heartbeat_ms / _MS, [*own, *also], sleep)
+
+        def failed(step: str) -> None:  # looked up late: an older observer changes nothing
+            self._observer.on_heartbeat_failed(step)
+
+        await heartbeat(self.settings.heartbeat_ms / _MS, [*own, *also], sleep, failed)
 
     async def watch_streams(self) -> None:
         """Stop open streams a kill switch or their session's time limit now forbids (2.8)."""

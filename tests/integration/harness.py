@@ -33,6 +33,7 @@ from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import (
     AttemptEvent,
     HeldEvent,
+    LedgerEvent,
     RefusedEvent,
     SettledEvent,
 )
@@ -177,6 +178,8 @@ class Recorder:
         self.attempts: list[AttemptEvent] = []
         self.settled: list[SettledEvent] = []
         self.internal: list[InternalEvent] = []
+        self.ledger: list[LedgerEvent] = []
+        self.heartbeat_failures: list[str] = []
 
     def on_refused(self, event: RefusedEvent) -> None:
         self.refused.append(event)
@@ -192,6 +195,12 @@ class Recorder:
 
     def on_internal(self, event: InternalEvent) -> None:
         self.internal.append(event)
+
+    def on_ledger(self, event: LedgerEvent) -> None:
+        self.ledger.append(event)
+
+    def on_heartbeat_failed(self, step: str) -> None:
+        self.heartbeat_failures.append(step)
 
 
 @dataclass(slots=True)

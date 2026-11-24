@@ -22,6 +22,7 @@ from spendgate.pipeline.model import (
     Clock,
     HeldEvent,
     KeyVerifier,
+    LedgerEvent,
     RefusedEvent,
     Sender,
     SettledEvent,
@@ -89,6 +90,12 @@ class GatewayObserver:
 
     def on_internal(self, event: InternalEvent) -> None:
         log_internal(self._logger, event)
+
+    def on_ledger(self, event: LedgerEvent) -> None:
+        pass  # ledger health metrics are not published yet
+
+    def on_heartbeat_failed(self, step: str) -> None:
+        pass  # the heartbeat already logs the failure
 
 
 def catalog_age_seconds(settings: Settings, now_ms: int) -> float | None:

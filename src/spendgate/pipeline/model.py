@@ -152,6 +152,16 @@ class SettledEvent:
     review_required: bool = False  # C-22: absurd reported usage, booked in full and flagged
     ttft_ms: int | None = None  # streams: request start to the first byte sent to the client
     http_status: int | None = None  # the provider's status on the last attempt; None: no answer
+    upstream_ms: int = 0  # summed attempt latencies; latency_ms minus this is gateway overhead
+
+
+@dataclass(frozen=True, slots=True)
+class LedgerEvent:
+    """One money-path ledger call: `op` is a fixed name (hold, settle, release, renew)."""
+
+    op: str
+    ms: int
+    ok: bool  # False: it raised, or a hold outran its deadline
 
 
 class Observer(Protocol):
@@ -171,6 +181,10 @@ class Observer(Protocol):
 
     def on_internal(self, event: InternalEvent) -> None: ...
 
+    def on_ledger(self, event: LedgerEvent) -> None: ...
+
+    def on_heartbeat_failed(self, step: str) -> None: ...
+
 
 class NoopObserver:
     def on_refused(self, event: RefusedEvent) -> None:
@@ -187,6 +201,18 @@ class NoopObserver:
 
     def on_internal(self, event: InternalEvent) -> None:
         pass
+
+    def on_ledger(self, event: LedgerEvent) -> None:
+        pass
+
+    def on_heartbeat_failed(self, step: str) -> None:
+        pass
+
+
+def report_ledger(observer: Observer, op: str, started: int, now: int, *, ok: bool) -> None:
+    """Time one ledger call for the metrics; an older or failing observer changes nothing."""
+    with contextlib.suppress(Exception):
+        observer.on_ledger(LedgerEvent(op, max(now - started, 0), ok))
 
 
 def report_internal(observer: Observer | None, event: InternalEvent) -> None:
