@@ -35,6 +35,8 @@ Used at `server`.
 | `body_read_timeout_seconds` | positive integer | `30` | Longest a client may take to send its whole request body (default 30). A slower or stalled upload is refused with HTTP 408 and frees its place at once. |
 | `max_request_seconds` | positive integer | `900` | Longest one call or stream may run, end to end (default 900). At the limit the gateway stops it and settles it as `timeout` (buffered) or `stream_broken` (stream): the actual usage if seen, else the full hold. |
 | `max_concurrent_requests` | positive integer | `128` | Most requests being admitted at once; beyond it the proxy refuses fast. It covers intake only: a running stream is limited by the key's concurrency. |
+| `keep_alive_seconds` | positive integer | `75` | How long an idle client connection stays open (default 75). Keep it above the load balancer's idle timeout (60 s on many), or the balancer may send a request on a connection the proxy is closing and answer it with a 502. |
+| `graceful_shutdown_seconds` | positive integer | `30` | Drain deadline after `SIGTERM` (default 30): calls still running then are stopped and settled as cancelled (the full hold once sent, unless usage was seen). Keep it below the orchestrator's grace period minus any `preStop` wait; set it above `max_request_seconds` to let every call finish. See the operations guide, Draining on restart. |
 | `key_pepper` | secret reference (`env:NAME` or `file:/path`) | required | Secret used to hash stored key secrets. Keep it: changing it invalidates every key. |
 
 ## Ledger

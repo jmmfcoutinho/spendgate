@@ -302,7 +302,11 @@ async def test_ack_overrun_clears_the_review_flag(tmp_path: Path) -> None:
 
 
 @async_test
-async def test_kill_switch_engage_list_lift_and_readyz(tmp_path: Path) -> None:
+async def test_a_global_kill_switch_refuses_calls_but_leaves_every_replica_ready(
+    tmp_path: Path,
+) -> None:
+    """ADR-0015: the switch lives in the shared ledger, so failing readiness on it would drop every
+    replica from the load balancer; the pipeline refuses each call with a readable 503 instead."""
     async with open_admin(tmp_path) as a:
         assert (await a.stack.client.get("/readyz")).status_code == 200
         made = await a.ok(
@@ -312,9 +316,10 @@ async def test_kill_switch_engage_list_lift_and_readyz(tmp_path: Path) -> None:
         listed = await a.ok("GET", f"{BASE}/kill-switches")
         assert [k["id"] for k in listed["data"]] == [made["id"]]  # type: ignore[attr-defined]
         ready = await a.stack.client.get("/readyz")
-        assert ready.status_code == 503 and ready.json() == {"status": "not_ready"}  # SR-06
+        assert ready.status_code == 200 and ready.json() == {"status": "ready"}  # SR-06
         detail = await a.call("GET", "/admin/v1/readiness")
-        assert detail.status_code == 503 and "kill_switch_engaged" in detail.json()["reasons"]
+        assert detail.status_code == 200 and detail.json()["reasons"] == []
+        assert any(w.startswith("kill_switch_engaged") for w in detail.json()["warnings"])
         refused = await a.stack.chat()
         assert refused.status_code == 503 and refused.json()["error"]["code"] == "kill_switch"
         await a.ok("DELETE", f"{BASE}/kill-switches/{made['id']}", 204)

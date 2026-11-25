@@ -83,6 +83,17 @@ D: dict[str, str] = {
         "Most requests being admitted at once; beyond it the proxy refuses fast. It covers "
         "intake only: a running stream is limited by the key's concurrency."
     ),
+    "Server.keep_alive_seconds": (
+        "How long an idle client connection stays open (default 75). Keep it above the load "
+        "balancer's idle timeout (60 s on many), or the balancer may send a request on a "
+        "connection the proxy is closing and answer it with a 502."
+    ),
+    "Server.graceful_shutdown_seconds": (
+        "Drain deadline after `SIGTERM` (default 30): calls still running then are stopped and "
+        "settled as cancelled (the full hold once sent, unless usage was seen). Keep it below the "
+        "orchestrator's grace period minus any `preStop` wait; set it above `max_request_seconds` "
+        "to let every call finish. See the operations guide, Draining on restart."
+    ),
     "Server.key_pepper": (
         "Secret used to hash stored key secrets. Keep it: changing it invalidates every key."
     ),

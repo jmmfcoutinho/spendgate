@@ -6,6 +6,8 @@ import os
 import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
+from types import FrameType
+from typing import Literal
 
 import httpx
 import uvicorn
@@ -14,6 +16,7 @@ from spendgate import package_version
 from spendgate.cli.client import EXIT_CONFIG, EXIT_OK
 from spendgate.cli.runtime import Runtime, open_runtime, system_ms
 from spendgate.config import ConfigError, Settings, check_config, load
+from spendgate.config.schema import Server
 from spendgate.gateway.admin import combine, create_admin_app
 from spendgate.gateway.admin_http import AdminContext
 from spendgate.gateway.app import create_app
@@ -91,6 +94,20 @@ class _Follower(uvicorn.Server):
         yield
 
 
+class _Leader(uvicorn.Server):
+    """The data server. It hands every signal to the admin server too, so both drain at once and
+    the stop takes one drain deadline, not two in a row."""
+
+    def __init__(self, config: uvicorn.Config, follower: uvicorn.Server | None = None) -> None:
+        super().__init__(config)
+        self._follower = follower
+
+    def handle_exit(self, sig: int, frame: FrameType | None) -> None:
+        super().handle_exit(sig, frame)
+        if self._follower is not None:
+            self._follower.handle_exit(sig, frame)  # same rules: a SIGINT during the drain forces
+
+
 @dataclass(frozen=True, slots=True)
 class Listen:
     host: str
@@ -137,24 +154,44 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         )  # fmt: skip
         separate = settings.config.server.admin
         admin_app = create_admin_app(ctx, shared_port=separate is None)
-        main = parse_listen(settings.config.server.listen)
+        main, server = parse_listen(settings.config.server.listen), settings.config.server
         if separate is None:
-            await _run(combine(data_app, admin_app), main, None, None)
+            await _run(combine(data_app, admin_app), main, None, None, server)
         else:
-            await _run(data_app, main, admin_app, parse_listen(separate.listen))
+            await _run(data_app, main, admin_app, parse_listen(separate.listen), server)
 
 
-async def _run(data: object, main: Listen, admin: object | None, admin_at: Listen | None) -> None:
-    first = uvicorn.Server(uvicorn.Config(data, main.host, main.port, lifespan="on"))  # type: ignore[arg-type]
+def uvicorn_config(
+    app: object, at: Listen, server: Server, *, lifespan: Literal["on", "off"]
+) -> uvicorn.Config:
+    """One listener's uvicorn settings: keep-alive and the drain deadline come from `server`.
+
+    At the deadline uvicorn cancels the calls still running; the pipeline settles each one as a
+    cancel (M-13), so the deadline must end before the orchestrator kills the process.
+    """
+    return uvicorn.Config(
+        app,  # type: ignore[arg-type]
+        at.host,
+        at.port,
+        lifespan=lifespan,
+        timeout_keep_alive=server.keep_alive_seconds,
+        timeout_graceful_shutdown=server.graceful_shutdown_seconds,
+    )
+
+
+async def _run(
+    data: object, main: Listen, admin: object | None, admin_at: Listen | None, server: Server
+) -> None:
     if admin is None or admin_at is None:
-        await first.serve()
+        await _Leader(uvicorn_config(data, main, server, lifespan="on")).serve()
         return
-    second = _Follower(uvicorn.Config(admin, admin_at.host, admin_at.port, lifespan="off"))  # type: ignore[arg-type]
+    second = _Follower(uvicorn_config(admin, admin_at, server, lifespan="off"))
+    first = _Leader(uvicorn_config(data, main, server, lifespan="on"), second)
     task = asyncio.ensure_future(second.serve())
     try:
         await first.serve()
     finally:
-        second.should_exit = True
+        second.should_exit = True  # the data server stopped without a signal (a startup error)
         await task
 
 

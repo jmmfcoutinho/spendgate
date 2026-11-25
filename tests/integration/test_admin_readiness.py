@@ -3,6 +3,8 @@ the admin key (SR-06, SR-05)."""
 
 from pathlib import Path
 
+import pytest
+
 from spendgate.gateway.observability import STALE_CATALOG_DAYS
 from spendgate.gateway.wiring import bind_catalog_metrics, catalog_age_seconds
 from tests.integration.harness import NOW_MS, async_test
@@ -12,7 +14,9 @@ DAY_S = 86_400
 
 
 @async_test
-async def test_t_obs_03_data_port_readyz_names_no_reason_warning_or_detail(tmp_path: Path) -> None:
+async def test_t_obs_03_data_port_readyz_names_no_reason_warning_or_detail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     async with open_admin(tmp_path) as a:
         ok = await a.stack.client.get("/readyz")
         assert (ok.status_code, ok.json()) == (200, {"status": "ready"})
@@ -21,9 +25,31 @@ async def test_t_obs_03_data_port_readyz_names_no_reason_warning_or_detail(tmp_p
             "POST", "/admin/v1/kill-switches", 201,
             json={"target_kind": "global", "reason": "drill"},
         )  # fmt: skip
+        warned = await a.stack.client.get("/readyz")  # a kill switch is a warning (ADR-0015)
+        assert (warned.status_code, warned.json()) == (200, {"status": "ready"})
+
+        async def unreachable(_scope_id: str) -> None:
+            raise ConnectionError("postgresql://db.invalid/sg")
+
+        monkeypatch.setattr(a.stack.ledger, "get_scope", unreachable)
         down = await a.stack.client.get("/readyz")
         assert (down.status_code, down.json()) == (503, {"status": "not_ready"})
-        assert "kill" not in down.text and "skew" not in down.text and "catalog" not in down.text
+        for word in ("kill", "skew", "catalog", "ledger", "postgresql"):
+            assert word not in warned.text and word not in down.text
+
+
+@async_test
+async def test_a_failing_kill_switch_read_is_a_warning_and_readyz_stays_ready(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def broken() -> bool:
+        raise RuntimeError("kill switch table unreadable")
+
+    async with open_admin(tmp_path) as a:
+        monkeypatch.setattr(a.stack.ledger, "global_kill_engaged", broken)
+        assert (await a.stack.client.get("/readyz")).status_code == 200
+        detail = await a.ok("GET", "/admin/v1/readiness")
+        assert detail["reasons"] == [] and "kill_switch_probe_failed" in detail["warnings"]  # type: ignore[operator]
 
 
 @async_test

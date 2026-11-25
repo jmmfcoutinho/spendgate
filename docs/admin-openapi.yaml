@@ -47,8 +47,10 @@ paths:
       summary: Readiness in detail
       description: >-
         What `/readyz` on the data port withholds: the failing reasons (`ledger_unreachable`,
-        `catalog_not_loaded`, `kill_switch_engaged`) and the warnings (`clock_skew`,
-        `catalog_stale`). The status code is 200 when ready and 503 when not. Needs `usage:read`.
+        `catalog_not_loaded`) and the warnings (`clock_skew`, `clock_probe_failed`,
+        `kill_switch_engaged`, `kill_switch_probe_failed`, `catalog_stale`). A kill switch is never a failing reason: calls are
+        refused with `kill_switch` instead. The status code is 200 when ready and 503 when not.
+        Needs `usage:read`.
       x-required-scope: usage:read
       responses:
         '200':

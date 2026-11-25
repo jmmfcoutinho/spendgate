@@ -26,7 +26,7 @@ Status: implemented in v0.1. Provider shapes checked 2026-11-13: Anthropic error
 
 No Realtime endpoint in v0.1 (see the [roadmap](../ROADMAP.md)). Provider slugs are adapter module names.
 
-Other paths under `/v1/` return 404 `not_found`. Ops endpoints (no auth, no body): `GET /livez`, `GET /readyz` (ledger + catalog loaded; the status code and `{"status"}` only, details at `GET /admin/v1/readiness`), `GET /metrics` (Prometheus; served by the admin app only, see 6).
+Other paths under `/v1/` return 404 `not_found`. Ops endpoints (no auth, no body): `GET /livez`, `GET /readyz` (ledger + catalog loaded, a kill switch never fails it; the status code and `{"status"}` only, details at `GET /admin/v1/readiness`), `GET /metrics` (Prometheus; served by the admin app only, see 6).
 
 **`model` field.** A gateway model name from `spendgate.yaml` (`models:` alias, which maps to an ordered list of deployments of **one** catalog id, or the catalog id itself such as `openai/gpt-5-mini`). Fallback in v0.1 is between deployments of the same catalog id only (regions, resources, keys); cross-model fallback is on the roadmap. Not listed for the key: `model_not_allowed` (403). Listed but no current catalog price: `model_not_priced` (404). Both are checked before any upstream call. The name is rewritten to the provider's model or deployment name upstream; the response `model` field is returned as the provider sent it.
 
