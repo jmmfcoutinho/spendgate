@@ -57,7 +57,6 @@ from spendgate.providers.sse import asked_for_usage
 SERVICE: Final = "bedrock"
 CHAT: Final = "/v1/chat/completions"
 _JSON_TYPE: Final = {"content-type": "application/json"}
-_CONFIG_FAULTS = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN, HTTPStatus.NOT_FOUND)
 SNAPSHOT_SECONDS: Final = 30  # well inside botocore's 10-minute mandatory refresh window
 _SIGN_AT_MOST_SECONDS: Final = 300  # older means no `prepare` ran lately: `translate` asks inline
 _REVOKED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
@@ -260,12 +259,10 @@ class Bedrock:
             code = ErrorCode.UPSTREAM_THROTTLED
         elif kind == "ValidationException" or status == HTTPStatus.BAD_REQUEST:
             code = ErrorCode.INVALID_REQUEST
-        elif status in _CONFIG_FAULTS or kind in (
-            "AccessDeniedException",
-            "ResourceNotFoundException",
-        ):
-            code = ErrorCode.INTERNAL_ERROR  # the gateway's own credentials or model config
-        else:  # ServiceUnavailable, InternalServer, ModelTimeout, ModelError, any other 5xx
+        else:
+            # Our own credentials or model config (401, 403, 404, AccessDenied, ResourceNotFound),
+            # ServiceUnavailable, InternalServer, ModelTimeout, ModelError and any other 5xx:
+            # not the caller's fault, so upstream_unavailable (protocol.md 4.2 rule 1).
             code = ErrorCode.UPSTREAM_UNAVAILABLE
         return UpstreamError(code, True, status, retry_after_seconds(response.headers))
 
