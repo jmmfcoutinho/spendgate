@@ -153,3 +153,47 @@ Both product defects are fixed: each pipeline now takes a unique lease-owner nam
 before its body is read is handled as a quiet refusal (no traceback). Their tests in
 `tests/load/test_known_defects.py` are now ordinary regression tests in the default suite. The load
 and overhead runs themselves moved behind `make load` (marker `load`).
+
+## Postgres round trips (2026-11-24, issue #7)
+
+Finding 3 above, measured again and addressed. The numbers come from two small scripts run against a
+local PostgreSQL 16 on loopback, with the gateway in process (the integration harness: fake upstream,
+no network) and its ledger pointed at Postgres through a TCP proxy. Round trips are counted two ways:
+direction changes on the wire, and the latency a 25 ms delay on every server-to-client packet adds to
+a call, divided by 25 ms (the number of times the gateway really waited). Both agree within one.
+
+| Per call (one key, two budgets on its chain) | Before | After |
+|---|---|---|
+| Ledger transactions, plain call | 4 (hold, settle, 2 header reads) | 2 (hold, settle) |
+| Ledger transactions, stream | 6 (2 more header reads before the first byte) | 2 |
+| Round trips, plain call (wire / by latency) | 46 / 47.6 | 5 / 5.1 |
+| Round trips, stream (wire / by latency) | 60 / 61.7 | 5 / 5.1 |
+| Median in-process plain call, no added delay | 17.2 ms | 11.7 ms |
+
+What changed: independent statements go out together (psycopg pipeline mode), `BEGIN` rides on the
+first and `COMMIT` on the last writes; hold is three round trips (unlocked reads, budget locks, writes),
+settle and release two, whatever the number of budgets. The remaining-budget header comes back with the
+hold and the settlement instead of `FOR UPDATE` reads of every budget on the chain, budget reports read
+without row locks, lease renewal is one statement, and pooled connections are no longer pinged before
+each transaction. Kill switches, caps and grants are still read inside the hold transaction: nothing
+that decides money is cached.
+
+One hot budget chain, 64 callers, 2000 calls, one gateway process (pool of 10), on a machine shared
+with other jobs (load average 7-9 on 4 CPUs, so absolute figures are low and noisy; the runs were
+interleaved after, before, after):
+
+| | Before | After |
+|---|---|---|
+| Throughput | 45 calls/s | 78-83 calls/s |
+| p50 / p99 latency | 1357 / 2096 ms | 787-807 / 999-1048 ms |
+| Gateway CPU per call | 9.0 ms | 7.1 ms |
+
+The ten pooled connections still mostly wait on the hot budget row (about 8 in `Lock` at any sample):
+each transaction holds it for one round trip plus the gateway's own work now, not for a dozen round
+trips.
+
+`make load` on this change, run alone on the 4-CPU machine (SQLite and Postgres 16): every money
+scenario passed, including the overshoot scenarios on both backends; 6 passed, 3 expected failures
+(the existing Postgres overhead targets). The SQLite overhead target (p50 under 5 ms) was missed on
+this machine with and without the change: p50 5.80 ms on the base and 5.20 ms on this change,
+measured back to back.

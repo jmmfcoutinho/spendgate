@@ -7,13 +7,20 @@ factory and run again, at most `MAX_RETRIES` times, then the ledger is reported 
 
 A lock timeout (55P03) or a cancelled statement (57014) is not retried: the session bounds exist to
 answer quickly, and a budget row held that long will most likely still be held on a retry.
+
+Round trips are what a hot budget pays for: its row stays locked while the gateway waits on the
+network. So `BEGIN` goes out with the first statement, a `Batch` goes out in one round trip
+(psycopg pipeline mode), and a flow's `last` batch goes out with the `COMMIT`. A pooled connection
+is not checked before use (that was one more round trip per transaction): a connection found dead
+before the COMMIT was sent has committed nothing, so the flow is re-run on another one, after the
+pool's own `check()` has dropped any other dead idle connection.
 """
 
 import asyncio
 import contextlib
 import random
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Final
 
 import psycopg
@@ -22,7 +29,7 @@ from psycopg.rows import DictRow
 from psycopg_pool import AsyncConnectionPool
 
 from spendgate.ledger.port import ConflictError, LedgerUnavailable
-from spendgate.ledger.sql import POSTGRES, Flow, Row, Stmt, Tx, render
+from spendgate.ledger.sql import POSTGRES, Batch, Flow, Row, Stmt, Tx, end_of, render
 
 type Conn = AsyncConnection[DictRow]
 type Pool = AsyncConnectionPool[Conn]
@@ -47,7 +54,8 @@ _ALLOW_SLOW: Final = (
 
 
 class RetryStats:
-    """How often flows were re-run, by SQLSTATE (40P01 deadlock, 40001 serialization, 23505)."""
+    """How often flows were re-run, by SQLSTATE (40P01 deadlock, 40001 serialization, 23505, and
+    08006 for a connection found dead before its COMMIT)."""
 
     def __init__(self) -> None:
         self.by_sqlstate: Counter[str] = Counter()
@@ -69,33 +77,75 @@ def _retryable(exc: psycopg.Error) -> bool:
     )
 
 
-async def _apply(conn: Conn, step: Stmt | Tx) -> list[Row]:
-    if isinstance(step, Tx):
-        await conn.execute(_TX_SQL[step])
-        return []
-    cursor = await conn.execute(render(step.sql, POSTGRES), step.params)
+type _Sql = tuple[str, Mapping[str, object] | None]
+_PIPELINE: Final = psycopg.Pipeline.is_supported()  # libpq 14 or later; else one at a time
+_LOST: Final = "08006"
+
+
+class ConnectionDropped(Exception):
+    """The connection died before the COMMIT was sent: nothing committed, the flow may re-run."""
+
+
+async def _rows(cursor: psycopg.AsyncCursor[Row]) -> list[Row]:
     return list(await cursor.fetchall()) if cursor.description is not None else []
+
+
+async def _send(conn: Conn, statements: Sequence[_Sql]) -> list[list[Row]]:
+    """Run the statements in order, in one round trip when there are several."""
+    if len(statements) == 1 or not _PIPELINE:
+        return [await _rows(await conn.execute(text, params)) for text, params in statements]
+    async with conn.pipeline():  # leaving it syncs once: one round trip; the first error raises
+        cursors = [await conn.execute(text, params) for text, params in statements]
+    return [await _rows(c) for c in cursors]
+
+
+def _sql(stmt: Stmt) -> _Sql:
+    return render(stmt.sql, POSTGRES), stmt.params
+
+
+async def _apply(conn: Conn, opening: list[_Sql], step: Stmt | Batch | Tx) -> list[Row]:
+    """One step, after the still unsent `opening` (BEGIN) in the same round trip."""
+    if isinstance(step, Tx):
+        await _send(conn, [*opening, (_TX_SQL[step], None)])
+        return []
+    if isinstance(step, Stmt):
+        return (await _send(conn, [*opening, _sql(step)]))[-1]
+    results = await _send(conn, [*opening, *map(_sql, step.stmts)])
+    step.results.extend(results[len(opening) :])
+    return []
 
 
 async def run_flow[T](conn: Conn, flow: Flow[T], *, slow: bool = False) -> T:
     """One attempt: BEGIN, step the flow to its end, COMMIT. Rolls back on any error."""
+    opening: list[_Sql] = [(_TX_SQL[Tx.BEGIN], None)]
+    if slow:
+        opening.append((_ALLOW_SLOW, {"value": SLOW_STATEMENT_TIMEOUT}))
+    committing = False
     try:
-        await conn.execute(_TX_SQL[Tx.BEGIN])
-        if slow:
-            await conn.execute(_ALLOW_SLOW, {"value": SLOW_STATEMENT_TIMEOUT})
         try:
             step = next(flow)
-            while True:
-                step = flow.send(await _apply(conn, step))
+            while not (isinstance(step, Batch) and step.last):
+                committing = committing or step is Tx.COMMIT  # a flow may commit part of its work
+                rows = await _apply(conn, opening, step)
+                opening = []
+                step = flow.send(rows)
         except StopIteration as done:
             result: T = done.value
-        if conn.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+        else:  # the last writes: the flow has finished before they and the COMMIT go out
+            result = end_of(flow)
+            committing = True
+            await _send(conn, [*opening, *map(_sql, step.stmts), (_TX_SQL[Tx.COMMIT], None)])
+            return result
+        if not opening and conn.info.transaction_status != psycopg.pq.TransactionStatus.IDLE:
+            committing = True
             await conn.execute(_TX_SQL[Tx.COMMIT])
         return result
-    except BaseException:
+    except BaseException as exc:
         # A broken connection cannot roll back; the pool discards it, the error is reported.
         with contextlib.suppress(psycopg.Error):
             await asyncio.shield(conn.rollback())
+        if isinstance(exc, psycopg.OperationalError) and conn.broken and not committing:
+            raise ConnectionDropped(str(exc)) from exc
         raise
     finally:
         flow.close()
@@ -108,6 +158,12 @@ async def run_with_retry[T](
         try:
             async with pool.connection() as conn:
                 return await run_flow(conn, make_flow(), slow=slow)
+        except ConnectionDropped as exc:
+            stats.by_sqlstate[_LOST] += 1
+            if attempt == MAX_RETRIES:
+                stats.exhausted += 1
+                raise LedgerUnavailable(f"ledger connection lost: {exc}") from exc
+            await pool.check()  # the pool's own health check: drop the other dead idle connections
         except psycopg.Error as exc:
             if isinstance(exc, errors.UniqueViolation) and not _retryable(exc):
                 raise ConflictError("reservation already exists") from exc

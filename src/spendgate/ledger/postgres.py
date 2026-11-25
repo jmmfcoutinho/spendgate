@@ -32,7 +32,14 @@ from spendgate.ledger.common import i
 from spendgate.ledger.engine import LedgerEngine
 from spendgate.ledger.ids import new_id as default_new_id
 from spendgate.ledger.port import LedgerUnavailable
-from spendgate.ledger.postgres_driver import Conn, Pool, RetryStats, run_flow, run_with_retry
+from spendgate.ledger.postgres_driver import (
+    Conn,
+    ConnectionDropped,
+    Pool,
+    RetryStats,
+    run_flow,
+    run_with_retry,
+)
 from spendgate.ledger.sql import Flow, q
 
 _CONNECT_TIMEOUT_S = 10
@@ -213,7 +220,7 @@ class PostgresLedger(LedgerEngine):
             ) as conn:
                 await _migrate(conn, clock, apply=migrate)
                 await run_flow(conn, currency_flow(currency))
-        except psycopg.Error as exc:
+        except (psycopg.Error, ConnectionDropped) as exc:
             raise LedgerUnavailable(f"cannot open ledger: {exc}") from exc
         return cls(
             dsn,
@@ -254,8 +261,7 @@ class PostgresLedger(LedgerEngine):
                     "connect_timeout": _CONNECT_TIMEOUT_S,
                     **self._tcp,
                 },
-                configure=bound_session,
-                check=AsyncConnectionPool.check_connection,
+                configure=bound_session,  # no `check`: see postgres_driver (ConnectionDropped)
             )
         pool = self._pool
         await pool.open()  # idempotent
@@ -264,6 +270,6 @@ class PostgresLedger(LedgerEngine):
     async def _run[T](
         self, make_flow: Callable[[], Flow[T]], *, write: bool = True, slow: bool = False
     ) -> T:
-        # `write` is moot here: reads still lock budget rows, so every flow gets the same shape.
+        # `write` is moot here: READ COMMITTED for every flow; the flows take their own locks.
         pool = await self._ensure_pool()
         return await run_with_retry(pool, make_flow, self.stats, slow=slow)

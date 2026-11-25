@@ -1,9 +1,11 @@
 """Step 9 in motion: the one money transition of a request, plus what follows it.
 
 `Closer.close` makes exactly one `release` or `settle` (retried a few times if the ledger blinks;
-the sweeper is the backstop), gives the limit slots back, reads what is left of the tightest budget
-and tells the observer. Buffered calls and streams close through here, so the invariant has one
-home.
+the sweeper is the backstop), gives the limit slots back, works out what is left of the tightest
+budget and tells the observer. Buffered calls and streams close through here, so the invariant has
+one home. What is left comes with the settlement (read under its locks), so a header costs no
+ledger read of its own; only a settlement that brought none (not applied, a late settle, a ledger
+that did not answer) falls back to a lock-free read.
 """
 
 import asyncio
@@ -16,7 +18,7 @@ from spendgate.core.limits import Admit, LimitStore
 from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.key_types import Principal
-from spendgate.ledger.port import LedgerPort
+from spendgate.ledger.port import BudgetRoom, LedgerPort, Settlement
 from spendgate.pipeline import steps
 from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.model import Clock, Inbound, Observer, SettledEvent
@@ -62,13 +64,13 @@ class Closer:
     ) -> Closed:
         """Exactly one release or settle, then limits, budget read and the observer event."""
         decision = decide(book, interrupted, self._now())
-        booked = await self._book(call.id, decision)
-        if not booked:
+        done = await self._book(call.id, decision)
+        if done is None:
             self._unsettled[call.id] = (decision, self._now())
         await self._finish_limits(call, book, decision)
-        left = await self.remaining(call.principal.scope_id, book.budget_ids)  # best effort
+        left = await self.left_after(call.principal.scope_id, done, book.budget_ids)
         self._settled(call, book, decision, left, ttft_ms)
-        return Closed(decision, booked, left)
+        return Closed(decision, done is not None, left)
 
     async def release_unsent(self, request_id: str, book: Book) -> None:
         """Best-effort free end of a hold that may exist though nothing was sent (NF-03).
@@ -77,25 +79,27 @@ class Closer:
         now, the heartbeat retries before the lease runs out.
         """
         decision = decide(book, Outcome.CANCELLED, self._now())
-        if not await self._book(request_id, decision, tries=1):
+        if await self._book(request_id, decision, tries=1) is None:
             self._unsettled[request_id] = (decision, self._now())
 
-    async def _book(self, request_id: str, decision: Decision, tries: int = _SETTLE_TRIES) -> bool:
+    async def _book(
+        self, request_id: str, decision: Decision, tries: int = _SETTLE_TRIES
+    ) -> Settlement | None:
+        """The one transition; None when the ledger did not take it."""
         for attempt in range(tries):
             if attempt:
                 await self._sleep(_BACKOFF_SECONDS[min(attempt, len(_BACKOFF_SECONDS)) - 1])
             try:
                 if decision.release:
-                    await self._ledger.release(request_id, decision.attempts, self._now())
-                    return True
+                    return await self._ledger.release(request_id, decision.attempts, self._now())
                 done = await self._ledger.settle(
                     request_id, decision.charge.nano, decision.attempts, self._now()
                 )
             except Exception:  # noqa: S112 - tried again; the sweeper is the backstop
                 continue
             log_alerts(done.alerts, self._settings.ledger_currency)  # a breach, a block
-            return True
-        return False
+            return done
+        return None
 
     def unsettled(self) -> frozenset[str]:
         """Requests whose one money transition the ledger has not yet taken."""
@@ -105,7 +109,8 @@ class Closer:
         """One more try for each close the ledger refused; a hold nobody settles is swept."""
         give_up = _GIVE_UP_LEASES * self._settings.lease_ms
         for rid, (decision, since) in list(self._unsettled.items()):
-            if await self._book(rid, decision, tries=1) or self._now() - since > give_up:
+            booked = await self._book(rid, decision, tries=1) is not None
+            if booked or self._now() - since > give_up:
                 self._unsettled.pop(rid, None)
 
     async def _finish_limits(self, call: Call, book: Book, decision: Decision) -> None:
@@ -167,6 +172,44 @@ class Closer:
         except Exception:
             return None
         return (Money(best[0], self._settings.ledger_currency), best[1]) if best else None
+
+    async def left_after(
+        self, scope_id: str, done: Settlement | None, budget_ids: frozenset[str] | None
+    ) -> tuple[Money, str] | None:
+        """The header after a close: from the settlement's rooms when they cover every budget the
+        hold took, else (not applied, late, a period boundary since the hold, a disabled budget, a
+        ledger that did not answer) the lock-free read."""
+        rooms = done.rooms if done is not None else ()
+        if budget_ids is not None and budget_ids <= {r.budget_id for r in rooms}:
+            return await self.room_left(scope_id, rooms, budget_ids)
+        return await self.remaining(scope_id, budget_ids)  # best effort
+
+    async def room_left(
+        self,
+        scope_id: str,
+        rooms: tuple[BudgetRoom, ...],
+        budget_ids: frozenset[str] | None = None,
+    ) -> tuple[Money, str] | None:
+        """`remaining` from the rooms a hold or settlement returned: no ledger read but the chain.
+
+        Only budgets on the key's chain count (a session's own budget is not), the tightest wins,
+        and on a tie the scope nearest the key, as in `remaining`.
+        """
+        try:
+            chain = await self._chain(scope_id)
+        except Exception:
+            return None
+        depth = {sid: (n, path) for n, (sid, path) in enumerate(chain)}
+        best: tuple[int, int, str] | None = None
+        for r in rooms:
+            if r.scope_id not in depth or (
+                budget_ids is not None and r.budget_id not in budget_ids
+            ):
+                continue
+            n, path = depth[r.scope_id]
+            candidate = (max(r.room_nano, 0), n, path)
+            best = candidate if best is None else min(best, candidate)
+        return (Money(best[0], self._settings.ledger_currency), best[2]) if best else None
 
     async def chain_scope_ids(self, scope_id: str) -> tuple[str, ...]:
         """The scope and its ancestors, as kill switches see them."""

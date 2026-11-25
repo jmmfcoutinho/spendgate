@@ -24,7 +24,7 @@ from spendgate.ledger.admin_flow import currency_flow
 from spendgate.ledger.engine import LedgerEngine
 from spendgate.ledger.ids import new_id as default_new_id
 from spendgate.ledger.port import LedgerError, LedgerUnavailable
-from spendgate.ledger.sql import SQLITE, Flow, Row, Stmt, Tx, render
+from spendgate.ledger.sql import SQLITE, Batch, Flow, Row, Stmt, Tx, end_of, render
 
 _MODE = 0o600
 
@@ -235,15 +235,21 @@ class SqliteLedger(LedgerEngine):
     def _step_through[T](self, flow: Flow[T]) -> T:
         try:
             step = next(flow)
-            while True:
+            while not (isinstance(step, Batch) and step.last):
                 step = flow.send(self._apply(step))
         except StopIteration as done:
             result: T = done.value
             return result
+        result = end_of(flow)  # as on Postgres: the last writes go out once the flow has finished
+        self._apply(step)
+        return result
 
-    def _apply(self, step: Stmt | Tx) -> list[Row]:
+    def _apply(self, step: Stmt | Batch | Tx) -> list[Row]:
         if isinstance(step, Tx):
             self._conn.execute("BEGIN IMMEDIATE" if step is Tx.BEGIN else step.value.upper())
+            return []
+        if isinstance(step, Batch):  # no round trips to save in process: one after the other
+            step.results.extend(self._apply(stmt) for stmt in step.stmts)
             return []
         cursor = self._conn.execute(render(step.sql, SQLITE), step.params)
         return [dict(row) for row in cursor.fetchall()]

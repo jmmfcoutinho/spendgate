@@ -83,6 +83,16 @@ All notable changes to this project are documented here. The format follows
   `ledger.auto_migrate: true`). SQLite still migrates at start by default. The `--local` admin
   commands follow the same setting, and a ledger error at start is printed as one `error:` line
   instead of a traceback. The Compose and local guides run `migrate` before `up`.
+- Postgres ledger: a call makes 5 round trips to the database instead of about 46 (60 for a
+  stream), so a hot budget row stays locked for less time. Statements that do not depend on each
+  other go out together (psycopg pipeline mode), `BEGIN` and `COMMIT` ride on the first and last
+  of them, `X-Spendgate-Budget-Remaining` comes back with the hold or the settlement instead of
+  two or four `FOR UPDATE` reads per call, budget reports read without row locks, lease renewal
+  is one statement for all holds, and pooled connections are no longer pinged before each
+  transaction (a connection found dead before its `COMMIT` was sent is replaced and the
+  transaction re-run). Money rules and the header's meaning are unchanged. See
+  [operations](docs/operations.md#postgres-connections) and
+  [the load review](docs/reviews/load-v0.1.md).
 
 ### Fixed
 
