@@ -160,15 +160,25 @@ async def wait_pending_zero(rig: Rig, seconds: float = 20.0) -> int:
     return int(read_facts(rig.backend, location_of(rig))["pending"])
 
 
-async def sweep_at_end(rig: Rig, lease_s: int = 60) -> int:
-    """Run the sweeper as the server does, with a clock past every lease: what it has to catch."""
+async def sweep_at_end(rig: Rig, lease_s: int = 60, settle_s: float = 10.0) -> int:
+    """Run the sweeper as the server does, with a clock past every lease: what it has to catch.
+
+    The sweep skips rows another session has locked, as the server's does; a killed gateway's
+    Postgres session can hold such a lock for a moment after it dies, so pending holds are swept
+    again for up to `settle_s`, as the server's next pass would.
+    """
+    deadline, total = time.monotonic() + settle_s, 0
     async with open_runtime_for(rig) as rt:
-        total = 0
         while True:
             result = await rt.ledger.sweep_expired(now_ms() + (lease_s + 5) * 1000, 100)
             total += len(result.expired)
-            if len(result.expired) < 100:
+            if len(result.expired) == 100:
+                continue
+            if not read_facts(rig.backend, location_of(rig))["pending"]:
                 return total
+            if time.monotonic() > deadline:
+                return total
+            await asyncio.sleep(0.5)
 
 
 async def limiter_phase(rig: Rig, cfg: dict[str, Any]) -> dict[str, Any]:
