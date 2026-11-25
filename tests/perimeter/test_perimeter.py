@@ -89,6 +89,39 @@ def test_app_cannot_reach_the_internet_but_reaches_the_guard(sqlite_stack: Stack
     assert probe["files"] == {"run_secrets": False, "config": False}
 
 
+# Runs in either container: argv = base URL, then paths. Prints {path: status or error text}.
+_GET = """
+import json, sys, urllib.error, urllib.request
+base, out = sys.argv[1], {}
+for path in sys.argv[2:]:
+    try:
+        out[path] = urllib.request.urlopen(base + path, timeout=5).status
+    except urllib.error.HTTPError as exc:
+        out[path] = exc.code
+    except OSError as exc:
+        out[path] = type(exc).__name__
+print(json.dumps(out))
+"""
+
+
+def test_t_adm_03_the_admin_port_listens_in_the_guard_but_apps_cannot_reach_it(
+    sqlite_stack: Stack,
+) -> None:
+    compose = sqlite_stack.compose
+    inside = json.loads(
+        compose.exec_python(
+            "spendgate", _GET, "http://127.0.0.1:8081", "/metrics", "/admin/v1/keys"
+        )
+    )
+    assert inside == {"/metrics": 200, "/admin/v1/keys": 401}  # it is up, and it wants a key
+    from_app = json.loads(compose.exec_python("app", _GET, "http://spendgate:8081", "/metrics"))
+    assert isinstance(from_app["/metrics"], str), from_app  # no HTTP answer at all, only an error
+    data_port = json.loads(
+        compose.exec_python("app", _GET, GUARD, "/metrics", "/admin/v1/keys", "/livez")
+    )
+    assert data_port == {"/metrics": 404, "/admin/v1/keys": 404, "/livez": 200}
+
+
 @pytest.fixture
 def restore_app(sqlite_stack: Stack) -> Iterator[None]:
     yield
