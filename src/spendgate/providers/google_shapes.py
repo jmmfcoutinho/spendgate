@@ -65,28 +65,66 @@ def shrinks(before: Json, after: Json) -> bool:
     return any((as_int(after.get(k, 0)) or 0) < (as_int(before.get(k, 0)) or 0) for k in _COUNTERS)
 
 
+def _parts(chunk: Mapping[str, Json]) -> list[Json]:
+    return [
+        p for c in as_list(chunk.get("candidates")) for p in as_list(dig(c, "content", "parts"))
+    ]
+
+
 def has_output(chunk: Mapping[str, Json]) -> bool:
     """True when any candidate carries content parts (text, tool calls, thoughts, anything).
 
-    Deliberately broad: any part, even a thought or an empty text, makes a missing candidates
-    count unreadable (the full hold). That over-charges a thoughts-only reply without the count,
-    but never under-charges a part kind this adapter does not list (images, code results).
+    Deliberately broad: content of any kind after a finish means the answer went on.
     """
-    return any(as_list(dig(c, "content", "parts")) for c in as_list(chunk.get("candidates")))
+    return bool(_parts(chunk))
 
 
-def read_usage(meta: Json, *, output_seen: bool) -> Usage | None:
+_UNBILLED_KEYS = frozenset({"text", "thought", "thoughtSignature"})
+
+
+def _billed(part: Json) -> bool:
+    """False only for a thought, an empty text or a bare signature, which add no candidates tokens.
+
+    Any other key or value type, including a part kind this adapter does not know (images, code
+    results), is billed output, so a missing candidates count stays unreadable (the full hold).
+    """
+    if not isinstance(part, Mapping) or not part.keys() <= _UNBILLED_KEYS:
+        return True
+    text, thought = part.get("text", ""), part.get("thought", False)
+    if not isinstance(text, str) or not isinstance(thought, bool):
+        return True
+    return not isinstance(part.get("thoughtSignature", ""), str) or (not thought and text != "")
+
+
+def has_billed_output(chunk: Mapping[str, Json]) -> bool:
+    """True when a part may count in `candidatesTokenCount` (see `_billed`)."""
+    return any(_billed(p) for p in _parts(chunk))
+
+
+def has_thinking(chunk: Mapping[str, Json]) -> bool:
+    """True when a part shows the model thought: a thought part or a thought signature."""
+    return any(
+        isinstance(p, Mapping) and (p.get("thought") is True or "thoughtSignature" in p)
+        for p in _parts(chunk)
+    )
+
+
+def read_usage(meta: Json, *, output_seen: bool, thinking_seen: bool = False) -> Usage | None:
     """Normalise `usageMetadata`: Gemini's candidates exclude thoughts, our output includes them.
 
     `promptTokenCount` is required. Gemini leaves `candidatesTokenCount` out when it is zero, so
-    it may be absent only when no candidate carried content (`output_seen` False: a blocked
-    prompt, a reply cut while thinking); after content an absent count is unreadable, never 0.
+    it may be absent only when no candidate carried billed output (`output_seen` False: a blocked
+    prompt, a reply cut while thinking, or only thoughts, empty texts and signatures); after billed
+    output an absent count is unreadable, never 0. Without it, a reply that shows thinking
+    (`thinking_seen`) needs `thoughtsTokenCount`, or the thoughts would be booked as free.
     The other counters are optional but must be counts when present. A present
     `totalTokenCount` larger than its parts means a part is missing: unreadable too.
     """
     if not isinstance(meta, Mapping) or "promptTokenCount" not in meta:
         return None
-    if output_seen and "candidatesTokenCount" not in meta:
+    if "candidatesTokenCount" not in meta and (
+        output_seen or (thinking_seen and "thoughtsTokenCount" not in meta)
+    ):
         return None
     counts = [as_int(meta.get(f"{k}TokenCount", 0)) for k in _USAGE]
     if any(c is None for c in counts):
@@ -170,6 +208,10 @@ def completion(chunk: Mapping[str, Json], model: str, response_id: str, created:
         "model": model,
         "choices": [{"index": 0, "message": message, "finish_reason": finish or "stop"}],
     }
-    if (usage := read_usage(chunk.get("usageMetadata"), output_seen=has_output(chunk))) is not None:
+    meta = chunk.get("usageMetadata")
+    usage = read_usage(
+        meta, output_seen=has_billed_output(chunk), thinking_seen=has_thinking(chunk)
+    )
+    if usage is not None:
         body["usage"] = chat_usage(usage)
     return body

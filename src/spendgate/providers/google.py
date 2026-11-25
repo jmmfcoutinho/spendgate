@@ -20,7 +20,8 @@ from spendgate.providers.google_shapes import (
     as_text,
     completion,
     dig,
-    has_output,
+    has_billed_output,
+    has_thinking,
     load,
     read_usage,
 )
@@ -405,7 +406,11 @@ class GoogleProvider:
         body = load(response.body)
         if body is None:
             return None
-        return read_usage(body.get("usageMetadata"), output_seen=has_output(body))
+        return read_usage(
+            body.get("usageMetadata"),
+            output_seen=has_billed_output(body),
+            thinking_seen=has_thinking(body),
+        )
 
     @never_raises_error
     def error(self, response: UpstreamResponse) -> UpstreamError:
