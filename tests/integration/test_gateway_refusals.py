@@ -15,8 +15,9 @@ import pytest
 from spendgate.core.outcomes import ReservationState
 from spendgate.core.policy import KillSwitch, KillTarget
 from spendgate.core.sessions import SessionDefaults
-from spendgate.ledger.port import HoldRequest, LedgerPort, LedgerUnavailable
+from spendgate.ledger.port import Held, HoldRequest, LedgerUnavailable, MoneyLedger, Refused
 from tests.fakes import Script
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import NOW_MS, Stack, open_stack, usd, wait_until
 
 HOLD_FORMAT = re.compile(r"\d+\.\d{9} USD")  # the `details.remaining` money format
@@ -275,20 +276,14 @@ def test_refused_request_refunds_its_limits(tmp_path: Path) -> None:
 
 
 def test_ledger_down_is_refused_without_contact(tmp_path: Path) -> None:
-    class Down:
+    class Down(MoneyLedgerProxy):
         """A ledger whose hold fails like a dead database; the rest passes through."""
 
-        def __init__(self, inner: LedgerPort) -> None:
-            self._inner = inner
-
-        async def hold(self, request: HoldRequest) -> object:
+        async def hold(self, request: HoldRequest) -> Held | Refused:
             raise LedgerUnavailable("database is gone")
 
-        def __getattr__(self, name: str) -> object:
-            return getattr(self._inner, name)
-
     async def case(path: Path) -> None:
-        async with open_stack(path, wrap_ledger=Down) as s:  # type: ignore[arg-type]
+        async with open_stack(path, wrap_ledger=Down) as s:
             r = await s.chat()
             assert r.status_code == 503 and error_of(r)["code"] == "ledger_unavailable"
             assert r.headers["retry-after"] == "5"
@@ -298,21 +293,18 @@ def test_ledger_down_is_refused_without_contact(tmp_path: Path) -> None:
     run(case, tmp_path)
 
 
-class Stalled:
+class Stalled(MoneyLedgerProxy):
     """A ledger whose hold waits until the test lets it commit: a stuck database recovering late."""
 
-    def __init__(self, inner: LedgerPort) -> None:
-        self._inner = inner
+    def __init__(self, inner: MoneyLedger) -> None:
+        super().__init__(inner)
         self.request_ids: list[str] = []
         self.recover = asyncio.Event()
 
-    async def hold(self, request: HoldRequest) -> object:
+    async def hold(self, request: HoldRequest) -> Held | Refused:
         self.request_ids.append(request.request_id)
         await self.recover.wait()
-        return await self._inner.hold(request)
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return await self.inner.hold(request)
 
 
 def test_m12_a_hold_past_the_deadline_is_ledger_unavailable_and_released_when_it_lands(
@@ -320,9 +312,9 @@ def test_m12_a_hold_past_the_deadline_is_ledger_unavailable_and_released_when_it
 ) -> None:
     stalled: list[Stalled] = []
 
-    def wrap(ledger: LedgerPort) -> LedgerPort:
+    def wrap(ledger: MoneyLedger) -> MoneyLedger:
         stalled.append(Stalled(ledger))
-        return stalled[0]  # type: ignore[return-value]
+        return stalled[0]
 
     async def case(path: Path) -> None:
         quick: dict[str, object] = {"hold_seconds": 0.05}

@@ -96,12 +96,7 @@ def _applied(conn: sqlite3.Connection) -> dict[int, migrations.Applied]:
     ).fetchone()
     if found is None:
         return {}
-    # `compatible` is absent from a table created before ADR-0018: those rows are all contract.
-    rows = [dict(r) for r in conn.execute("SELECT * FROM schema_migrations")]
-    return {
-        int(r["version"]): migrations.Applied(str(r["checksum"]), bool(r.get("compatible")))
-        for r in rows
-    }
+    return migrations.recorded(dict(r) for r in conn.execute("SELECT * FROM schema_migrations"))
 
 
 def _ensure_bookkeeping(conn: sqlite3.Connection) -> None:
@@ -124,7 +119,7 @@ def _migrate(conn: sqlite3.Connection, clock: Callable[[], int], *, apply: bool)
     try:
         applied = _applied(conn)
         packaged = migrations.load("sqlite")
-        todo = migrations.pending(packaged, applied)
+        todo = migrations.pending_migrations(applied, packaged)
         if not apply:
             migrations.require_current(todo, applied)
         else:

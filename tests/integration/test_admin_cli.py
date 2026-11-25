@@ -10,6 +10,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from spendgate import package_version
 from spendgate.cli import main
 from spendgate.cli.client import Client, CliError
 from spendgate.cli.commands import COMMANDS
@@ -148,7 +149,8 @@ async def test_http_transport_authenticates_with_the_admin_key_and_maps_refusals
         ) as h:
             client = Client(h)
             data, text = await COMMANDS["status"](client, None)  # type: ignore[arg-type]
-            assert data["version"] == "0.test" and "spendgate 0.test" in text
+            version = package_version()
+            assert data["version"] == version and f"spendgate {version}" in text
         async with httpx.AsyncClient(transport=transport, base_url="http://a") as anon:
             with pytest.raises(CliError, match="unauthorized") as caught:
                 await COMMANDS["status"](Client(anon), None)  # type: ignore[arg-type]

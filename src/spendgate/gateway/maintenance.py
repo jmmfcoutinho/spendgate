@@ -9,20 +9,32 @@ catches its errors, logs one event and tries again at the next interval.
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Protocol
 
 from spendgate.config import Settings
 from spendgate.gateway.logs import log_event
 from spendgate.gateway.metrics import Metrics
-from spendgate.ledger.port import LedgerPort
+from spendgate.ledger.port import SweepResult
+from spendgate.ledger.usage import RetentionResult
 from spendgate.pipeline.model import Clock
 
 _DAY_MS = 86_400_000
 _SWEEP_BATCH = 100
 
 
+class MaintainedLedger(Protocol):
+    """The two ledger calls upkeep makes; `AdminLedger` has both."""
+
+    async def sweep_expired(self, now: int, batch: int = 100) -> SweepResult: ...
+
+    async def delete_calls_older_than(
+        self, days: int, now: int, batch: int = 1_000
+    ) -> RetentionResult: ...
+
+
 class Maintenance:
     def __init__(
-        self, ledger: LedgerPort, settings: Settings, now: Clock, logger: logging.Logger,
+        self, ledger: MaintainedLedger, settings: Settings, now: Clock, logger: logging.Logger,
         metrics: Metrics | None = None,
     ) -> None:  # fmt: skip
         self._ledger, self._settings, self._now, self._logger = ledger, settings, now, logger

@@ -9,10 +9,8 @@ from typing import Any
 
 import httpx
 
-from spendgate.gateway.admin import create_admin_app
 from spendgate.gateway.admin_http import AdminContext
 from spendgate.gateway.metrics import Metrics
-from spendgate.gateway.wiring import default_readiness
 from spendgate.ledger.key_types import AdminScope
 from tests.integration.harness import NOW_MS, PEPPER, Stack, open_stack
 
@@ -57,12 +55,10 @@ class Admin:
 async def open_admin(
     tmp_path: Path, *, shared_port: bool = True, **kw: Any
 ) -> AsyncIterator[Admin]:
-    async with open_stack(tmp_path, **kw) as s:
-        ctx = AdminContext(
-            s.ledger, s.keys, s.settings, s.clock.now, NOW_MS - 5_000, Metrics(), "0.test",
-            readiness=default_readiness(s.ledger, s.settings, s.clock.now),
-        )  # fmt: skip
-        app = create_admin_app(ctx, shared_port=shared_port)
+    # The admin app `build_gateway` wires, as `serve` runs it; a separate port is a config entry.
+    admin = None if shared_port else "127.0.0.1:8081"
+    async with open_stack(tmp_path, metrics=Metrics(), admin_listen=admin, **kw) as s:
+        ctx, app = s.gateway.admin_context, s.gateway.admin_app
         made = await s.ledger.create_admin_key(
             s.scope.id, "ops", ALL, pepper=PEPPER, actor="boot", now=NOW_MS
         )

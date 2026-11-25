@@ -26,7 +26,7 @@ from spendgate.gateway.logs import INTERNAL_EVENT, configure_json_logging
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.wiring import GatewayObserver
 from spendgate.ledger.key_types import AdminScope
-from spendgate.ledger.port import LedgerPort, LedgerUnavailable
+from spendgate.ledger.port import AttemptRecord, LedgerUnavailable, MoneyLedger, Settlement
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.providers.anthropic import AnthropicProvider
 from spendgate.providers.bedrock import Bedrock
@@ -43,6 +43,7 @@ from spendgate.providers.port import (
     UpstreamResponse,
 )
 from tests.fakes import Script
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import AWS_EXAMPLE, Stack, async_test, open_stack
 
 SECRET = "sk-fake-" + "0" * 24  # pragma: allowlist secret
@@ -135,7 +136,7 @@ def internal_lines(sink: io.StringIO) -> list[dict[str, object]]:
 
 @asynccontextmanager
 async def broken_stack(
-    tmp_path: Path, method: str, wrap_ledger: Callable[[SqliteLedger], LedgerPort] | None = None
+    tmp_path: Path, method: str, wrap_ledger: Callable[[SqliteLedger], MoneyLedger] | None = None
 ) -> AsyncIterator[tuple[Stack, io.StringIO]]:
     with json_log() as sink:
         observer = GatewayObserver(Metrics(), logging.getLogger("spendgate.call"))
@@ -199,24 +200,20 @@ async def test_a_charged_answer_that_cannot_be_converted_says_it_was_charged(
         assert (await s.totals())[0] > 0  # unchanged money behaviour: the answer is charged
 
 
-class SettleDown:
+class SettleDown(MoneyLedgerProxy):
     """A ledger whose `settle` fails: the close is not booked and the sweeper charges the hold."""
 
-    def __init__(self, inner: LedgerPort) -> None:
-        self._inner = inner
-
-    async def settle(self, *args: object) -> object:
+    async def settle(
+        self, request_id: str, charge_nano: int, attempts: tuple[AttemptRecord, ...], now: int
+    ) -> Settlement:
         raise LedgerUnavailable("gone")
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
 
 
 @async_test
 async def test_a_charged_call_whose_settle_the_ledger_did_not_take_still_reads_charged(
     tmp_path: Path,
 ) -> None:
-    async with broken_stack(tmp_path, "response", SettleDown) as (s, sink):  # type: ignore[arg-type]
+    async with broken_stack(tmp_path, "response", SettleDown) as (s, sink):
         r = await s.chat()
         assert r.status_code == 500
         (event,) = internal_lines(sink)

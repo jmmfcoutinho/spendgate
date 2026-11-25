@@ -10,7 +10,7 @@ import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 
-from spendgate.ledger.port import LedgerPort
+from spendgate.ledger.port import MoneyLedger
 from spendgate.pipeline.closing import Closer
 from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import Clock, NoopObserver, Observer, report_ledger
@@ -58,7 +58,7 @@ class Upkeep:
     """What the heartbeat does, over the ledger, leases and closer the pipeline owns."""
 
     def __init__(  # noqa: PLR0913, PLR0917 - the pipeline's own collaborators, passed through
-        self, ledger: LedgerPort, closer: Closer, leases: Leases, owned: set[str],
+        self, ledger: MoneyLedger, closer: Closer, leases: Leases, owned: set[str],
         now: Clock, instance: str, lease_ms: int, observer: Observer | None = None,
     ) -> None:  # fmt: skip
         self._ledger, self._closer, self._leases, self._owned = ledger, closer, leases, owned

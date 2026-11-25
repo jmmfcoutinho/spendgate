@@ -10,21 +10,12 @@ from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from spendgate.core.budgets import Budget, BudgetAlert, Period, ScopeKind, SoftWarning
+from spendgate.core.budgets import BudgetAlert, SoftWarning
 from spendgate.core.errors import Refusal
 from spendgate.core.failures import CallErrorCode
 from spendgate.core.outcomes import Outcome, ReservationState
 from spendgate.core.policy import KeyPolicy, KillSwitch, Plan
-from spendgate.ledger.key_types import (
-    AdminScope,
-    KeyKind,
-    KeyRecord,
-    KeySpec,
-    NewKey,
-    StoredKey,
-)
 from spendgate.ledger.rows import BudgetTotals, CallRow, HeldItem, ReservationRow, ScopeRow
-from spendgate.ledger.usage import RetentionResult, UsageQuery, UsageResult
 
 # Row types live in `rows`; they are re-exported here because every caller imports them from `port`.
 __all__ = ["BudgetTotals", "CallRow", "HeldItem", "ReservationRow", "ScopeRow"]
@@ -236,11 +227,15 @@ class SweepResult:
     normalised: tuple[str, ...]  # budgets whose excess was recorded after a grant expired
 
 
-# --- reads -----------------------------------------------------------------------------------
+# --- the money port ---------------------------------------------------------------------------
 
 
-class LedgerPort(Protocol):
-    """Transactions on the money state. Names follow the admin API operation ids."""
+class MoneyLedger(Protocol):
+    """The transactions and reads a call needs: everything the pipeline and the sweeper use.
+
+    Narrow on purpose: a test double for the money path implements these eight methods, and
+    nothing on the request path can reach an admin write. `admin_port.AdminLedger` adds the rest.
+    """
 
     async def hold(self, request: HoldRequest) -> Held | Refused: ...
 
@@ -266,130 +261,8 @@ class LedgerPort(Protocol):
 
     async def totals(self, scope_id: str, now: int) -> tuple[BudgetTotals, ...]: ...
 
-    # Admin side: the smallest set that creates and changes the state the scenarios run on.
-    async def create_scope(  # noqa: PLR0913 - mirrors the admin ScopeCreate body
-        self,
-        kind: ScopeKind,
-        name: str,
-        parent_id: str | None,
-        *,
-        now: int,
-        actor: str = "system",
-        display_name: str | None = None,
-    ) -> ScopeRow: ...
-
-    async def create_budget(  # noqa: PLR0913 - mirrors the admin BudgetCreate body
-        self,
-        scope_id: str,
-        period: Period,
-        cap_nano: int,
-        *,
-        now: int,
-        soft_pct: int = 80,
-        model_filter: str | None = None,
-        strict_overrun: bool = True,
-        note: str | None = None,
-        actor: str = "system",
-        budget_id: str | None = None,
-    ) -> Budget: ...
-
-    async def update_budget(  # noqa: PLR0913 - mirrors the admin BudgetUpdate body
-        self,
-        budget_id: str,
-        *,
-        actor: str,
-        now: int,
-        cap_nano: int | None = None,
-        soft_pct: int | None = None,
-        strict_overrun: bool | None = None,
-        note: str | None = None,
-    ) -> Budget: ...
-
-    async def create_grant(  # noqa: PLR0913 - mirrors the admin GrantCreate body
-        self,
-        budget_id: str,
-        *,
-        amount_nano: int,
-        valid_from: int,
-        valid_until: int,
-        actor: str,
-        reason: str,
-        now: int,
-    ) -> str: ...
-
-    async def ack_overrun(self, budget_id: str, *, actor: str, reason: str, now: int) -> None: ...
-
-    async def engage_kill_switch(
-        self, switch: KillSwitch, *, actor: str, reason: str, now: int
-    ) -> str: ...
-
-    async def lift_kill_switch(self, switch_id: str, *, actor: str, now: int) -> None: ...
-
-    async def delete_budget(self, budget_id: str, *, actor: str, now: int) -> None: ...
-
-    async def disable_scope(self, scope_id: str, *, actor: str, now: int) -> None: ...
-
-    async def add_key_record(self, key_id: str, scope_id: str, *, now: int) -> None:
-        """Thin primitive that satisfies `reservations.key_id`; key flows handle real keys."""
-        ...
-
-    # Keys. `pepper` is passed in by the caller and never stored.
-    async def create_key(self, spec: KeySpec, *, pepper: bytes, actor: str, now: int) -> NewKey: ...
-
-    async def create_admin_key(  # noqa: PLR0913 - an admin key's whole definition
-        self,
-        scope_id: str,
-        name: str,
-        admin_scopes: frozenset[AdminScope],
-        *,
-        pepper: bytes,
-        actor: str,
-        now: int,
-        expires_at: int | None = None,
-    ) -> NewKey: ...
-
-    async def list_keys(
-        self, scope_id: str | None = None, *, kind: KeyKind = KeyKind.API
-    ) -> tuple[KeyRecord, ...]: ...
-
-    async def get_key(self, key_id: str) -> KeyRecord | None: ...
-
-    async def find_key(self, prefix: str) -> StoredKey | None:
-        """Lookup by the public prefix, with the stored hash; used by `keys.KeyService`."""
-        ...
-
-    async def revoke_key(self, key_id: str, *, actor: str, now: int) -> KeyRecord: ...
-
-    async def rotate_key(
-        self, key_id: str, *, grace_ms: int, pepper: bytes, actor: str, now: int
-    ) -> NewKey: ...
-
-    async def set_key_policy(
-        self, policy: KeyPolicy, *, name: str | None = None, actor: str, now: int
-    ) -> KeyRecord: ...
-
     async def get_scope(self, scope_id: str) -> ScopeRow | None: ...
 
     async def active_kill_switches(self) -> tuple[KillSwitch, ...]:
         """Every switch in force now; the pipeline re-checks open streams against them."""
-        ...
-
-    async def find_scope(self, path: str) -> ScopeRow | None:
-        """A scope by its unique path (`org:acme/user:u1`), or None. Ids never match."""
-        ...
-
-    async def get_reservation(self, request_id: str) -> ReservationRow | None: ...
-
-    async def get_calls(self, request_id: str) -> tuple[CallRow, ...]: ...
-
-    # Usage and retention. `retention_days` makes `usage` refuse a `since` older than
-    # the configured window even before the first deletion run.
-    async def usage(
-        self, query: UsageQuery, *, now: int, retention_days: int | None = None
-    ) -> UsageResult: ...
-
-    async def delete_calls_older_than(
-        self, days: int, now: int, batch: int = 1_000
-    ) -> RetentionResult:
-        """Whole UTC days of calls (plus old terminal reservations and closed sessions)."""
         ...

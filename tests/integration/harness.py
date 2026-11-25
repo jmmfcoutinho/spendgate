@@ -1,9 +1,10 @@
 """Gateway test rig: Starlette app, pipeline, SQLite ledger and the fake upstream, no sockets.
 
-`open_stack` builds the whole proxy in-process: requests enter through `httpx.ASGITransport`,
-the pipeline talks to `FakeUpstream` through its transport, and money lives in a real SQLite
-ledger. Two OpenAI deployments (`a.` and `b.` hosts) serve the alias `alpha`, so failover is
-observable in the fake's request log (the `host` header).
+`open_stack` builds the whole proxy in-process with `build_gateway`, the composition root that
+`spendgate serve` uses: requests enter through `httpx.ASGITransport`, the pipeline talks to
+`FakeUpstream` through its transport, and money lives in a real SQLite ledger. Two OpenAI
+deployments (`a.` and `b.` hosts) serve the alias `alpha`, so failover is observable in the
+fake's request log (the `host` header).
 """
 
 import asyncio
@@ -22,11 +23,11 @@ from spendgate.config import Settings, load
 from spendgate.core.budgets import Budget, Period, ScopeKind
 from spendgate.core.money import Money
 from spendgate.core.sessions import SessionDefaults
-from spendgate.gateway.app import create_app
-from spendgate.gateway.wiring import default_readiness
+from spendgate.gateway.compose import Gateway, build_gateway
+from spendgate.gateway.metrics import Metrics
 from spendgate.ledger.key_types import KeySpec
 from spendgate.ledger.keys import KeyService
-from spendgate.ledger.port import LedgerPort, ScopeRow
+from spendgate.ledger.port import MoneyLedger, ScopeRow
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.pipeline.adapters import build_providers
 from spendgate.pipeline.faults import InternalEvent
@@ -217,6 +218,7 @@ class Stack:
     scope: ScopeRow
     budget: Budget
     observer: Recorder
+    gateway: Gateway  # what `serve` would run: both apps, upkeep, admin context
     extra_keys: dict[str, str] = field(default_factory=dict)
 
     async def post(
@@ -250,22 +252,25 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
     tpm: int | None = None, max_concurrent: int | None = None,
     allowed_models: tuple[str, ...] | None = None, per_call: int | None = None,
     pipeline_kwargs: dict[str, object] | None = None,
-    wrap_ledger: Callable[[SqliteLedger], LedgerPort] | None = None,
-    providers: Mapping[str, Provider] | None = None,
+    wrap_ledger: Callable[[SqliteLedger], MoneyLedger] | None = None,
+    providers: Mapping[str, Provider] | None = None, metrics: Metrics | None = None,
+    admin_listen: str | None = None,
 ) -> AsyncIterator[Stack]:  # fmt: skip
     fake = fake or FakeUpstream()
     clock = FakeClock(NOW_MS)
     path = tmp_path / "spendgate.yaml"
-    path.write_text(
-        CONFIG.format(
-            max_body=max_body,
-            max_json_body=min(max_body, 4_194_304),  # JSON has its own cap (SR-01)
-            concurrent=concurrent,
-            attempts=attempts,
-            models=models,
-            cooldown=cooldown,
-        )
+    text = CONFIG.format(
+        max_body=max_body,
+        max_json_body=min(max_body, 4_194_304),  # JSON has its own cap (SR-01)
+        concurrent=concurrent,
+        attempts=attempts,
+        models=models,
+        cooldown=cooldown,
     )
+    if admin_listen is not None:  # a separate admin listener (`server.admin`)
+        main = 'server: {listen: "127.0.0.1:8080",'
+        text = text.replace(main, f'{main} admin: {{listen: "{admin_listen}"}},', 1)
+    path.write_text(text)
     (tmp_path / "catalog_override.yaml").write_text(CATALOG_OVERRIDE)
     settings = load(path, env=ENV)
     assert settings.ledger_path is not None
@@ -286,20 +291,24 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
         "bedrock": Bedrock(lambda: AWS_EXAMPLE),
         "google": GoogleProvider(),
     } | dict(providers or {})  # fmt: skip
+    # Through the server's own composition root; `pipeline_kwargs` may replace any argument.
     kwargs: dict[str, object] = {
-        "settings": settings, "ledger": wrap_ledger(ledger) if wrap_ledger else ledger,
-        "keys": keys, "providers": providers,
-        "sender": sender, "now_ms": clock.now, "observer": observer,
-    }  # fmt: skip
-    pipeline = Pipeline(**(kwargs | (pipeline_kwargs or {})))  # type: ignore[arg-type]
-    app = create_app(pipeline, readiness=default_readiness(ledger, settings, clock.now))
+        "ledger": ledger, "keys": keys, "sender": sender, "providers": providers,
+        "now_ms": clock.now, "observer": observer, "metrics": metrics,
+    } | (pipeline_kwargs or {})  # fmt: skip
+    if wrap_ledger is not None:
+        if kwargs["ledger"] is not ledger:  # it would wrap the stack's ledger, not the swapped one
+            raise ValueError("give wrap_ledger or a swapped ledger in pipeline_kwargs, not both")
+        kwargs["money"] = wrap_ledger(ledger)  # the pipeline's ledger; probes keep the real one
+    gateway = build_gateway(settings, **kwargs)  # type: ignore[arg-type]
+    pipeline, app = gateway.pipeline, gateway.data_app
     client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://gateway.test"
     )
     try:
         yield Stack(
             settings, pipeline, app, client, fake, clock, ledger, keys, made.secret, scope,
-            cap, observer,
+            cap, observer, gateway,
         )  # fmt: skip
     finally:
         await pipeline.aclose()

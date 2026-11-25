@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 
+from spendgate import package_version
 from spendgate.gateway.admin import combine, create_admin_app
 from spendgate.gateway.app import create_app
 from spendgate.ledger.key_types import AdminScope
@@ -146,11 +147,12 @@ async def test_every_admin_write_is_audited_with_actor_and_time(tmp_path: Path) 
 @async_test
 async def test_status_reports_ledger_catalog_alerts_and_switches(tmp_path: Path) -> None:
     async with open_admin(tmp_path) as a:
+        a.stack.clock.advance(seconds=5)  # the gateway was built at NOW_MS
         await a.ok(
             "POST", f"{BASE}/kill-switches", 201, json={"target_kind": "global", "reason": "r"}
         )
         s = await a.ok("GET", f"{BASE}/status")
-        assert s["version"] == "0.test" and s["uptime_seconds"] == 5
+        assert s["version"] == package_version() and s["uptime_seconds"] == 5
         assert s["ledger"] == {"backend": "sqlite", "healthy": True, "pending_holds": 0}
         assert s["catalog"]["entries"] > 0  # type: ignore[index]
         assert len(s["kill_switches"]) == 1  # type: ignore[arg-type]

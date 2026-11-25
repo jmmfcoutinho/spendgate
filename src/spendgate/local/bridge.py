@@ -1,11 +1,12 @@
 """HTTP-library-neutral half of the transports: request in, `Reply` out, lifecycle, streams.
 
 Two httpx generations exist side by side: the OpenAI SDK uses `httpx`, the Anthropic SDK 2.x uses
-`httpx2`, and each refuses the other's objects. The bridges below know neither; `transport.py`
-and `transport_httpx2.py` only translate class names around them.
+`httpx2`, and each refuses the other's objects. The bridges and stream halves below know neither;
+`transport.py` and `transport_httpx2.py` only put each library's base classes around them, and
+`factory.py` builds the runtime either pair wraps.
 """
 
-from collections.abc import Iterator, Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
 from typing import Protocol
 
 from spendgate.client.session import current_session
@@ -105,3 +106,30 @@ class AsyncBridge:
 
     async def close(self) -> None:
         await self.runtime.aclose()
+
+
+class SyncChunks:
+    """A live reply body for a sync client; mixed in before the library's `SyncByteStream`."""
+
+    def __init__(self, bridge: SyncBridge, chunks: ByteStream) -> None:
+        self._bridge, self._chunks = bridge, chunks
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self._bridge.chunks(self._chunks)
+
+    def close(self) -> None:
+        self._bridge.close_stream(self._chunks)
+
+
+class AsyncChunks:
+    """A live reply body for an async client; mixed in before the library's `AsyncByteStream`."""
+
+    def __init__(self, chunks: ByteStream) -> None:
+        self._chunks = chunks
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        async for chunk in self._chunks:
+            yield chunk
+
+    async def aclose(self) -> None:
+        await self._chunks.aclose()

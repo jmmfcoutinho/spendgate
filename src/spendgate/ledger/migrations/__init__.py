@@ -10,9 +10,10 @@ ahead. Every other migration is a contract step and refuses older code.
 
 import hashlib
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from importlib.resources import files
+from typing import Any
 
 from spendgate.ledger.port import LedgerUnavailable
 
@@ -64,8 +65,17 @@ def load(dialect: str) -> list[Migration]:
     return found
 
 
-def pending(packaged: list[Migration], applied: Mapping[int, Applied]) -> list[Migration]:
-    """The packaged migrations not applied yet, in order.
+def recorded(rows: Iterable[Mapping[str, Any]]) -> dict[int, Applied]:
+    """`schema_migrations` rows by version. A row without `compatible` comes from a table made
+    before ADR-0018: those were all contract steps."""
+    return {int(r["version"]): Applied(str(r["checksum"]), bool(r.get("compatible"))) for r in rows}
+
+
+def pending_migrations(
+    applied: Mapping[int, Applied], packaged: list[Migration]
+) -> list[Migration]:
+    """The packaged migrations not applied yet, in order. Pure: both backends read `applied`
+    and `packaged` themselves and only then ask what to run.
 
     Refuses a changed applied migration, and a schema from a newer release unless it is exactly
     one version ahead and that version was recorded as compatible with the previous release.

@@ -13,7 +13,8 @@ from pathlib import Path
 
 from spendgate.core.budgets import Period, ScopeKind
 from spendgate.core.money import Money
-from spendgate.ledger.port import ConflictError, LedgerPort
+from spendgate.ledger.admin_port import AdminLedger
+from spendgate.ledger.port import ConflictError
 from spendgate.local.principal import LOCAL_KEY_ID
 
 SCOPE_NAME = "local"
@@ -44,7 +45,7 @@ def prepare_directory(path: Path) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 
 
-async def prepare_scope(ledger: LedgerPort, ledger_path: Path, cap: Money | None, now: int) -> str:
+async def prepare_scope(ledger: AdminLedger, ledger_path: Path, cap: Money | None, now: int) -> str:
     """The local scope's id, creating scope, key row and budget on first use.
 
     `cap=None` only reuses what exists and refuses a ledger with no budget at all (fail closed).

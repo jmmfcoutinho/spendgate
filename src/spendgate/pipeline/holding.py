@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 
 from spendgate.core.errors import ErrorCode, Refusal
-from spendgate.ledger.port import ConflictError, Held, HoldRequest, LedgerPort, Refused
+from spendgate.ledger.port import ConflictError, Held, HoldRequest, MoneyLedger, Refused
 from spendgate.pipeline import answers, tracing
 from spendgate.pipeline.closing import Call, Closer
 from spendgate.pipeline.model import Clock, Observer, report_ledger
@@ -31,7 +31,7 @@ type Spawn = Callable[[Awaitable[None]], object]
 
 class Holder:
     def __init__(  # noqa: PLR0913, PLR0917 - the pipeline's own collaborators, passed through
-        self, ledger: LedgerPort, closer: Closer, observer: Observer, tracer: tracing.Tracer,
+        self, ledger: MoneyLedger, closer: Closer, observer: Observer, tracer: tracing.Tracer,
         now: Clock, spawn: Spawn, hold_seconds: float = HOLD_SECONDS,
     ) -> None:  # fmt: skip
         self._ledger, self._closer, self._observer, self._tracer = ledger, closer, observer, tracer

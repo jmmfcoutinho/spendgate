@@ -138,6 +138,14 @@ All notable changes to this project are documented here. The format follows
 - Roadmap: adds per-instance budget slices, library mode on Python 3.12, per-end-user budgets
   keyed on `X-Spendgate-User`, weekly and rolling budget windows, a generic OpenAI-compatible
   provider, a read-only usage page and a public hold and settle API, each with why. Soft-threshold webhook alerts and OpenTelemetry tracing move to Done.
+- Internal structure, no change in behaviour, config, error codes, headers, endpoints, logs or
+  metrics: the ledger port is split into `MoneyLedger` (the eight calls the pipeline and the
+  sweeper make) and `AdminLedger` (admin writes, keys and reads on top of it);
+  `gateway.compose.build_gateway` is the one composition root, used by `serve` and by the
+  integration test harness; OpenAI and Azure OpenAI share one wire module (`openai_wire`);
+  `transport()` and `transport2()` share their runtime builder and stream wrappers; SQLite and
+  Postgres decide pending migrations with one pure `pending_migrations`; the data app's POST
+  routes come from `ENDPOINTS`.
 
 ### Fixed
 

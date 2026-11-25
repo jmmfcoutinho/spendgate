@@ -24,7 +24,7 @@ from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.ids import new_id
 from spendgate.ledger.key_types import Principal
-from spendgate.ledger.port import Held, LedgerPort
+from spendgate.ledger.port import Held, MoneyLedger
 from spendgate.pipeline import answers, candidates, intake, replies, steps, tracing
 from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.auth import authenticate, recheck
@@ -79,7 +79,7 @@ class Pipeline:
     """Steps 1 to 10 over injected ports."""
 
     def __init__(  # noqa: PLR0913 - the ports are the point of the design
-        self, *, settings: Settings, ledger: LedgerPort, keys: KeyVerifier,
+        self, *, settings: Settings, ledger: MoneyLedger, keys: KeyVerifier,
         providers: Mapping[str, Provider], sender: Sender, limits: LimitStore | None = None,
         now_ms: Clock = system_ms, new_request_id: IdGenerator = request_id,
         observer: Observer | None = None, instance: str | None = None,

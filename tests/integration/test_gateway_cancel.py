@@ -7,40 +7,47 @@ from pathlib import Path
 import httpx
 
 from spendgate.core.outcomes import Outcome, ReservationState
-from spendgate.ledger.port import HoldRequest, LedgerPort, Settlement
+from spendgate.ledger.port import (
+    AttemptRecord,
+    Held,
+    HoldRequest,
+    MoneyLedger,
+    Refused,
+    Settlement,
+)
 from tests.fakes import Script
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import Stack, async_test, open_stack, wait_until
 
 
-class Gated:
+class Gated(MoneyLedgerProxy):
     """Wraps a ledger: `hold` and `settle` commit, then wait for the test to let them return."""
 
     def __init__(
-        self, inner: LedgerPort, *, gate_hold: bool = False, gate_settle: bool = False
+        self, inner: MoneyLedger, *, gate_hold: bool = False, gate_settle: bool = False
     ) -> None:
-        self._inner = inner
+        super().__init__(inner)
         self._gate_hold, self._gate_settle = gate_hold, gate_settle
         self.request_id = ""
         self.hold_done = asyncio.Event()
         self.settle_started = asyncio.Event()
         self.proceed = asyncio.Event()
 
-    async def hold(self, request: HoldRequest) -> object:
+    async def hold(self, request: HoldRequest) -> Held | Refused:
         self.request_id = request.request_id
-        result = await self._inner.hold(request)
+        result = await self.inner.hold(request)
         self.hold_done.set()
         if self._gate_hold:
             await self.proceed.wait()
         return result
 
-    async def settle(self, *args: object) -> Settlement:
+    async def settle(
+        self, request_id: str, charge_nano: int, attempts: tuple[AttemptRecord, ...], now: int
+    ) -> Settlement:
         self.settle_started.set()
         if self._gate_settle:
             await self.proceed.wait()
-        return await self._inner.settle(*args)  # type: ignore[arg-type]
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return await self.inner.settle(request_id, charge_nano, attempts, now)
 
 
 async def start_hanging_call(s: Stack) -> asyncio.Future[httpx.Response]:
@@ -72,9 +79,9 @@ async def test_cancel_before_send_releases_the_hold(tmp_path: Path) -> None:
     """The hold committed but the upstream request was never built: released, nothing charged."""
     gate: list[Gated] = []
 
-    def wrap(ledger: LedgerPort) -> LedgerPort:
+    def wrap(ledger: MoneyLedger) -> MoneyLedger:
         gate.append(Gated(ledger, gate_hold=True))
-        return gate[0]  # type: ignore[return-value]
+        return gate[0]
 
     async with open_stack(tmp_path, wrap_ledger=wrap) as s:
         call = asyncio.ensure_future(s.chat())
@@ -94,9 +101,9 @@ async def test_cancel_before_send_releases_the_hold(tmp_path: Path) -> None:
 async def test_second_cancel_cannot_interrupt_the_settle(tmp_path: Path) -> None:
     gate: list[Gated] = []
 
-    def wrap(ledger: LedgerPort) -> LedgerPort:
+    def wrap(ledger: MoneyLedger) -> MoneyLedger:
         gate.append(Gated(ledger, gate_settle=True))
-        return gate[0]  # type: ignore[return-value]
+        return gate[0]
 
     async with open_stack(tmp_path, wrap_ledger=wrap) as s:
         call = await start_hanging_call(s)
