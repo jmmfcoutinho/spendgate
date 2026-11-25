@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from spendgate.config import schema
-from spendgate.config.secrets import check_ref
+from spendgate.config.secrets import check_credential_ref, check_ref
 from spendgate.core.money import Money
 
 OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "configuration.md"
@@ -125,6 +125,17 @@ D: dict[str, str] = {
         "that is behind and says to run `spendgate migrate` (or `serve --migrate`): see "
         "[upgrades](operations.md#upgrades-and-rollbacks)."
     ),
+    "Ledger.pool_min": (
+        "Postgres only: connections each instance keeps open (default 1). Not used by SQLite."
+    ),
+    "Ledger.pool_max": (
+        "Postgres only: most connections each instance opens (default 10). Size the server's "
+        "`max_connections` for this times the number of instances, plus migrations and admin."
+    ),
+    "Ledger.pool_timeout_seconds": (
+        "Postgres only: how long a call waits for a free pooled connection (default 10) before "
+        "it is refused with `ledger_unavailable`."
+    ),
     "SqliteLedger.kind": "Always `sqlite`.",
     "SqliteLedger.path": (
         "Database file. A relative path is relative to the config file. The file must be mode "
@@ -136,7 +147,28 @@ D: dict[str, str] = {
         "when the server is on another host. Each connection gets lock, statement and "
         "idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the "
         "URL or the server sets them: "
-        "see [Postgres connections](operations.md#postgres-connections)."
+        "see [Postgres connections](operations.md#postgres-connections). A `file:` DSN is "
+        "read again on `SIGHUP`; only its password may change there."
+    ),
+    "PostgresLedger.auth": (
+        "Sign in with a short-lived token from the host's cloud identity instead of a password; "
+        "the DSN then names the user and carries no password. See "
+        "[cloud identity](operations.md#cloud-identity-for-the-database)."
+    ),
+    "RdsIamAuth.kind": (
+        "`rds_iam`: an Amazon RDS or Aurora IAM auth token, signed with the standard AWS "
+        "credential chain. Needs the `bedrock` extra (botocore)."
+    ),
+    "RdsIamAuth.region": "AWS region of the database. Default: the AWS chain's region.",
+    "EntraAuth.kind": (
+        "`entra`: a Microsoft Entra ID token from `DefaultAzureCredential` (managed or "
+        "workload identity, environment) for Azure Database for PostgreSQL. Needs the `azure` "
+        "extra."
+    ),
+    "EntraAuth.scope": "Token audience. The default is the one Azure documents for PostgreSQL.",
+    "CloudSqlIamAuth.kind": (
+        "`cloudsql_iam`: a Google access token from application default credentials, for "
+        "Cloud SQL IAM database sign-in. Needs the `google` extra."
     ),
     # Fx
     "Fx.rates": (
@@ -161,7 +193,9 @@ D: dict[str, str] = {
     "Provider.auth": "How the proxy authenticates to the provider.",
     "Provider.credential": (
         "Secret reference for the key or token. Not used with `sigv4`, which reads the standard "
-        "AWS credential chain."
+        "AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the "
+        "service-account JSON, or `adc` for application default credentials (workload "
+        "identity, the metadata server). A `file:` credential is read again on `SIGHUP`."
     ),
     "Provider.region": "Provider region, where the adapter needs one (Bedrock, Azure).",
     "Provider.api_version": (
@@ -334,6 +368,7 @@ _PATTERNS = {
     "^[a-z][a-z0-9_]*/.+$": "catalog id `provider/model`",
     "^[A-Za-z0-9][A-Za-z0-9._-]*$": "name",
     r"^\d{4}-\d{2}-\d{2}$": "date `YYYY-MM-DD`",
+    "^[a-z0-9-]+$": "region name",
 }
 
 
@@ -357,6 +392,22 @@ def _constraints(meta: list[Any]) -> tuple[str | None, str | None]:
 
 def render_type(field: FieldInfo, links: Callable[[str], str]) -> str:
     return _render(field.annotation, list(field.metadata), links)
+
+
+# AfterValidator function -> how a string it checks is described.
+_VALIDATED_STR: dict[object, str] = {
+    check_ref: "secret reference (`env:NAME` or `file:/path`)",
+    check_credential_ref: "secret reference (`env:NAME` or `file:/path`) or `adc`",
+    schema._decimal_text: "quoted decimal",
+}
+
+
+def _render_str(meta: list[Any]) -> str:
+    for m in meta:
+        if (text := _VALIDATED_STR.get(getattr(m, "func", None))) is not None:
+            return text
+    pattern, _ = _constraints(meta)
+    return pattern or "string"
 
 
 def _render(tp: Any, meta: list[Any], links: Callable[[str], str]) -> str:  # noqa: ANN401, PLR0911
@@ -387,12 +438,7 @@ def _render(tp: Any, meta: list[Any], links: Callable[[str], str]) -> str:  # no
     if tp is bool:
         return "boolean"
     if tp is str:
-        pattern, _ = _constraints(meta)
-        if any(getattr(m, "func", None) is check_ref for m in meta):
-            return "secret reference (`env:NAME` or `file:/path`)"
-        if any(getattr(m, "func", None) is schema._decimal_text for m in meta):
-            return "quoted decimal"
-        return pattern or "string"
+        return _render_str(meta)
     if tp is int:
         _, bound = _constraints(meta)
         return bound or "integer"

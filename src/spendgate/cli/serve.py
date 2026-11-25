@@ -15,6 +15,7 @@ import uvicorn
 
 from spendgate import package_version
 from spendgate.cli.client import EXIT_CONFIG, EXIT_OK
+from spendgate.cli.reload import SecretReload, on_sighup
 from spendgate.cli.runtime import Runtime, open_runtime, system_ms
 from spendgate.config import ConfigError, Settings, check_config, load
 from spendgate.config.schema import Server
@@ -195,6 +196,8 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         pipeline = build_pipeline(
             settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger, tracer=tracer
         )
+        # SIGHUP re-reads `file:` secrets (provider credentials, the ledger DSN) in place.
+        reload = SecretReload(settings, pipeline, logger, rt.rotate_dsn)
         ready = default_readiness(rt.ledger, settings, rt.now)
         bind_catalog_metrics(metrics, settings, rt.now)
         bind_runtime_metrics(metrics, pipeline.unsettled, rt.ledger)
@@ -210,10 +213,11 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
         separate = settings.config.server.admin
         admin_app = create_admin_app(ctx, shared_port=separate is None)
         main, server = parse_listen(settings.config.server.listen), settings.config.server
-        if separate is None:
-            await _run(combine(data_app, admin_app), main, None, None, server)
-        else:
-            await _run(data_app, main, admin_app, parse_listen(separate.listen), server)
+        with on_sighup(asyncio.get_running_loop(), reload):
+            if separate is None:
+                await _run(combine(data_app, admin_app), main, None, None, server)
+            else:
+                await _run(data_app, main, admin_app, parse_listen(separate.listen), server)
 
 
 def uvicorn_config(

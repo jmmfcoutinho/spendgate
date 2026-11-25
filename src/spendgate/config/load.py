@@ -18,7 +18,7 @@ import yaml
 from pydantic import ValidationError
 
 from spendgate.config.schema import Config, DeploymentSpec, Provider
-from spendgate.config.secrets import Secret, check_ref, resolve
+from spendgate.config.secrets import ADC, Secret, check_ref, resolve
 from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.catalog import Catalog, CatalogError, ModelNotPriced, parse
 from spendgate.core.health import HealthConfig
@@ -52,6 +52,7 @@ class ResolvedDeployment:
     region: str | None
     api_version: str | None
     credential: Secret | None
+    ambient: bool = False  # `credential: adc`: the host's own cloud identity, no stored secret
 
 
 @dataclass(frozen=True, slots=True)
@@ -346,14 +347,21 @@ def _deployment(
         issues.append((f"{at}.base_url", problem))
     if auth != "sigv4" and ref is None:
         issues.append((at, f"auth {auth} needs a credential (env:NAME or file:/path)"))
-    where = f"{at}.credential" if spec.credential else f"providers.{spec.provider}.credential"
-    credential = _secret(ref, where, ctx)
+    where = credential_path(spec, at)
+    if ref == ADC and (spec.provider != "google" or auth != "bearer_token"):
+        issues.append((where, "adc is for Google Vertex AI only (auth bearer_token)"))
+    credential = None if ref == ADC else _secret(ref, where, ctx)
     if base_url is None:
         return None
     return ResolvedDeployment(
         spec.provider, base_url, spec.model or model_part, auth,
-        spec.region or prov.region, spec.api_version or prov.api_version, credential,
+        spec.region or prov.region, spec.api_version or prov.api_version, credential, ref == ADC,
     )  # fmt: skip
+
+
+def credential_path(spec: DeploymentSpec, at: str) -> str:
+    """Where the deployment's credential reference is written: its own key or its provider's."""
+    return f"{at}.credential" if spec.credential else f"providers.{spec.provider}.credential"
 
 
 def _priced(catalog: Catalog, catalog_id: str, now_ms: int | None) -> bool:

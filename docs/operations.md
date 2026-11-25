@@ -124,8 +124,10 @@ rollback-safe ships at most one migration, and marks it compatible.
   hour, at most seven days), so you can roll the new one out first.
 - **Revoke** now: `spendgate keys revoke KEY_ID`. List with `spendgate keys list`; secrets are
   never shown.
-- **Provider keys** live in the proxy's environment or secret files (`env:` and `file:` references)
-  and are read when the proxy starts. Rotate one by updating the secret and restarting.
+- **Provider keys** live in the proxy's environment or secret files (`env:` and `file:` references).
+  A `file:` key is read again on `SIGHUP`, without a restart (see
+  [rotating secrets](#rotating-secrets)); an `env:` key is read only at start, so rotating one
+  needs a restart.
 - **The pepper** protects stored key hashes. Do not rotate it casually: it invalidates every key.
 
 ## Kill switch
@@ -220,8 +222,9 @@ Lease renewal skips a hold whose row another transaction has locked instead of w
 one long lock does not fail the heartbeat and stop every open stream. Such a row is being closed by
 its owner, or a sweeper is expiring a lease that is already overdue (that stream is stopped as
 `lease_lost`); if the sweep rolls back, the hold stays pending and a later sweep expires it.
-Callers waiting for a pooled connection queue for up to 10 s; none is refused just for queueing,
-so a burst of new calls cannot block settlements or renewals of calls already running.
+Callers waiting for a pooled connection queue for up to `ledger.pool_timeout_seconds` (default
+10 s); none is refused just for queueing, so a burst of new calls cannot block settlements or
+renewals of calls already running.
 
 **Round trips.** A budget row stays locked while the gateway waits on the network, so the
 ledger keeps round trips few: a call costs five, three for its hold and two for its settlement or
@@ -265,6 +268,79 @@ ledger traffic can be read or redirected on the way; `require` only encrypts and
 certificate, and the libpq default (`prefer`) falls back to plaintext. The DSN is a secret
 reference (`env:NAME` or `file:/path`), so the whole URL, password included, lives in a secret and
 never in `spendgate.yaml`.
+
+**Connection errors.** A connection that fails is reported as `cannot connect to the ledger
+database (<error class>)`, with the SQLSTATE when there is one, at start and in the pool's retry
+warnings. libpq's own message is left out because it quotes host, port and option values from the
+URL. The usual cause of an `@` in the host, port or database name is an `@` in the password:
+percent-encode it as `%40` (the message says so when it sees one).
+
+**Pool size.** Each instance keeps `ledger.pool_min` connections open (default 1) and opens at
+most `ledger.pool_max` (default 10); a call that finds none free waits
+`ledger.pool_timeout_seconds` (default 10) and is then refused with `ledger_unavailable`. Size the
+server's `max_connections` for `pool_max` times the number of instances, plus room for
+migrations, `psql` and backups. SQLite ignores these keys.
+
+## Cloud identity
+
+Where the host has a cloud identity (an AWS role, an Azure managed or workload identity, a Google
+service account attached to the workload), spendgate can use it instead of a stored key for Vertex
+AI and instead of a stored password for the Postgres ledger. No new dependency: each kind uses the
+library of an extra you already install for that cloud, and the `full` image has them all. The
+reasoning is in [ADR-0017](adr/0017-cloud-identity.md).
+
+### Vertex AI with application default credentials
+
+Set `credential: adc` on a `google` provider or deployment with `auth: bearer_token`, instead of
+a service-account JSON file:
+
+```yaml
+providers:
+  google:
+    base_url: "https://europe-west4-aiplatform.googleapis.com"
+    auth: bearer_token
+    credential: adc
+    region: europe-west4
+```
+
+spendgate calls `google.auth.default()` with the `cloud-platform` scope: GKE workload identity,
+the metadata server on Compute Engine and Cloud Run, a credentials file named by
+`GOOGLE_APPLICATION_CREDENTIALS`, or a developer's `gcloud auth application-default login`. The
+project is the one those credentials name, else the one `default()` found (for example from
+`GOOGLE_CLOUD_PROJECT` or the metadata server); with neither, the call is refused. The token is
+refreshed before it expires in a worker thread, as for a service-account key, and every `adc`
+deployment shares it. `adc` is refused for any other provider or auth mode. The `google` extra is
+needed.
+
+### Cloud identity for the database
+
+With `ledger.backend.auth`, every new Postgres connection logs in with a short-lived token from
+the host's identity instead of a password. The DSN names the user and carries no password. Start
+is refused with exit code 3 if it has one, names no user, or the kind's extra is not installed:
+
+```yaml
+ledger:
+  currency: USD
+  backend:
+    kind: postgres
+    # postgresql://spendgate@ledger.abc123.eu-west-1.rds.amazonaws.com:5432/spendgate?sslmode=verify-full
+    dsn: "env:SPENDGATE_DATABASE_URL"
+    auth: {kind: rds_iam, region: eu-west-1}
+```
+
+| `kind` | Token | Extra | Database side |
+|---|---|---|---|
+| `rds_iam` | RDS IAM auth token signed locally with the standard AWS credential chain (15 minutes); `region` defaults to the chain's | `bedrock` (botocore) | IAM database authentication enabled, `GRANT rds_iam TO spendgate`, and an IAM policy allowing `rds-db:connect` for that user |
+| `entra` | Microsoft Entra ID access token from `DefaultAzureCredential` for `scope` (default `https://ossrdbms-aad.database.windows.net/.default`) | `azure` | Azure Database for PostgreSQL with Entra authentication and a role for the identity |
+| `cloudsql_iam` | Google access token from application default credentials (`sqlservice.login` scope) | `google` | Cloud SQL IAM database authentication and an IAM user; for a service account the user is its email without `.gserviceaccount.com` |
+
+A token is fetched in a worker thread, one fetch at a time, and reused for every connection opened
+until 5 minutes before it expires, or until a connect fails: the server may have rejected it, so
+the next login fetches a new one. It is only needed to log in: a connection already open keeps
+working after its token expires. The migration connection at start uses a token too. If a token
+cannot be fetched, the call that needed a new connection is refused with `ledger_unavailable`
+and the log names the kind and the error class, never the token. Use TLS (`sslmode=verify-full`,
+see above): a token is a password while it lives, and RDS refuses IAM logins without TLS.
 
 ## The sweeper
 
@@ -364,6 +440,36 @@ as with a restored backup: spend in that window is missing from the books.
 unavailable, calls are refused with `ledger_unavailable` and `/readyz` answers 503 until it is
 back; if the host is lost, recovery is restoring the backup on a new host and starting the proxy.
 Spend after the backup point is lost.
+
+## Rotating secrets
+
+Send `SIGHUP` to `serve` (`kill -HUP <pid>`, `docker compose kill -s HUP spendgate`) after you
+write a new key or password to a secret file. It reads every `file:` secret again in place, with
+no restart and no drain:
+
+- **Provider credentials** (`providers.*.credential` and per-deployment `credential`): the next
+  call uses the new value; a call already in flight finishes with the one it started with.
+- **The ledger DSN** (`ledger.backend.dsn`): connections the pool opens from then on log in with
+  the new password; open connections keep their session. Only the password may change. A DSN that
+  names another host, port, database, user or option is refused and the old one stays in use:
+  moving to another ledger is a restart.
+
+The files are read in a thread of its own, so a slow or hung mount delays only the reload, never the
+calls being served, and shutdown does not wait for it; a `SIGHUP` that arrives during a reload makes
+it read once more when it ends, however many arrive. A DSN that is not a valid connection string is
+refused the same way as one that names another database, and the other secrets are still applied.
+
+`env:` secrets are not read again (a process's environment cannot change), nor is anything else in
+`spendgate.yaml`: routes, budgets and limits change with a restart. The key pepper is never
+reloaded, because a new pepper would void every key at once. A file that cannot be read or is empty
+keeps its old value, so a rotation caught half-written does not take a deployment down. Each reload
+logs one `secrets_reloaded` event with the config paths it read (`reloaded`) and the ones whose
+value is new (`changed`), comma-separated, never a value; a path that failed is logged as
+`secret_reload_failed` at level `WARNING` with `where` and `reason`. Keep the old key valid at the
+provider until the log shows the path in `changed`. A Kubernetes secret volume swaps its files at
+once, after the kubelet's sync delay, so send the signal once the pod sees the new value. A Docker
+Compose file secret is a bind mount of one host file: overwrite that file in place (`printf ... >
+file`), because a file renamed over it is not seen inside the container.
 
 ## Metrics and logs
 
@@ -466,9 +572,11 @@ key, a user, tag or session label. See [ADR-0019](adr/0019-otel-extra.md).
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,
 `request_id`, `key_prefix`, `scope_path`, `model`, `deployment`, `outcome`, token counts, `cost`,
 `currency`, `latency_ms`, `ttft_ms`, `status`, `reason`, `level`, `ts`, for internal errors
-`where`, `error_class`, `frames`, `charged`, `job` (a background job that failed), and the
-budget-warning fields below (`budget_id`, `scope_kind`, `period`, `period_start`, `spent`, `cap`).
-Prompts, response bodies, headers and secrets are never logged: a field not on the list is dropped, and strings shaped like keys are dropped too.
+`where`, `error_class`, `frames`, `charged`, `job` (a background job that failed), the
+budget-warning fields below (`budget_id`, `scope_kind`, `period`, `period_start`, `spent`, `cap`),
+and `reloaded` and `changed` for [secret reloads](#rotating-secrets). Prompts, response bodies,
+headers and secrets are never logged: a field not on the list is dropped, and strings shaped like
+keys are dropped too.
 Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
 start.
 

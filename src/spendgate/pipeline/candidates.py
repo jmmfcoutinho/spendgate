@@ -8,8 +8,8 @@ uses this lives in `pipeline.routing`.
 
 import math
 import random
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from spendgate.config import ResolvedDeployment, Route
@@ -74,6 +74,26 @@ class Router:
 
     def targets(self, alias: str) -> tuple[Target, ...]:
         return self._targets[alias]
+
+    def reload(self, routes: Mapping[str, Route]) -> Callable[[], None]:
+        """Targets with re-read credentials for the same deployments; the result swaps them in.
+
+        Built now (a mismatch raises before anything changes), swapped later in one assignment,
+        so a request admitted then sees either the old targets or the new ones, and a request
+        already in flight keeps the targets it took. Health stays per label.
+        """
+        targets = {
+            alias: tuple(
+                replace(t, deployment=_deployment(routes[alias].deployments[i]))
+                for i, t in enumerate(old)
+            )
+            for alias, old in self._targets.items()
+        }
+
+        def swap() -> None:
+            self._targets = targets
+
+        return swap
 
     def pick(self, targets: Iterable[Target], tried: set[str], now: int) -> Target | None:
         """The first untried deployment health allows (a half-open probe is taken only here)."""
@@ -170,5 +190,5 @@ def retry_hint(err: UpstreamError, headers: Mapping[str, str], now: int) -> tupl
 def _deployment(d: ResolvedDeployment) -> Deployment:
     return Deployment(
         d.provider, d.base_url, d.model, AuthMode(d.auth), d.region, d.api_version,
-        d.credential.reveal() if d.credential is not None else "",
+        d.credential.reveal() if d.credential is not None else "", d.ambient,
     )  # fmt: skip

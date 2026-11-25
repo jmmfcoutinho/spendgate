@@ -17,7 +17,7 @@ import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
 
-from spendgate.config import Settings
+from spendgate.config import Route, Settings
 from spendgate.core.errors import ErrorCode, Refusal, Shape
 from spendgate.core.limits import Admit, InMemoryLimitStore, LimitStore
 from spendgate.core.money import Money
@@ -368,6 +368,16 @@ class Pipeline:
     def unsettled(self) -> frozenset[str]:
         """Closes the ledger refused, waiting for a heartbeat retry or the sweeper."""
         return self._closer.unsettled()
+
+    def reload_credentials(self, routes: Mapping[str, Route]) -> Callable[[Settings], None]:
+        """Re-read provider credentials (SIGHUP), built now; the result applies them."""
+        swap = self._router.reload(routes)
+
+        def commit(settings: Settings) -> None:
+            swap()
+            self.settings = settings
+
+        return commit
 
     # --- background ----------------------------------------------------------------------------
 

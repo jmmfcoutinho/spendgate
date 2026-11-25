@@ -10,13 +10,15 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from spendgate.config.secrets import check_ref
+from spendgate.config.secrets import check_credential_ref, check_ref
 from spendgate.core.money import Money, MoneyError, parse_amount
 
 # Must match providers.anthropic: older SDKs send 2023-06-01; 2026-10-21 is the current version.
 ANTHROPIC_VERSIONS = ("2023-06-01", "2026-10-21")
 DEFAULT_MAX_BODY_BYTES = 26_214_400  # 25 MiB: protocol.md "25 MB" body and 25 MB transcription file
 DEFAULT_MAX_JSON_BODY_BYTES = 4_194_304  # 4 MiB: JSON parses into ~25x its size (SR-01)
+# Azure Database for PostgreSQL: the token audience Microsoft documents for Entra sign-in.
+ENTRA_DB_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
 _SCOPE = r"(org|project|service|user):[A-Za-z0-9._-]+"
 _SCOPE_PATH = rf"^{_SCOPE}(/{_SCOPE})*$"
 
@@ -39,6 +41,7 @@ def _decimal_text(value: object) -> str:
 
 Amount = Annotated[Money, BeforeValidator(_money)]
 SecretRef = Annotated[str, AfterValidator(check_ref)]
+CredentialRef = Annotated[str, AfterValidator(check_credential_ref)]  # a SecretRef or `adc`
 PosInt = Annotated[int, Field(strict=True, gt=0)]
 Currency = Annotated[str, Field(strict=True, pattern=r"^[A-Z]{3}$")]  # ISO 4217 code
 ScopePath = Annotated[str, Field(strict=True, pattern=_SCOPE_PATH)]
@@ -76,9 +79,27 @@ class SqliteLedger(_Strict):
     path: Annotated[str, Field(strict=True, min_length=1)]
 
 
+class RdsIamAuth(_Strict):
+    kind: Literal["rds_iam"]
+    region: Annotated[str, Field(strict=True, pattern=r"^[a-z0-9-]+$")] | None = None
+
+
+class EntraAuth(_Strict):
+    kind: Literal["entra"]
+    scope: Annotated[str, Field(strict=True, min_length=1)] = ENTRA_DB_SCOPE
+
+
+class CloudSqlIamAuth(_Strict):
+    kind: Literal["cloudsql_iam"]
+
+
+DbAuth = Annotated[RdsIamAuth | EntraAuth | CloudSqlIamAuth, Field(discriminator="kind")]
+
+
 class PostgresLedger(_Strict):
     kind: Literal["postgres"]
     dsn: SecretRef  # a DSN carries the password, so it is referenced like a secret
+    auth: DbAuth | None = None  # a short-lived token as the password of every new connection
 
 
 class Ledger(_Strict):
@@ -89,6 +110,9 @@ class Ledger(_Strict):
     sweep_seconds: PosInt = 30  # how often the server charges and releases expired holds
     retention_days: PosInt = 90
     auto_migrate: bool | None = None  # None: SQLite yes, Postgres no (ADR-0018)
+    pool_min: Annotated[int, Field(strict=True, ge=0)] = 1  # Postgres only
+    pool_max: PosInt = 10
+    pool_timeout_seconds: PosInt = 10  # longest wait for a pooled connection
 
     @property
     def migrates_on_start(self) -> bool:
@@ -105,6 +129,12 @@ class Ledger(_Strict):
     def _heartbeat_inside_lease(self) -> Self:
         if self.heartbeat_seconds is not None and self.heartbeat_seconds >= self.lease_seconds:
             raise ValueError("heartbeat_seconds must be shorter than lease_seconds")
+        return self
+
+    @model_validator(mode="after")
+    def _pool_order(self) -> Self:
+        if self.pool_min > self.pool_max:
+            raise ValueError("pool_min must not exceed pool_max")
         return self
 
 
@@ -131,7 +161,7 @@ class Provider(_Strict):
 
     base_url: Annotated[str, Field(strict=True, min_length=1)] | None = None
     auth: AuthName = "api_key"
-    credential: SecretRef | None = None  # none for sigv4 (the standard AWS chain)
+    credential: CredentialRef | None = None  # none for sigv4 (the standard AWS chain)
     region: str | None = None
     api_version: str | None = None
 
@@ -141,7 +171,7 @@ class DeploymentSpec(_Strict):
     model: Annotated[str, Field(strict=True, min_length=1)] | None = None  # default: catalog model
     base_url: Annotated[str, Field(strict=True, min_length=1)] | None = None
     auth: AuthName | None = None
-    credential: SecretRef | None = None
+    credential: CredentialRef | None = None
     region: str | None = None
     api_version: str | None = None
 

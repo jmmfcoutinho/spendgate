@@ -2243,6 +2243,7 @@ otel = [
 ]
 postgres = [
     { name = "psycopg", extra = ["binary", "pool"] },
+    { name = "psycopg-pool" },
 ]
 tokenizer = [
     { name = "tiktoken" },
@@ -2277,6 +2278,7 @@ requires-dist = [
     { name = "opentelemetry-exporter-otlp-proto-http", marker = "extra == 'otel'", specifier = ">=1.45.2" },
     { name = "opentelemetry-sdk", marker = "extra == 'otel'", specifier = ">=1.45.2" },
     { name = "psycopg", extras = ["binary", "pool"], marker = "extra == 'postgres'", specifier = ">=3.3.8" },
+    { name = "psycopg-pool", marker = "extra == 'postgres'", specifier = ">=3.3.0" },
     { name = "pydantic", specifier = ">=2.14.3" },
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "requests", marker = "extra == 'google'", specifier = ">=2.34.2" },

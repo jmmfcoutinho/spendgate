@@ -54,6 +54,9 @@ Used at `ledger`.
 | `sweep_seconds` | positive integer | `30` | How often the server charges and releases expired holds. |
 | `retention_days` | positive integer | `90` | Calls older than this many whole UTC days are deleted once a day. Usage reports cover only this window. |
 | `auto_migrate` | boolean (optional) | unset | Whether `serve` applies pending migrations at start. Unset means `true` for SQLite (one file on one host) and `false` for Postgres. When false, `serve` refuses a schema that is behind and says to run `spendgate migrate` (or `serve --migrate`): see [upgrades](operations.md#upgrades-and-rollbacks). |
+| `pool_min` | integer | `1` | Postgres only: connections each instance keeps open (default 1). Not used by SQLite. |
+| `pool_max` | positive integer | `10` | Postgres only: most connections each instance opens (default 10). Size the server's `max_connections` for this times the number of instances, plus migrations and admin. |
+| `pool_timeout_seconds` | positive integer | `10` | Postgres only: how long a call waits for a free pooled connection (default 10) before it is refused with `ledger_unavailable`. |
 
 ## Fx
 
@@ -81,7 +84,7 @@ Used at `providers.<name>`.
 |---|---|---|---|
 | `base_url` | string (optional) | unset | Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start. For `openai` and `azure_openai` the upstream must honour `max_completion_tokens`: the proxy sends the held output ceiling in that field only, so an OpenAI-compatible server (vLLM, LiteLLM, ...) that ignores it does not enforce the ceiling (protocol.md 2.1). |
 | `auth` | `api_key` or `bearer_token` or `sigv4` | `"api_key"` | How the proxy authenticates to the provider. |
-| `credential` | secret reference (`env:NAME` or `file:/path`) (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. |
+| `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the service-account JSON, or `adc` for application default credentials (workload identity, the metadata server). A `file:` credential is read again on `SIGHUP`. |
 | `region` | string (optional) | unset | Provider region, where the adapter needs one (Bedrock, Azure). |
 | `api_version` | string (optional) | unset | Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the minimum version is not verified here, so prefer the v1 API. |
 
@@ -186,7 +189,8 @@ Used at `ledger.backend`.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `kind` | `postgres` | required | Always `postgres`. Needs the `postgres` extra. |
-| `dsn` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the connection URL, password included. Use `sslmode=verify-full` when the server is on another host. Each connection gets lock, statement and idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the URL or the server sets them: see [Postgres connections](operations.md#postgres-connections). |
+| `dsn` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the connection URL, password included. Use `sslmode=verify-full` when the server is on another host. Each connection gets lock, statement and idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the URL or the server sets them: see [Postgres connections](operations.md#postgres-connections). A `file:` DSN is read again on `SIGHUP`; only its password may change there. |
+| `auth` | [RdsIamAuth](#rdsiamauth) or [EntraAuth](#entraauth) or [CloudSqlIamAuth](#cloudsqliamauth) (optional) | unset | Sign in with a short-lived token from the host's cloud identity instead of a password; the DSN then names the user and carries no password. See [cloud identity](operations.md#cloud-identity-for-the-database). |
 
 ## DeploymentSpec
 
@@ -198,7 +202,7 @@ Used at `models.<name>.deployments[]`.
 | `model` | string (optional) | unset | The provider's own model or deployment name. Default: the model part of `catalog_id`. |
 | `base_url` | string (optional) | unset | Overrides `providers.<slug>.base_url` for this deployment. May be `env:NAME`. |
 | `auth` | `api_key` or `bearer_token` or `sigv4` (optional) | unset | Overrides `providers.<slug>.auth` for this deployment. |
-| `credential` | secret reference (`env:NAME` or `file:/path`) (optional) | unset | Overrides `providers.<slug>.credential` for this deployment. |
+| `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Overrides `providers.<slug>.credential` for this deployment. |
 | `region` | string (optional) | unset | Overrides `providers.<slug>.region` for this deployment. |
 | `api_version` | string (optional) | unset | Overrides `providers.<slug>.api_version` for this deployment. |
 
@@ -261,6 +265,32 @@ Used at `observability.otel`.
 |---|---|---|---|
 | `enabled` | boolean | `false` | Export one span per hold, forward and settle over OTLP/HTTP, and pass the caller's `traceparent` on to the provider. Needs the `otel` extra (`spendgate[otel]`); without it `serve` warns at start and traces nothing. The exporter reads the standard `OTEL_EXPORTER_OTLP_*` variables. |
 | `service_name` | string | `"spendgate"` | The `service.name` resource attribute of every span. |
+
+## RdsIamAuth
+
+Used at `ledger.backend.auth`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `kind` | `rds_iam` | required | `rds_iam`: an Amazon RDS or Aurora IAM auth token, signed with the standard AWS credential chain. Needs the `bedrock` extra (botocore). |
+| `region` | region name (optional) | unset | AWS region of the database. Default: the AWS chain's region. |
+
+## EntraAuth
+
+Used at `ledger.backend.auth`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `kind` | `entra` | required | `entra`: a Microsoft Entra ID token from `DefaultAzureCredential` (managed or workload identity, environment) for Azure Database for PostgreSQL. Needs the `azure` extra. |
+| `scope` | string | `"https://ossrdbms-aad.database.windows.net/.default"` | Token audience. The default is the one Azure documents for PostgreSQL. |
+
+## CloudSqlIamAuth
+
+Used at `ledger.backend.auth`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `kind` | `cloudsql_iam` | required | `cloudsql_iam`: a Google access token from application default credentials, for Cloud SQL IAM database sign-in. Needs the `google` extra. |
 
 ## Limits
 

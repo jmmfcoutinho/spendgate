@@ -64,6 +64,21 @@ the `spendgate` service, so it gets the same secrets and networks and is deleted
 release that changes the schema, back up the ledger. Rollbacks and the compatibility rules are in
 [Upgrades and rollbacks](../../docs/operations.md#upgrades-and-rollbacks).
 
+## Rotating a key or password
+
+Overwrite the secret file in place (the container sees the bind-mounted file, not a new one renamed over
+it), then tell the guard to read its `file:` secrets again; no restart, calls in flight are not cut:
+
+```bash
+printf '%s' "$NEW_OPENAI_API_KEY" > secrets/openai_api_key
+docker compose kill -s HUP spendgate
+docker compose logs spendgate | grep secrets_reloaded    # the paths read and changed, never a value
+```
+
+The database URL reloads the same way, but only its password may change: rotate the role's password
+in Postgres first (`ALTER ROLE spendgate PASSWORD ...`), then write the new URL. Connections already
+open stay logged in. Details: [rotating secrets](../../docs/operations.md#rotating-secrets).
+
 ## What the perimeter guarantees
 
 - An app container on `apps` cannot resolve or connect to any provider (or any internet host). It holds no
