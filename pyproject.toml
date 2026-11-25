@@ -51,6 +51,11 @@ openai = [
 anthropic = [
     "anthropic>=2.6.0",
 ]
+otel = [
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
+]
 
 [project.urls]
 Homepage = "https://github.com/jmmfcoutinho/spendgate"
@@ -207,6 +212,14 @@ type = "forbidden"
 source_modules = ["spendgate"]
 forbidden_modules = ["uvicorn"]
 ignore_imports = ["spendgate.cli.serve -> uvicorn"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only gateway.otel imports OpenTelemetry"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["opentelemetry"]
+ignore_imports = ["spendgate.gateway.otel -> opentelemetry"]
 allow_indirect_imports = true
 
 [tool.uv]

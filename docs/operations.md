@@ -282,7 +282,8 @@ runs the same heartbeat and sweeps at each beat. A step that fails is logged on 
 beat; the heartbeat only stops when the process stops it. These lines are plain text, not JSON
 events: spendgate does not configure that logger, so they reach stderr through Python's default
 handler (or whatever logging your application sets up in library mode). Alert on
-`heartbeat step failed`.
+`heartbeat step failed`, or on `spendgate_heartbeat_failures_total` (see
+[Metrics and logs](#metrics-and-logs)).
 
 Scope chains (a key's scope and its ancestors, used for the budget headers, the settled call's
 `scope_path` and the stream watch) are cached for 30 seconds. A scope moved to a new parent shows
@@ -388,9 +389,78 @@ path (`unknown` if it could not be read). Names:
 | `spendgate_tokens_total{kind}` | Tokens by kind |
 | `spendgate_catalog_age_seconds`, `spendgate_catalog_info{sha}` | Age and checksum of the price catalog |
 | `spendgate_alert_webhooks_total{result}` | Budget-warning webhook posts: `delivered`, `failed` (gave up after retries), `dropped` (queue full or server stopping); only with `alerts.webhook` |
+| `spendgate_ledger_latency_ms{op}` | Ledger call latency: `op` is `hold`, `settle`, `release` or `renew` |
+| `spendgate_ledger_errors_total{op}` | Ledger calls that failed: the ops above plus `sweep` and `retention`; a hold past its 10 s deadline counts |
+| `spendgate_ledger_unavailable_total` | Requests refused as `ledger_unavailable` (key check or hold); nothing was sent |
+| `spendgate_ledger_pool_wait_ms` | Time a transaction queued for a Postgres pool connection |
+| `spendgate_ledger_pool_size`, `spendgate_ledger_pool_in_use`, `spendgate_ledger_pool_max` | Postgres pool connections held, lent out, and the most it opens (no series on SQLite, or before the first transaction) |
+| `spendgate_sweeper_expired_total` | Expired holds the sweeper charged in full |
+| `spendgate_unsettled_closes` | Closes the ledger has not taken yet: retried at each heartbeat, else swept in full |
+| `spendgate_heartbeat_failures_total{step}` | Heartbeat steps that raised (`renew_leases`, `watch_streams`); retried at the next beat |
+| `spendgate_gateway_overhead_ms` | Time a held call spent outside the upstream call: pricing, hold, routing, settle and the budget read after it (the upload is not counted) |
+
+`op` and `step` are fixed sets in the code (anything else would be counted as `other`). The pool,
+unsettled and sweeper series come from `serve`; library mode publishes no metrics.
 
 Alert on `spendgate_overruns_total`, on a growing `spendgate_holds_in_flight` that does not fall
-(stuck calls) and on a large `spendgate_catalog_age_seconds` (prices may be stale).
+(stuck calls) and on a large `spendgate_catalog_age_seconds` (prices may be stale). Example
+Prometheus rules (tune the thresholds to your traffic):
+
+```yaml
+groups:
+  - name: spendgate
+    rules:
+      - alert: SpendgateOverrun
+        expr: increase(spendgate_overruns_total[15m]) > 0
+        labels: {severity: page}
+        annotations: {summary: "A settlement exceeded its hold on {{ $labels.scope }}"}
+      - alert: SpendgateLedgerUnavailable
+        expr: rate(spendgate_ledger_unavailable_total[5m]) > 0
+        for: 2m
+        labels: {severity: page}
+        annotations: {summary: "Calls are refused because the ledger does not answer"}
+      - alert: SpendgateLedgerErrors
+        expr: sum by (op) (rate(spendgate_ledger_errors_total[5m])) > 0
+        for: 5m
+        annotations: {summary: "Ledger {{ $labels.op }} calls are failing"}
+      - alert: SpendgateHoldSlow
+        expr: histogram_quantile(0.99, sum by (le) (rate(spendgate_ledger_latency_ms_bucket{op="hold"}[5m]))) > 1000
+        for: 10m
+        annotations: {summary: "p99 hold latency is above 1 s (the deadline is 10 s)"}
+      - alert: SpendgatePoolSaturated
+        expr: spendgate_ledger_pool_in_use >= spendgate_ledger_pool_max
+        for: 5m
+        annotations: {summary: "Every Postgres pool connection is in use; calls queue for one"}
+      - alert: SpendgateUnsettledCloses
+        expr: spendgate_unsettled_closes > 0
+        for: 5m
+        annotations: {summary: "Closes the ledger refused; the sweeper will charge them in full"}
+      - alert: SpendgateSweeperCharging
+        expr: increase(spendgate_sweeper_expired_total[1h]) > 0
+        annotations: {summary: "Expired holds were charged in full (a crash or a lost heartbeat)"}
+      - alert: SpendgateHeartbeatFailing
+        expr: increase(spendgate_heartbeat_failures_total[5m]) > 2
+        annotations: {summary: "Heartbeat step {{ $labels.step }} keeps failing; streams may stop"}
+      - alert: SpendgateStuckHolds
+        expr: delta(spendgate_holds_in_flight[30m]) > 0 and spendgate_holds_in_flight > 50
+        for: 30m
+        annotations: {summary: "Holds in flight keep growing"}
+```
+
+**Traces** are optional. Install the extra (`pip install "spendgate[otel]"`) and set
+`observability.otel.enabled: true`; without the extra `serve` prints a warning at start and
+traces nothing. Spans go out over OTLP/HTTP, configured only by the standard variables
+(`OTEL_EXPORTER_OTLP_ENDPOINT` or `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `..._HEADERS`,
+`..._TIMEOUT`, `..._CERTIFICATE`; `OTEL_TRACES_SAMPLER` for sampling); the default endpoint is
+`http://localhost:4318`. Each call gives at most three spans: `spendgate.hold`,
+`spendgate.forward` (every attempt of the call, kind client) and `spendgate.settle` (for a stream,
+when it ends). A valid `traceparent` on the request is their parent; without one the hold span
+starts a new trace and the other two are its children. The provider request carries a
+`traceparent` naming the forward span. `tracestate` and baggage are neither read nor passed on.
+Span attributes are an allowlist: `spendgate.request_id`, `spendgate.model`, `spendgate.endpoint`,
+`spendgate.deployment`, `spendgate.outcome`, `spendgate.attempts`, `spendgate.released`,
+`spendgate.booked` and `error.type` (an exception's class, never its message). Never a prompt, a
+key, a user, tag or session label. See [ADR-0019](adr/0019-otel-extra.md).
 
 **Logs** are one JSON object per line on the `spendgate.call` logger, written for every settled
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,

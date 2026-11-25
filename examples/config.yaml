@@ -62,6 +62,10 @@ anthropic:
 
 fail_open: {}                            # explicit opt-outs only, e.g. allow_remote_media: true
 
+# Traces need the otel extra; the exporter reads OTEL_EXPORTER_OTLP_ENDPOINT and friends.
+observability:
+  otel: { enabled: false, service_name: spendgate }
+
 bootstrap:                               # create-only; a restart never changes existing rows
   scopes: ["org:acme", "org:acme/project:app"]
   budgets:

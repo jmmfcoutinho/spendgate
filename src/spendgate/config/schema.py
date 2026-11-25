@@ -202,6 +202,17 @@ class Routing(_Strict):
         return self
 
 
+class Otel(_Strict):
+    """OpenTelemetry tracing (the `otel` extra). The exporter reads the standard OTEL_* vars."""
+
+    enabled: bool = False
+    service_name: Annotated[str, Field(strict=True, min_length=1, max_length=128)] = "spendgate"
+
+
+class Observability(_Strict):
+    otel: Otel = Field(default_factory=Otel)
+
+
 class Anthropic(_Strict):
     allowed_versions: list[str] = Field(default_factory=lambda: list(ANTHROPIC_VERSIONS))
     allowed_betas: list[str] = Field(default_factory=list)
@@ -281,3 +292,4 @@ class Config(_Strict):
     anthropic: Anthropic = Field(default_factory=Anthropic)
     routing: Routing = Field(default_factory=Routing)
     alerts: Alerts = Field(default_factory=Alerts)
+    observability: Observability = Field(default_factory=Observability)

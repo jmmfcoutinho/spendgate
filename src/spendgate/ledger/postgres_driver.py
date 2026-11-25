@@ -19,8 +19,9 @@ pool's own `check()` has dropped any other dead idle connection.
 import asyncio
 import contextlib
 import random
+import time
 from collections import Counter
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Final
 
 import psycopg
@@ -151,13 +152,43 @@ async def run_flow[T](conn: Conn, flow: Flow[T], *, slow: bool = False) -> T:
         flow.close()
 
 
-async def run_with_retry[T](
-    pool: Pool, make_flow: Callable[[], Flow[T]], stats: RetryStats, *, slow: bool = False
-) -> T:
+type WaitHook = Callable[[float], None]
+
+
+class PoolUse:
+    """Connections lent to a transaction right now. Counted here, not read from the pool's stats:
+    those also count connections still being opened, which nobody is using yet."""
+
+    def __init__(self) -> None:
+        self.lent = 0
+
+
+@contextlib.contextmanager
+def _lent(use: PoolUse | None) -> Iterator[None]:
+    if use is None:
+        yield
+        return
+    use.lent += 1
+    try:
+        yield
+    finally:
+        use.lent -= 1
+
+
+async def run_with_retry[T](  # noqa: PLR0913 - the metrics hooks are optional keywords
+    pool: Pool, make_flow: Callable[[], Flow[T]], stats: RetryStats, *, slow: bool = False,
+    on_wait: WaitHook | None = None, use: PoolUse | None = None,
+) -> T:  # fmt: skip
+    """`on_wait` gets how long each attempt queued for a connection, in ms; `use` counts the
+    connections lent out (both are metrics)."""
     for attempt in range(MAX_RETRIES + 1):
+        asked, connected = time.monotonic(), False  # a duration only; ledger time is the DB's
         try:
             async with pool.connection() as conn:
-                return await run_flow(conn, make_flow(), slow=slow)
+                connected = True
+                _waited(on_wait, asked)
+                with _lent(use):
+                    return await run_flow(conn, make_flow(), slow=slow)
         except ConnectionDropped as exc:
             stats.by_sqlstate[_LOST] += 1
             if attempt == MAX_RETRIES:
@@ -165,6 +196,8 @@ async def run_with_retry[T](
                 raise LedgerUnavailable(f"ledger connection lost: {exc}") from exc
             await pool.check()  # the pool's own health check: drop the other dead idle connections
         except psycopg.Error as exc:
+            if not connected:  # no connection came (PoolTimeout): the whole wait was queueing
+                _waited(on_wait, asked)
             if isinstance(exc, errors.UniqueViolation) and not _retryable(exc):
                 raise ConflictError("reservation already exists") from exc
             if not _retryable(exc):
@@ -178,3 +211,9 @@ async def run_with_retry[T](
             # Jitter so the two sides of a deadlock do not collide again in lockstep.
             await asyncio.sleep(random.uniform(0, _BACKOFF_S * 2**attempt))  # noqa: S311
     raise AssertionError("unreachable")  # pragma: no cover - the loop returns or raises
+
+
+def _waited(on_wait: WaitHook | None, asked: float) -> None:
+    if on_wait is not None:
+        with contextlib.suppress(Exception):  # a metrics fault must not fail a money transaction
+            on_wait((time.monotonic() - asked) * 1000)

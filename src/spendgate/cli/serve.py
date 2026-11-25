@@ -2,9 +2,10 @@
 
 import asyncio
 import contextlib
+import importlib.util
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from types import FrameType
 from typing import Literal
@@ -25,7 +26,14 @@ from spendgate.gateway.bootstrap import BootstrapReport, apply_bootstrap
 from spendgate.gateway.logs import configure_json_logging
 from spendgate.gateway.maintenance import Maintenance
 from spendgate.gateway.metrics import Metrics
-from spendgate.gateway.wiring import bind_catalog_metrics, build_pipeline, default_readiness
+from spendgate.gateway.wiring import (
+    bind_catalog_metrics,
+    bind_runtime_metrics,
+    build_pipeline,
+    default_readiness,
+)
+from spendgate.pipeline.model import Sender
+from spendgate.pipeline.tracing import Tracer
 from spendgate.pipeline.transport import upstream_timeout
 
 
@@ -90,6 +98,43 @@ def run_migrate(path: str, *, bootstrap: bool) -> int:
 
 # --- serve -----------------------------------------------------------------------------------
 
+OTEL_MISSING = (
+    "warning: observability.otel.enabled is set but the otel extra is not installed "
+    "(pip install 'spendgate[otel]'); tracing is off"
+)
+
+
+# Every module `gateway.otel` needs: the SDK and the OTLP/HTTP exporter it imports at start.
+OTEL_MODULES = ("opentelemetry.sdk", "opentelemetry.exporter.otlp.proto.http")
+
+
+def otel_installed() -> bool:
+    # find_spec imports the parent package, so without it this raises instead of returning None.
+    try:
+        return all(importlib.util.find_spec(name) is not None for name in OTEL_MODULES)
+    except ImportError:
+        return False
+
+
+@contextlib.asynccontextmanager
+async def upstream(settings: Settings) -> AsyncIterator[tuple[Sender, Tracer | None]]:
+    """The provider client, traced when `observability.otel` is on and the extra is installed."""
+    timeout = upstream_timeout(settings.config.routing.connect_timeout_seconds)
+    otel = settings.config.observability.otel
+    if otel.enabled and not otel_installed():
+        print(OTEL_MISSING, file=sys.stderr)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        if not (otel.enabled and otel_installed()):
+            yield client, None
+            return
+        from spendgate.gateway import otel as tracing  # noqa: PLC0415 - the optional extra
+
+        started = tracing.start(otel.service_name)
+        try:
+            yield tracing.TracingSender(client), started.tracer
+        finally:
+            started.shutdown()
+
 
 class _Follower(uvicorn.Server):
     """A second server in the same process: the first one owns the signal handlers."""
@@ -143,18 +188,18 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
     for line in settings.unmatched_filters():
         print(f"warning: {line}", file=sys.stderr)
     metrics, logger = Metrics(), configure_json_logging()
-    timeout = upstream_timeout(settings.config.routing.connect_timeout_seconds)
     async with (
-        httpx.AsyncClient(timeout=timeout) as sender,
+        upstream(settings) as (sender, tracer),
         webhook_alerts(settings.alert_webhook, metrics, logger, rt.now) as alerts,
     ):
         pipeline = build_pipeline(
-            settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger
+            settings, rt.ledger, rt.keys, sender, metrics=metrics, logger=logger, tracer=tracer
         )
         ready = default_readiness(rt.ledger, settings, rt.now)
         bind_catalog_metrics(metrics, settings, rt.now)
+        bind_runtime_metrics(metrics, pipeline.unsettled, rt.ledger)
         # Metrics are served by the admin app only (see gateway.admin): not given to the data app.
-        upkeep = Maintenance(rt.ledger, settings, rt.now, logger)  # sweeper + retention
+        upkeep = Maintenance(rt.ledger, settings, rt.now, logger, metrics)  # sweeper + retention
         # The webhook poster (when configured) runs beside the sweeper: stopped with it, but a
         # failure in either leaves the other running.
         data_app = create_app(pipeline, readiness=ready, background=with_alerts(upkeep.run, alerts))

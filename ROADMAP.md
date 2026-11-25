@@ -26,7 +26,7 @@ would change public behaviour gets an ADR first (see [CONTRIBUTING.md](CONTRIBUT
 - Reconciliation against provider billing and usage APIs (a drift report).
 - Daily usage rollups, so long-term reporting survives the `calls` retention window.
 - A read-only web dashboard for usage.
-- OpenTelemetry tracing as an extra, and a Grafana dashboard.
+- A Grafana dashboard over the Prometheus metrics (OpenTelemetry tracing is the `otel` extra).
 
 ## Deployment and security
 

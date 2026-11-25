@@ -31,12 +31,14 @@ from spendgate.ledger.admin_flow import currency_flow
 from spendgate.ledger.common import i
 from spendgate.ledger.engine import LedgerEngine
 from spendgate.ledger.ids import new_id as default_new_id
-from spendgate.ledger.port import LedgerUnavailable
+from spendgate.ledger.port import LedgerUnavailable, PoolStats
 from spendgate.ledger.postgres_driver import (
     Conn,
     ConnectionDropped,
     Pool,
+    PoolUse,
     RetryStats,
+    WaitHook,
     run_flow,
     run_with_retry,
 )
@@ -194,6 +196,9 @@ class PostgresLedger(LedgerEngine):
         self._pool: Pool | None = None
         self._loop: asyncio.AbstractEventLoop | None = None
         self.stats = RetryStats()
+        # Set by the gateway to feed the pool wait histogram; None: not measured.
+        self.pool_wait: WaitHook | None = None
+        self._use = PoolUse()
 
     @classmethod
     async def open(  # noqa: PLR0913 - connection tuning knobs
@@ -240,6 +245,13 @@ class PostgresLedger(LedgerEngine):
         """The server's `clock_timestamp()`: what the skew warning compares the gateway against."""
         return await self._run(_now_flow, write=False)
 
+    def pool_stats(self) -> PoolStats | None:
+        """The pool's size and connections in use; None before the first transaction opens it."""
+        if self._pool is None:
+            return None
+        size = self._pool.get_stats().get("pool_size", 0)  # idle, lent out or being opened
+        return PoolStats(size, self._use.lent, self._sizes[1])
+
     async def aclose(self) -> None:
         pool, self._pool = self._pool, None
         if pool is not None:
@@ -272,4 +284,6 @@ class PostgresLedger(LedgerEngine):
     ) -> T:
         # `write` is moot here: READ COMMITTED for every flow; the flows take their own locks.
         pool = await self._ensure_pool()
-        return await run_with_retry(pool, make_flow, self.stats, slow=slow)
+        return await run_with_retry(
+            pool, make_flow, self.stats, slow=slow, on_wait=self.pool_wait, use=self._use
+        )

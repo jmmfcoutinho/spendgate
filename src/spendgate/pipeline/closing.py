@@ -19,9 +19,9 @@ from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import BudgetRoom, LedgerPort, Settlement
-from spendgate.pipeline import steps
+from spendgate.pipeline import steps, tracing
 from spendgate.pipeline.alerts import log_alerts
-from spendgate.pipeline.model import Clock, Inbound, Observer, SettledEvent
+from spendgate.pipeline.model import Clock, Inbound, Observer, SettledEvent, report_ledger
 from spendgate.pipeline.settle import Book, Closed, Decision, decide
 from spendgate.pipeline.steps import Prepared
 
@@ -45,15 +45,21 @@ class Call:
     prepared: Prepared
     admit: Admit | None
     started: int
+    trace: object = None  # the caller's trace context (`pipeline.tracing`); None when untraced
+
+    @property
+    def tags(self) -> dict[str, tracing.Attribute]:
+        return tracing.tags(self.id, self.prepared.route.catalog_id, self.inbound.endpoint.path)
 
 
 class Closer:
     def __init__(  # noqa: PLR0913, PLR0917 - the closer's collaborators
         self, settings: Settings, ledger: LedgerPort, limits: LimitStore, observer: Observer,
-        now: Clock, sleep: Sleeper = asyncio.sleep,
+        now: Clock, sleep: Sleeper = asyncio.sleep, tracer: tracing.Tracer | None = None,
     ) -> None:  # fmt: skip
         self._settings, self._ledger, self._limits = settings, ledger, limits
         self._observer, self._now, self._sleep = observer, now, sleep
+        self._tracer = tracer or tracing.NoTracer()
         # Closes the ledger did not take: (decision, when it first failed). Each heartbeat retries
         # them; their holds are no longer renewed, so the sweeper charges them in full (CR-02).
         self._unsettled: dict[str, tuple[Decision, int]] = {}
@@ -64,7 +70,12 @@ class Closer:
     ) -> Closed:
         """Exactly one release or settle, then limits, budget read and the observer event."""
         decision = decide(book, interrupted, self._now())
-        done = await self._book(call.id, decision)
+        with self._tracer.span(tracing.SETTLE, call.trace, call.tags) as span:
+            done = await self._book(call.id, decision)
+            span.set("spendgate.outcome", decision.outcome.value)
+            span.set("spendgate.deployment", decision.deployment)
+            span.set("spendgate.released", decision.release)
+            span.set("spendgate.booked", done is not None)
         if done is None:
             self._unsettled[call.id] = (decision, self._now())
         await self._finish_limits(call, book, decision)
@@ -86,17 +97,23 @@ class Closer:
         self, request_id: str, decision: Decision, tries: int = _SETTLE_TRIES
     ) -> Settlement | None:
         """The one transition; None when the ledger did not take it."""
+        op = "release" if decision.release else "settle"
         for attempt in range(tries):
             if attempt:
                 await self._sleep(_BACKOFF_SECONDS[min(attempt, len(_BACKOFF_SECONDS)) - 1])
+            started = self._now()
             try:
                 if decision.release:
-                    return await self._ledger.release(request_id, decision.attempts, self._now())
+                    released = await self._ledger.release(request_id, decision.attempts, started)
+                    report_ledger(self._observer, op, started, self._now(), ok=True)
+                    return released
                 done = await self._ledger.settle(
-                    request_id, decision.charge.nano, decision.attempts, self._now()
+                    request_id, decision.charge.nano, decision.attempts, started
                 )
-            except Exception:  # noqa: S112 - tried again; the sweeper is the backstop
+            except Exception:  # tried again; the sweeper is the backstop
+                report_ledger(self._observer, op, started, self._now(), ok=False)
                 continue
+            report_ledger(self._observer, op, started, self._now(), ok=True)
             log_alerts(done.alerts, self._settings.ledger_currency)  # a breach, a block
             return done
         return None
@@ -146,6 +163,7 @@ class Closer:
             decision.release, left[0] if left else None, chain[0][1] if chain else None,
             any(a.review_required for a in decision.attempts), ttft_ms,
             decision.attempts[-1].http_status if decision.attempts else None,
+            sum(a.latency_ms or 0 for a in decision.attempts),
         )  # fmt: skip
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._observer.on_settled(event)

@@ -64,6 +64,21 @@ All notable changes to this project are documented here. The format follows
   drops are counted in `spendgate_alert_webhooks_total{result}`. See
   [operations](docs/operations.md#budget-warning-webhook) and
   [ADR-0016](docs/adr/0016-alert-webhook.md).
+- Ledger health metrics at `/metrics`: `spendgate_ledger_latency_ms{op}` (hold, settle, release,
+  lease renewal), `spendgate_ledger_errors_total{op}` (a hold past its deadline counts),
+  `spendgate_ledger_unavailable_total`, the Postgres pool (`spendgate_ledger_pool_wait_ms`,
+  `spendgate_ledger_pool_size`, `_in_use`, `_max`), `spendgate_sweeper_expired_total` (holds
+  charged in full), `spendgate_unsettled_closes`, `spendgate_heartbeat_failures_total{step}` and
+  `spendgate_gateway_overhead_ms` (time outside the upstream call). Labels are fixed sets in the
+  code. Example Prometheus alert rules are in [operations](docs/operations.md#metrics-and-logs).
+  See [ADR-0019](docs/adr/0019-otel-extra.md).
+- Optional OpenTelemetry tracing: the `otel` extra and `observability.otel: {enabled,
+  service_name}` (off by default). One span per hold, forward and settle, exported over OTLP/HTTP
+  as the standard `OTEL_EXPORTER_OTLP_*` variables say; the request's `traceparent` is their
+  parent and is passed on to the provider with the forward span. Span attributes are an allowlist
+  (request id, catalog model, deployment label, endpoint, outcome, counts, `error.type`); no
+  prompt, key, user, tag or session value, and no exception message. Enabled without the extra,
+  `serve` warns at start and serves untraced. The base install keeps five runtime dependencies.
 
 ### Changed
 
