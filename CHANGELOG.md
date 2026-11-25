@@ -164,6 +164,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A Gemini answer whose parts carry no billed output (thought parts, empty texts, thought
+  signatures) and no `candidatesTokenCount` is charged its real usage instead of the full hold.
+  Gemini bills thoughts in `thoughtsTokenCount`, which such an answer must then carry when it
+  shows thinking; any other part, including one of a kind the adapter does not know, still
+  needs the candidates count, and content after the finish still makes the usage untrusted.
+  Never an under-charge (M-13) (#67).
 - `/readyz` no longer answers 503 while a global kill switch is engaged. The switch is shared, so
   every replica turned unready at once and load balancers dropped them all. Calls are still
   refused with `kill_switch` (503); the admin readiness detail lists the switch as a warning

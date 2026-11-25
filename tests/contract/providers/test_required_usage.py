@@ -255,6 +255,86 @@ def test_m13_gemini_may_omit_the_candidates_count_only_without_candidates_conten
     assert read(GoogleProvider(), shapes.CHAT, {"candidates": GEMINI_TEXT, "usageMetadata": zero})
 
 
+# Parts that add no candidates tokens (#67): a thought, an empty text, a bare signature.
+GEMINI_UNBILLED: list[Json] = [
+    {"text": "", "thoughtSignature": "fake-sig"},
+    {"thoughtSignature": "fake-sig"},
+    {"text": "Weighing the options", "thought": True},
+    {"text": "", "thought": True, "thoughtSignature": "fake-sig"},
+]
+THOUGHTS_ONLY: dict[str, Json] = {
+    "promptTokenCount": 10,
+    "thoughtsTokenCount": 5,
+    "totalTokenCount": 15,
+}
+
+
+def gemini_answer(part: Json, meta: Json, finish: str = "STOP") -> dict[str, Json]:
+    return {
+        "candidates": [{"content": {"role": "model", "parts": [part]}, "finishReason": finish}],
+        "usageMetadata": meta,
+    }
+
+
+@pytest.mark.parametrize("part", GEMINI_UNBILLED)
+def test_m13_gemini_parts_without_output_read_a_missing_candidates_count_as_zero(
+    part: Json,
+) -> None:
+    """Thoughts are billed in `thoughtsTokenCount`, so the real usage is charged, not the hold."""
+    real = Usage(input_tokens=10, output_tokens=5, reasoning_tokens=5)
+    body = gemini_answer(part, THOUGHTS_ONLY)
+    assert read(GoogleProvider(), shapes.CHAT, body) == real
+    assert streamed(GoogleProvider(), shapes.CHAT, [sse(body)]) == real
+    parts_then_totals = [sse(gemini_answer(part, None, "")), sse(body)]
+    assert streamed(GoogleProvider(), shapes.CHAT, parts_then_totals) == real
+
+
+@pytest.mark.parametrize("part", GEMINI_UNBILLED)
+def test_m13_gemini_thinking_without_a_thoughts_count_is_unreadable(part: Json) -> None:
+    """A thought or signature with no thoughts count and no candidates count: never 0 output."""
+    for meta in ({"promptTokenCount": 10}, THOUGHTS_ONLY | {"totalTokenCount": 16}):
+        body = gemini_answer(part, meta)
+        assert read(GoogleProvider(), shapes.CHAT, body) is None
+        assert streamed(GoogleProvider(), shapes.CHAT, [sse(body)]) is None
+
+
+@pytest.mark.parametrize(
+    "part",
+    [
+        {"text": "Hi"},
+        {"text": "Hi", "thought": False},
+        {"text": "Hi", "thoughtSignature": "fake-sig"},
+        {"functionCall": {"name": "f", "args": {}}, "thoughtSignature": "fake-sig"},
+        {"inlineData": {"mimeType": "image/png", "data": "AA=="}},
+        {"executableCode": {"language": "PYTHON", "code": "print(1)"}},
+        {"text": "", "videoMetadata": {}},  # a key this adapter does not know
+        {"text": "x", "thought": "yes"},  # a thought flag that is not a boolean
+        {"text": 5, "thought": True},
+        {"thoughtSignature": 7},
+        "not-an-object",
+    ],
+)
+def test_m13_gemini_any_other_part_still_needs_the_candidates_count(part: Json) -> None:
+    body = gemini_answer(part, THOUGHTS_ONLY)
+    assert read(GoogleProvider(), shapes.CHAT, body) is None
+    assert streamed(GoogleProvider(), shapes.CHAT, [sse(body)]) is None
+    assert (
+        streamed(
+            GoogleProvider(),
+            shapes.CHAT,
+            [sse(gemini_answer(GEMINI_UNBILLED[2], None, "")), sse(body)],
+        )
+        is None
+    )
+
+
+def test_m13_gemini_a_signature_after_the_finish_still_makes_usage_untrusted() -> None:
+    final = gemini_answer({"text": "Hi"}, {"promptTokenCount": 5, "candidatesTokenCount": 2})
+    late = {"candidates": [{"content": {"parts": [{"thoughtSignature": "fake-sig"}]}}]}
+    assert streamed(GoogleProvider(), shapes.CHAT, [sse(final)]) == Usage(5, 2)
+    assert streamed(GoogleProvider(), shapes.CHAT, [sse(final), sse(late)]) is None
+
+
 def test_m13_gemini_stream_judges_the_final_totals_against_all_content_seen() -> None:
     """Final totals may come after the text: their missing candidates count is still no zero."""
     text = sse({"candidates": GEMINI_TEXT})
