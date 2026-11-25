@@ -20,8 +20,9 @@ the entry at once; another process notices it at most `ttl_ms` later, which is t
 revocation bound (T-AUTH-03). Malformed keys never reach the ledger. A well-formed prefix the
 ledger does not know (or that is revoked) is remembered for `min(ttl_ms, 1 s)`, so a client
 retrying one bad key in a loop costs one read a second, not one per request (SR-11); a flood of
-distinct random prefixes still costs a read each. A key created through this service clears the
-negative entries. Single event loop only: the caches have no lock.
+distinct random prefixes still costs a read each, and only that (accepted risk R-06 in the threat
+model, pinned by T-AUTH-06). A key created through this service clears the negative entries.
+Single event loop only: the caches have no lock.
 """
 
 import hashlib
@@ -33,6 +34,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from spendgate.core.errors import ErrorCode, Refusal
+from spendgate.core.pepper import MIN_PEPPER_BYTES
 from spendgate.core.policy import KeyPolicy
 from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.key_types import (
@@ -47,7 +49,6 @@ from spendgate.ledger.key_types import (
 
 PREFIX_HEX: Final = 12
 SECRET_HEX: Final = 48
-MIN_PEPPER_BYTES: Final = 16
 _KIND_TAG: Final = {KeyKind.API: "sg", KeyKind.ADMIN: "sga"}
 _KEY = re.compile(rf"(sga?)-([0-9a-f]{{{PREFIX_HEX}}})-([0-9a-f]{{{SECRET_HEX}}})")
 _MAX_KEY_LEN: Final = 4 + PREFIX_HEX + 1 + SECRET_HEX
@@ -89,6 +90,7 @@ def parse_key(raw: str) -> ParsedKey | None:
 
 
 def hash_secret(secret: str, pepper: bytes) -> str:
+    # The config already refuses a short pepper (exit 3); this guards every other caller.
     if len(pepper) < MIN_PEPPER_BYTES:
         raise ValueError(f"the key pepper must be at least {MIN_PEPPER_BYTES} bytes")
     return hmac.new(pepper, secret.encode(), hashlib.sha256).hexdigest()

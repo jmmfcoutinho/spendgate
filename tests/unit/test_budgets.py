@@ -58,6 +58,7 @@ def test_period_month_starts_on_the_first() -> None:
     assert next_period_start(Period.MONTH, ms(2028, 2, 29)) == ms(2028, 3, 1)
 
 
+# T-CLK-02
 def test_period_rollover_at_23_59_59_999_utc() -> None:
     last = ms(2026, 11, 30, 23, 59, 59, 999)
     assert period_start(Period.DAY, last) == ms(2026, 11, 30)

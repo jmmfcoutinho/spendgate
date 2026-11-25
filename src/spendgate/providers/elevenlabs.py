@@ -3,7 +3,8 @@
 Text-to-speech is billed by characters. The charge is the larger of the input's length and the
 `character-cost` header ElevenLabs reports, so a credit multiplier can never under-bill. The URL is
 the configured base plus a fixed path and a voice id that matched a strict pattern (SSRF, path
-tricks); the body is rebuilt from validated fields, never forwarded.
+tricks); the body is rebuilt from validated fields, never forwarded. `language_code` is the one
+field beyond the OpenAI speech shape (ADR-0026); the shared allowlist refuses it for the others.
 """
 
 import json
@@ -37,6 +38,7 @@ VOICE_ID = re.compile(
 )  # ElevenLabs ids are 20 alphanumerics; OpenAI names fail
 COST_HEADER = "character-cost"
 MIN_SPEED, MAX_SPEED = 0.7, 1.2  # ElevenLabs voice_settings.speed range
+LANGUAGE_CODE = re.compile(r"[a-z]{2}")  # ISO 639-1; a model that cannot use it ignores it
 _MAX_MESSAGE = 200
 _QUOTA_CODES = frozenset({"quota_exceeded", "insufficient_credits", "payment_required"})
 _VOICE_CODES = frozenset({"voice_not_found", "invalid_uid", "voice_not_fine_tuned"})
@@ -66,13 +68,25 @@ def _format(body: Mapping[str, Json]) -> _Format:
     return found
 
 
+def _language(body: Mapping[str, Json]) -> str | None:
+    """The ISO 639-1 `language_code` to forward; None when absent or null (ElevenLabs infers it)."""
+    code = body.get("language_code")
+    if code is None:
+        return None
+    if not isinstance(code, str) or not LANGUAGE_CODE.fullmatch(code):
+        raise Untranslatable("language_code must be an ISO 639-1 code", "language_code")
+    return code
+
+
 def _check(req: CleanRequest) -> tuple[_Format, str, str]:
     """(format, voice id, text) of a request ElevenLabs can serve, else `Untranslatable`."""
     if req.endpoint != openai.SPEECH:
         raise Untranslatable("endpoint is not served by elevenlabs", "endpoint")
     if req.stream:
         raise Untranslatable("speech does not stream", "stream")
-    openai.check(req.endpoint, req.body, req.files)  # the shared allowlist and input length
+    _language(req.body)
+    shared = {k: v for k, v in req.body.items() if k != "language_code"}  # ours, checked above
+    openai.check(req.endpoint, shared, req.files)  # the shared allowlist and input length
     if "instructions" in req.body:
         raise Untranslatable("instructions are not supported by ElevenLabs", "instructions")
     speed = req.body.get("speed")
@@ -116,6 +130,8 @@ class ElevenLabs:
         speed = req.body.get("speed")
         if speed is not None:
             payload["voice_settings"] = {"speed": speed}
+        if (language := _language(req.body)) is not None:
+            payload["language_code"] = language
         base = deployment.base_url.rstrip("/").removesuffix("/v1")
         url = f"{base}/v1/text-to-speech/{voice}?output_format={fmt.output}"
         headers = {
