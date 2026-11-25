@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-25
+
+**Upgrading from 0.2.x:** no migration and no config change is needed. Pull the 0.3.0 images: the
+0.2.0 images carry a vulnerable `libzstd1` (see Security). A `server.key_pepper` shorter than 16
+bytes, which 0.2.0 already refused with a traceback, is now reported by `check-config` too.
+
 ### Added
 
 - `docs/reviews/live-smoke-v0.2.md`: a live smoke test of OpenAI chat, Responses and embeddings,
@@ -53,7 +59,7 @@ All notable changes to this project are documented here. The format follows
   race test (CR-10) is recorded as closed: the two ordered tests force each order.
 - Container image: `libzstd1` is upgraded to Debian's fix for CVE-2026-124851 (zstd information
   disclosure), which the pinned `python:3.13-slim` digest predates. The 0.2.0 images carry the
-  vulnerable package; rebuild or wait for the next release.
+  vulnerable package; the 0.3.0 images ship the fix.
 
 ## [0.2.0] - 2026-11-25
 
