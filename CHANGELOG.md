@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-25
+
+**Upgrading from 0.1.x:**
+
+- **Postgres: run `spendgate migrate` before starting 0.2.0** (or start it with `serve --migrate`,
+  or set `ledger.auto_migrate: true`). `serve` no longer migrates a Postgres ledger at start and
+  refuses with exit code 5 while the schema is behind
+  ([ADR-0018](docs/adr/0018-migration-policy.md)). SQLite still migrates at start.
+- Bounded defaults for agents ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)): a key without
+  its own `concurrency` admits 16 calls at once (`defaults.limits.concurrency`, also in library
+  mode), and session defaults allow 60 new sessions per hour unless they set
+  `max_new_sessions_per_hour`. An explicit `null` keeps either unlimited.
+- New `calls.error_code` rows hold stable codes such as `read_timeout` instead of exception class
+  names ([ADR-0022](docs/adr/0022-stable-error-codes.md)); queries matching the old names should
+  also match the new ones.
+
 ### Added
 
 - `docs/releasing.md`: how a release and a security release ship (tagging, the environment
