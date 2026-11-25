@@ -36,6 +36,7 @@ def multipart(audio: bytes) -> tuple[bytes, str]:
     return body, f"multipart/form-data; boundary={boundary}"
 
 
+# T-DOS-02
 @pytest.mark.slow
 @async_test
 async def test_parallel_large_uploads_stay_under_the_memory_budget(tmp_path: Path) -> None:
