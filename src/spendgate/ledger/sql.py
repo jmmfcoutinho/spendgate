@@ -195,6 +195,9 @@ SESSION_RENAME = """UPDATE scopes SET closed_at = :now, name = name || '#' || :s
 SESSION_TOUCH = """UPDATE scopes SET step_count = step_count + 1, last_activity_at = :now
   WHERE id = :id"""
 SESSION_REFUND = "UPDATE scopes SET step_count = step_count - 1 WHERE id = :id AND step_count > 0"
+# Release refunds the step, so it locks the session row before the budgets: the lock order.
+RES_SESSION_LOCK = """SELECT id FROM scopes
+  WHERE id = (SELECT session_id FROM reservations WHERE id = :id) $LOCK"""
 SESSION_NEW_COUNT = """SELECT COUNT(*) AS n FROM scopes
   WHERE kind = 'session' AND parent_id = :parent
   AND substr(name, 1, :plen) = :prefix AND created_at > :since"""
