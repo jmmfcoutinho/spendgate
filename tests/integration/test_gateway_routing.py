@@ -89,7 +89,7 @@ async def test_provider_rejection_is_free_and_not_failed_over(tmp_path: Path) ->
 
 @async_test
 async def test_cooled_deployment_is_skipped_for_its_cooldown(tmp_path: Path) -> None:
-    """A is skipped for 3 s (Retry-After beats the 1 s default); then one probe is let through."""
+    """A is skipped for its 3 s Retry-After, then serves again."""
     async with open_stack(tmp_path, cooldown=1) as s:
         s.fake.enqueue(Script(status=429, retry_after="3"))
         await s.chat()

@@ -26,9 +26,9 @@ from spendgate.core.policy import (
     resolve,
 )
 from spendgate.ledger.port import Candidate, HoldMeta, HoldRequest
+from spendgate.pipeline.candidates import Target
 from spendgate.pipeline.faults import InternalEvent, fault_of
 from spendgate.pipeline.model import Inbound, Observer, report_internal
-from spendgate.pipeline.routing import Target
 from spendgate.pipeline.settle import Pricing, fx_rate_nano
 from spendgate.providers.port import CleanRequest, Json, Provider
 

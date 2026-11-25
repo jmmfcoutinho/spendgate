@@ -15,8 +15,8 @@ from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import LedgerUnavailable
 from spendgate.pipeline import steps
 from spendgate.pipeline.auth import authenticate, presented_key
+from spendgate.pipeline.candidates import Router
 from spendgate.pipeline.model import CHAT, EMBEDDINGS, MESSAGES, TRANSCRIPTIONS, Endpoint, Inbound
-from spendgate.pipeline.routing import Router
 from spendgate.pipeline.steps import Context, Prepared
 from spendgate.providers.anthropic import AnthropicProvider
 from spendgate.providers.openai import OpenAIProvider
