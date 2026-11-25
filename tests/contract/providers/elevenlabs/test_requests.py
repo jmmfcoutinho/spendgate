@@ -5,6 +5,7 @@ import logging
 
 import pytest
 
+from spendgate.core.errors import ErrorCode
 from spendgate.providers.elevenlabs import ElevenLabs
 from spendgate.providers.port import AuthMode, CleanRequest, Deployment, Json, Untranslatable
 from tests.contract.providers.elevenlabs.helpers import KEY, MODEL, TEXT, VOICE, deployment, request
@@ -45,6 +46,57 @@ def test_speed_goes_into_voice_settings_and_nothing_else_is_forwarded() -> None:
         "text": TEXT,
         "voice_settings": {"speed": 1.1},
     }
+
+
+@pytest.mark.parametrize("code", ["pt", "en", "ja", "zh"])
+def test_a_valid_language_code_is_forwarded_as_elevenlabs_language_code(code: str) -> None:
+    body: dict[str, Json] = {"language_code": code, "speed": 0.9}
+    assert ElevenLabs().validate(request(body)) is None
+    out = ElevenLabs().translate(request(body), deployment())
+    assert sent_body(out.body) == {
+        "model_id": MODEL,
+        "text": TEXT,
+        "voice_settings": {"speed": 0.9},
+        "language_code": code,
+    }
+    assert "language_code" not in out.url  # a body field, never part of the URL
+
+
+@pytest.mark.parametrize("body", [{}, {"language_code": None}])
+def test_an_absent_or_null_language_code_is_not_forwarded(body: dict[str, Json]) -> None:
+    assert ElevenLabs().validate(request(body)) is None
+    out = ElevenLabs().translate(request(body), deployment())
+    assert "language_code" not in sent_body(out.body)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "PT",  # ISO 639-1 codes are lowercase
+        "Pt",
+        "pt-PT",  # a locale, not a language code
+        "pt_BR",
+        "por",  # ISO 639-2/3
+        "p",
+        "",
+        " pt",
+        "pt\n",
+        "pé",
+        "../",
+        5,
+        True,
+        ["pt"],
+        {"code": "pt"},
+    ],
+)
+def test_an_invalid_language_code_is_refused_never_forwarded(code: Json) -> None:
+    refusal = ElevenLabs().validate(request({"language_code": code}))
+    assert refusal is not None
+    assert refusal.code is ErrorCode.INVALID_REQUEST
+    assert refusal.param == "language_code"
+    with pytest.raises(Untranslatable) as caught:
+        ElevenLabs().translate(request({"language_code": code}), deployment())
+    assert caught.value.refusal.param == "language_code"
 
 
 @pytest.mark.parametrize(
