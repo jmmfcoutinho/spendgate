@@ -38,7 +38,7 @@ VOICE_ID = re.compile(
 )  # ElevenLabs ids are 20 alphanumerics; OpenAI names fail
 COST_HEADER = "character-cost"
 MIN_SPEED, MAX_SPEED = 0.7, 1.2  # ElevenLabs voice_settings.speed range
-LANGUAGE_CODE = re.compile(r"[a-z]{2}")  # ISO 639-1; a model without that language answers 400
+LANGUAGE_CODE = re.compile(r"[a-z]{2}")  # ISO 639-1; a model that cannot use it ignores it
 _MAX_MESSAGE = 200
 _QUOTA_CODES = frozenset({"quota_exceeded", "insufficient_credits", "payment_required"})
 _VOICE_CODES = frozenset({"voice_not_found", "invalid_uid", "voice_not_fine_tuned"})
