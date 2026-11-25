@@ -72,4 +72,15 @@ bootstrap:                               # create-only; a restart never changes 
       scope: "org:acme/project:app"
       models: [gpt-6-luna, embeddings]
       session_defaults: { budget: "1 EUR", max_steps: 50, max_seconds: 900 }
+    - name: agent-key                    # for an autonomous agent: every call is in a session
+      scope: "org:acme/project:app"
+      models: [gpt-6-luna, claude-haiku]
+      limits: { rpm: 120, concurrency: 4 }   # few calls in flight: bounds the overrun at the cap
+      session_required: true             # a call without X-Spendgate-Session is refused
+      session_defaults:
+        budget: "1 EUR"
+        max_steps: 50
+        max_seconds: 900
+        idle_seconds: 300
+        max_new_sessions_per_hour: 20    # minting session ids cannot dodge the limits
     - { name: ops-admin, admin_scopes: ["usage:read", "keys:write", "budgets:write"] }

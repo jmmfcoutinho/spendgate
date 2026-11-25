@@ -79,7 +79,7 @@ CREATE TABLE keys (
   name           TEXT    NOT NULL,
   allowed_models TEXT,                               -- JSON array of globs; NULL = all
   limits         TEXT,                               -- JSON: rpm, tpm, max_concurrent, max_output_tokens, per_call_ceiling_nano
-  session_defaults TEXT,                             -- JSON: budget_nano, max_steps, max_seconds, idle_seconds, max_new_sessions_per_hour; NULL = sessions not allowed
+  session_defaults TEXT,                             -- JSON: budget_nano, max_steps, max_seconds, idle_seconds, max_new_sessions_per_hour, required (true only when set: calls must name a session); NULL = sessions not allowed
   admin_perms    TEXT,                               -- JSON array of usage:read, keys:write, budgets:write; admin keys only (kind 'admin', format sga-<prefix>-<secret>; scope_id is the org they were created under and does not limit them)
   created_at     BIGINT  NOT NULL,
   expires_at     BIGINT,                             -- rotation sets this on the old key (grace period)

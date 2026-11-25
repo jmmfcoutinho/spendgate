@@ -28,8 +28,10 @@ tests that prove it.
 - **Overruns are recorded, never clamped.** Usage above the hold is booked as reported. A breach of
   the cap blocks the budget until an operator acknowledges it (the default, `strict_overrun`).
 - **Session limits.** A call that sends `X-Spendgate-Session` gets that session's budget, step
-  limit, time limit and idle expiry, so a runaway loop ends with `session_limit_reached`. A call
-  without the header has no session limits; the key's parent budgets are the backstop.
+  limit, time limit and idle expiry, so a runaway loop ends with `session_limit_reached`. Give an
+  agent a key with `session_required: true`: a call without the header is then refused, and a key
+  starts at most 60 new sessions an hour unless configured, so the agent can neither drop the
+  header nor mint ids to escape its limits. Each key has at most 16 calls in flight by default.
 - **Throttling costs nothing.** A provider 429 cools that deployment down and the call goes to the
   next deployment of the same model inside the same reservation, at no charge.
 - **A perimeter you can test.** In the reference Docker Compose setup only the proxy holds provider

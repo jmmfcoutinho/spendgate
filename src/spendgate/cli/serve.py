@@ -68,6 +68,8 @@ def print_bootstrap(report: BootstrapReport) -> None:
         print(f"bootstrap: created budget {budget}", file=out)
     for key in report.keys:
         print(f"bootstrap: created {key.kind} key {key.name} ({key.scope}): {key.secret}", file=out)
+    for warning in report.warnings:
+        print(f"warning: bootstrap: {warning}", file=out)
 
 
 async def _migrate(settings: Settings, *, bootstrap: bool) -> None:

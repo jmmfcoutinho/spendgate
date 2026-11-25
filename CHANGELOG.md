@@ -32,6 +32,34 @@ All notable changes to this project are documented here. The format follows
 - The operations guide states what a ledger outage or failover looks like per backend (calls are
   refused with `ledger_unavailable` until the ledger is back, no restart needed) and sizes the
   drain with the new settings.
+- Key option `session_required` (`bootstrap.keys[].session_required` in the config,
+  `session_required` on `POST` and `PATCH /admin/v1/keys`, shown on every key): a call on such a
+  key without `X-Spendgate-Session` is refused with `invalid_request`
+  (`param: X-Spendgate-Session`) before the rate limits are counted and before any hold, so an
+  agent cannot leave its session limits behind by dropping the header. It needs
+  `session_defaults` ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
+- `spendgate.local.guard(concurrency=...)`: the most calls each client admits at once (16 by
+  default, `None` for no bound). With `config=`, the file's `defaults.limits.concurrency` sets it.
+- `spendgate migrate --bootstrap` warns when a configured key already exists with other
+  `session_required` or `session_defaults` than the config. Bootstrap stays create-only; change
+  an existing key with `PATCH /admin/v1/keys/{key_id}`. After upgrading it warns for each existing
+  key whose config has `session_defaults` without `max_new_sessions_per_hour`, since the config
+  now means 60 there: PATCH the key to adopt the bound, or set `max_new_sessions_per_hour: null`
+  in the config to keep it unbounded and silence the warning.
+
+### Changed
+
+- Safer defaults for agents ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)):
+  `defaults.limits.concurrency` is 16 when the config leaves it out (it was unlimited), also in
+  library mode, where each `guard()` client now admits 16 calls at once unless `concurrency=`
+  says otherwise (`concurrency=None` for no bound), and
+  `session_defaults.max_new_sessions_per_hour` is 60 when a key's session defaults leave it out,
+  in the config and the admin API (it was unlimited). An explicit `null` keeps either unlimited,
+  and a key in an admin API response shows `max_new_sessions_per_hour: null` when unbounded, so
+  sending back what a GET returned keeps it.
+  Keys already stored keep the session limits they were created with. The example config has
+  an agent key with `session_required` and these limits, and `how-money-is-protected.md` states
+  the overrun bound at a cap crossing that the concurrency limit gives.
 
 ### Fixed
 

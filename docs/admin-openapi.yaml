@@ -564,14 +564,18 @@ components:
       type: object
       description: >-
         On keys only (column keys.session_defaults). A session header on a key without defaults is
-        `invalid_request`. Clients cannot request limits. Money is integer nano-units.
+        `invalid_request`. Clients cannot request limits. Money is integer nano-units. Absent
+        limits are not enforced, except `max_new_sessions_per_hour`, which is 60 when absent from a
+        request body; send `null` to remove that bound. A key in a response always carries
+        `max_new_sessions_per_hour` (`null` when unbounded), so sending back what a GET returned
+        keeps the stored value.
       additionalProperties: false
       properties:
         budget_nano: {type: integer, minimum: 0}
         max_steps: {type: integer, minimum: 1}
         max_seconds: {type: integer, minimum: 1}
         idle_seconds: {type: integer, minimum: 1}
-        max_new_sessions_per_hour: {type: integer, minimum: 1}
+        max_new_sessions_per_hour: {type: [integer, 'null'], minimum: 1, default: 60}
     ScopeCreate:
       type: object
       required: [path]
@@ -634,6 +638,13 @@ components:
         allowed_models: {type: array, items: {type: string}, description: Empty or absent means the models listed in config}
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        session_required:
+          type: boolean
+          default: false
+          description: >-
+            Refuse every call on the key that does not send `X-Spendgate-Session` (`invalid_request`,
+            `param: X-Spendgate-Session`), before any hold. Needs `session_defaults`, else
+            `invalid_request` with `param: session_required`.
         expires_at: {type: [string, 'null'], format: date-time}
     KeyUpdate:
       type: object
@@ -642,10 +653,11 @@ components:
         allowed_models: {type: array, items: {type: string}}
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        session_required: {type: boolean, description: Absent keeps the stored value. Needs session_defaults (sent or stored).}
         expires_at: {type: [string, 'null'], format: date-time}
     Key:
       type: object
-      required: [id, prefix, scope_id, created_at, revoked]
+      required: [id, prefix, scope_id, created_at, revoked, session_required]
       properties:
         id: {type: string}
         prefix: {type: string, description: The `<prefix>` part of sg-<prefix>-<secret>}
@@ -654,6 +666,7 @@ components:
         allowed_models: {type: array, items: {type: string}}
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        session_required: {type: boolean}
         created_at: {type: string, format: date-time}
         expires_at: {type: [string, 'null'], format: date-time}
         last_used_at: {type: [string, 'null'], format: date-time}

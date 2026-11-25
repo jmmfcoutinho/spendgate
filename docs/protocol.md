@@ -115,17 +115,17 @@ Chat → Converse / Gemini translation covers only: `messages` (text, data-URL i
 |---|---|---|
 | `Authorization: Bearer sg-<prefix>-<secret>` | yes (or `x-api-key`) | Virtual key; bound to one scope. Looked up by `<prefix>`, verified against the stored hash |
 | `x-api-key: sg-...` | alt | Same key, for the Anthropic SDK. If both are present they must match, else `unauthorized` |
-| `X-Spendgate-Session` | no | Agent session or run id. Charset `[A-Za-z0-9._:-]`, 1-128 chars |
+| `X-Spendgate-Session` | no; yes on a `session_required` key | Agent session or run id. Charset `[A-Za-z0-9._:-]`, 1-128 chars |
 | `X-Spendgate-User` | no | End-user id, same charset, 1-128. Attribution only |
 | `X-Spendgate-Tags` | no | Comma list, each `[a-z0-9._:-]{1,32}`, at most 10. Attribution only |
 
 * Invalid label values: `invalid_request` 400 with `param` = header name (never silently dropped, never truncated).
 * **User and tags** are recorded on the call and usable in usage queries. They never affect a budget, limit or routing decision. Fallbacks when `X-Spendgate-User` is absent: body `user` (OpenAI) or `metadata.user_id` (Anthropic).
 * **Session = a child scope** of the key's scope, identified by `(key id, session id)`, created on first use with the key's `session_defaults`; the session scope path includes the key id (segment `session:<key id>:<session id>`, e.g. `org:acme/project:app/service:api/session:01J...:nightly-import`), so sessions are **per key**: two keys on one scope never share a session (`budget_nano`, `max_steps`, `max_seconds`, `idle_seconds`, `max_new_sessions_per_hour`). Properties:
-  * The header is accepted **only for keys that have `session_defaults`**; otherwise `invalid_request` with `param: X-Spendgate-Session`. Without the header there is no session and no session limit.
+  * The header is accepted **only for keys that have `session_defaults`**; otherwise `invalid_request` with `param: X-Spendgate-Session`. Without the header there is no session and no session limit, so a key meant for an agent should set **`session_required: true`**: a call on it without the header is refused with `invalid_request` and `param: X-Spendgate-Session` (message `This key requires the X-Spendgate-Session header.`) before the rate limits are counted and before any hold (only the per-key intake slot is held while the body is read).
   * It can only add limits: the parent chain (org, project, service, user) is always checked too, and the tightest scope decides.
   * A client cannot choose a budget, raise a default, or reach another key's session: the id is namespaced by key id, and no header selects a budget or limit.
-  * `max_steps` counts one step per client request (not per attempt), refunded only by a final `release`; `max_seconds` runs from the first call; `idle_seconds` ends an idle session: the old row is closed and renamed, the same id starts a fresh session (step counter restarts, parent budgets still apply). A session that hit any limit (budget, steps, time) stays closed: the same id keeps getting `session_limit_reached`; only an idle-expired session restarts. Residual (TH-09): up to `max_new_sessions_per_hour` x session budget per hour, always inside the parent budgets. `max_new_sessions_per_hour` stops an agent dodging limits by minting ids.
+  * `max_steps` counts one step per client request (not per attempt), refunded only by a final `release`; `max_seconds` runs from the first call; `idle_seconds` ends an idle session: the old row is closed and renamed, the same id starts a fresh session (step counter restarts, parent budgets still apply). A session that hit any limit (budget, steps, time) stays closed: the same id keeps getting `session_limit_reached`; only an idle-expired session restarts. Residual (TH-09): up to `max_new_sessions_per_hour` x session budget per hour, always inside the parent budgets. `max_new_sessions_per_hour` stops an agent dodging limits by minting ids; it is 60 when a key's `session_defaults` leave it out (`null` removes the bound).
   * Any exhausted session limit returns `session_limit_reached`, including the session's **own** budget (`details.limit = "budget"`, never `budget_exhausted`); `details.limit` is machine-readable: `budget`, `steps`, `time`, `new_sessions`. Parent-chain budget refusals keep `budget_exhausted`. A refused call is not counted as a step.
 * A call with an expired, revoked or unknown key: `unauthorized` 401. A valid key that may not use the model or endpoint: `model_not_allowed` / `forbidden` 403.
 * Keys never appear in responses, logs or errors. Upstream receives only the gateway's provider credentials.
@@ -168,7 +168,7 @@ Anthropic-shaped (`/v1/messages`), same codes plus the request id as the Anthrop
 | `not_found` | 404 | no | `invalid_request_error` / `not_found_error` | Unknown path or admin object |
 | `conflict` | 409 | no | `invalid_request_error` / `conflict_error` | Admin: duplicate or stale update |
 | `request_too_large` | 413 | no | `invalid_request_error` / `request_too_large` | Body over limit, or requested output above the ceiling |
-| `rate_limited` | 429 | yes (token-bucket refill / concurrency: 1-2 s) | `rate_limit_error` / same | **Our** RPM, TPM or concurrency limit for the key or scope; `details.limit` says which |
+| `rate_limited` | 429 | yes (token-bucket refill / concurrency: 1-2 s) | `rate_limit_error` / same | **Our** RPM, TPM or concurrency limit for the key or scope (concurrency is 16 calls in flight per key unless configured); `details.limit` says which |
 | `upstream_throttled` | 429 | yes (provider `Retry-After`, else cooldown remaining) | `rate_limit_error` / same | Every candidate (up to `routing.max_attempts`) answered with a `free_statuses` status (429; 529 for `anthropic`). `details.provider` set |
 | `internal_error` | 500 | no | `server_error` / `api_error` | Unexpected gateway bug; fails closed. Before upstream contact: no charge. After upstream contact: the full hold is charged (settle as `internal_error`) |
 | `upstream_unavailable` | 502 (upstream 5xx or connection error), 504 (upstream timeout), 503 (all deployments circuit-open) | 503 only: breaker cooldown remaining | `upstream_error` / `api_error` (`timeout_error` for 504) | Provider 5xx, timeout or connection error. 5xx and timeout are returned **without** failover and with `x-should-retry: false`; a connection failure before send fails over first (`not_processed`), and 502 follows only when no candidate is left; a model with a single deployment retries a connect failure once on that same deployment (within `routing.max_attempts`) |
@@ -231,6 +231,7 @@ client = OpenAI(base_url="http://localhost:8080/v1", api_key="sg-ab12-...",
                 default_headers={"X-Spendgate-Session": "nightly-import", "X-Spendgate-User": "u-42",
                                  "X-Spendgate-Tags": "import,batch"})
 # Anthropic: Anthropic(base_url="http://localhost:8080", api_key="sg-ab12-...")  # sent as x-api-key
+# An agent's key should have `session_required: true`: every call then must name its session.
 ```
 
 Handle in order: `402` (stop, tell the user; `code` says why), `429` (back off by `Retry-After`; if `code == "upstream_throttled"` the provider, not your budget, is the limit), `5xx` (the gateway sets `x-should-retry: false` on provider 5xx and timeouts because the hold was charged; the caller decides whether to retry; `kill_switch` will not recover on its own).
@@ -239,7 +240,7 @@ Handle in order: `402` (stop, tell the user; `code` says why), `429` (back off b
 
 Closed questions:
 
-1. Session-id minting: both guards apply. `X-Spendgate-Session` is accepted only for keys with `session_defaults`, and `max_new_sessions_per_hour` bounds minting. Closed.
+1. Session-id minting and omission: all three guards apply. `X-Spendgate-Session` is accepted only for keys with `session_defaults`, `max_new_sessions_per_hour` (60 by default) bounds minting, and a `session_required` key refuses calls that omit the header. Closed.
 2. 429 for `upstream_throttled` (chosen) vs 503: 429 gets SDK retry for free; clients tell the two apart by `code`. Closed.
 3. `X-Spendgate-Budget-Scope` is kept as its own header (value: the human path of the tightest scope). Closed.
 

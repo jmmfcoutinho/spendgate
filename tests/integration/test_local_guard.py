@@ -7,6 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from spendgate.config.schema import DEFAULT_CONCURRENCY
 from spendgate.core.money import FxSnapshot
 from spendgate.local import CapMismatch, Guard, GuardError, guard
 from tests.fakes import FakeUpstream
@@ -113,6 +114,25 @@ def test_a_config_file_replaces_the_synthesized_routes(
         guard("5 EUR", config=config, ledger_path=tmp_path / "e.db")
     with pytest.raises(GuardError, match="config= already names"):
         guard("5 USD", config=config, provider_keys=KEYS)
+
+
+def test_guard_concurrency_defaults_to_16_and_none_removes_the_bound(tmp_path: Path) -> None:
+    def bound(**kw: int | None) -> int | None:
+        with make(tmp_path, None, "5 USD", **kw) as g:
+            return g.settings.config.defaults.limits.concurrency
+
+    assert bound() == DEFAULT_CONCURRENCY
+    assert bound(concurrency=64) == 64
+    assert bound(concurrency=None) is None
+    for bad in (0, -1, True, 2.5, 16.0, "4"):
+        with pytest.raises(GuardError, match="concurrency must be"):
+            make(tmp_path, concurrency=bad)
+    for explicit in (None, DEFAULT_CONCURRENCY, 64):  # any explicit value, even the default
+        with pytest.raises(GuardError, match="drop concurrency="):
+            guard(
+                "5 USD", ledger_path=tmp_path / "l.db", config=tmp_path / "spendgate.yaml",
+                concurrency=explicit,
+            )  # fmt: skip
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="XDG layout")

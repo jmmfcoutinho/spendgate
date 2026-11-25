@@ -10,6 +10,7 @@ from collections.abc import Callable, Coroutine
 from pathlib import Path
 
 import httpx
+import pytest
 
 from spendgate.core.outcomes import ReservationState
 from spendgate.core.policy import KillSwitch, KillTarget
@@ -113,6 +114,49 @@ def test_session_header_needs_a_session_key(tmp_path: Path) -> None:
                              headers={"X-Spendgate-Session": "x"})  # fmt: skip
             await refused(s, r, 400, "invalid_request")
             assert error_of(r)["param"] == "X-Spendgate-Session"
+
+    run(case, tmp_path)
+
+
+SESSION = "X-Spendgate-Session"
+# Header lists a client may send to a `session_required` key. Every one either is refused before
+# the hold, or runs inside the session named last (repeated fields: the last value is the one
+# the pipeline reads), so none of them gets a call past the session limits.
+REQUIRED_CASES = {
+    "absent": ([], None),
+    "empty": ([(SESSION, "")], None),
+    "space": ([(SESSION, " ")], None),
+    "tab": ([(SESSION, "\t")], None),
+    "padded": ([(SESSION, " run-1 ")], None),
+    "repeated, last empty": ([(SESSION, "run-1"), (SESSION, "")], None),
+    "repeated, first empty": ([(SESSION, ""), (SESSION, "run-2")], "run-2"),
+    "repeated, both set": ([(SESSION, "run-3"), (SESSION, "run-4")], "run-4"),
+    "plain": ([(SESSION, "run-5")], "run-5"),
+}
+
+
+# T-SESS-08
+@pytest.mark.parametrize("case_name", list(REQUIRED_CASES))
+def test_m11_a_session_required_key_refuses_a_call_without_the_header_before_the_hold(
+    tmp_path: Path, case_name: str
+) -> None:
+    headers, session = REQUIRED_CASES[case_name]
+    body = {"model": "alpha", "max_tokens": 10, "messages": [{"role": "user", "content": "hi"}]}
+
+    async def case(path: Path) -> None:
+        defaults = SessionDefaults(max_steps=1, required=True)
+        async with open_stack(path, session_defaults=defaults) as s:
+            sent = [("Authorization", f"Bearer {s.secret}"), *headers]
+            r = await s.client.post("/v1/chat/completions", json=body, headers=sent)
+            if session is None:
+                await refused(s, r, 400, "invalid_request")
+                assert error_of(r)["param"] == SESSION
+                assert s.observer.held == []  # refused before any hold
+                return
+            assert r.status_code == 200, r.text
+            # The call was a step of that session: with max_steps 1 the next one is refused.
+            again = await s.post("/v1/chat/completions", body, headers={SESSION: session})
+            assert error_of(again)["code"] == "session_limit_reached"
 
     run(case, tmp_path)
 

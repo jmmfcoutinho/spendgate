@@ -63,6 +63,12 @@ the ledger connections (`await guard.aclose()` for async clients).
   `cap="5 USD"` needs no exchange rate. `cap="5 EUR"` needs
   `fx=FxSnapshot.of("USD", "EUR", "0.92", "2026-11-17", "ECB")` and otherwise fails at start with
   `no FX rate USD to EUR`. A currency cannot be changed on an existing ledger.
+- **Calls in flight.** Each client (and each `transport()`) admits at most 16 calls at once, as
+  the proxy does per key; more are refused with `rate_limited` (`details.limit: concurrency`)
+  until one finishes. The bound also limits how far past the cap the budget can go when calls
+  settle above their holds ([how money is protected](how-money-is-protected.md)). Change it with
+  `guard(cap=..., concurrency=64)`; `concurrency=None` removes it. With `config=`, the file's
+  `defaults.limits.concurrency` sets it instead (`null` removes it), and `concurrency=` is refused.
 - **Ledger location.** `default_ledger_path()`: `$XDG_DATA_HOME/spendgate/local-ledger.db`
   (default `~/.local/share/...`) on Linux, `~/Library/Application Support/spendgate/` on macOS
   (POSIX only: setup uses `fcntl` file locks). The folder is created 0700 and the file 0600; a file

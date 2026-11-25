@@ -179,13 +179,25 @@ D: dict[str, str] = {
         "next, at no cost."
     ),
     # Limits
-    "Limits.rpm": "Requests per minute. Unset means no limit.",
+    "Limits.rpm": "Requests per minute. Unset means the `defaults.limits.rpm` value applies.",
     "Limits.tpm": (
-        "Estimated tokens per minute. Unset means no limit. The estimate is the worst case: each "
-        "image counts at the model's image ceiling, up to 61,000 tokens on a model without a "
-        "documented one."
+        "Estimated tokens per minute. Unset means the `defaults.limits.tpm` value applies. The "
+        "estimate is the worst case: each image counts at the model's image ceiling, up to 61,000 "
+        "tokens on a model without a documented one."
     ),
-    "Limits.concurrency": "Calls in flight at once. Unset means no limit.",
+    "Limits.concurrency": (
+        "Calls in flight at once. Unset means the `defaults.limits.concurrency` value applies."
+    ),
+    # DefaultLimits
+    "DefaultLimits.rpm": "Requests per minute for keys with none of their own. Unset: no limit.",
+    "DefaultLimits.tpm": (
+        "Estimated tokens per minute for keys with none of their own. Unset: no limit. The "
+        "estimate is the worst case, as for a key's own `tpm`."
+    ),
+    "DefaultLimits.concurrency": (
+        "Calls in flight at once, per key, for keys with none of their own. It also bounds the "
+        "overrun at a cap crossing (see how-money-is-protected.md). `null` removes the bound."
+    ),
     # Defaults
     "Defaults.limits": "Applied to a key for each limit the key does not set itself.",
     "Defaults.max_output_tokens": (
@@ -249,13 +261,23 @@ D: dict[str, str] = {
     "BootstrapKey.session_defaults": (
         "Limits for sessions on this key. A request that names a session needs them."
     ),
+    "BootstrapKey.session_required": (
+        "Refuse every call on this key that does not send `X-Spendgate-Session` "
+        "(`invalid_request`), so an agent cannot leave its session limits behind. Needs "
+        "`session_defaults`. Like every key setting it applies when the key is created; use "
+        "`PATCH /admin/v1/keys/{key_id}` for existing keys (`migrate --bootstrap` warns when "
+        "an existing key differs)."
+    ),
     "SessionDefaultsSpec.budget": "Cap of one session, inside the shared budgets.",
     "SessionDefaultsSpec.max_steps": "Most requests in one session.",
     "SessionDefaultsSpec.max_seconds": "Wall-clock limit from the first call of a session.",
     "SessionDefaultsSpec.idle_seconds": (
         "A session idle this long is closed and the same id starts a fresh one."
     ),
-    "SessionDefaultsSpec.max_new_sessions_per_hour": "Bounds how fast a key can start sessions.",
+    "SessionDefaultsSpec.max_new_sessions_per_hour": (
+        "Most new sessions this key may start in an hour, idle restarts included, so minting "
+        "session ids cannot dodge the limits. `null` removes the bound."
+    ),
 }
 
 # Type text for the validated aliases, recognised by their constraints.
