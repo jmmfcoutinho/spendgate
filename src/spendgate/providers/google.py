@@ -60,6 +60,9 @@ _PASSED = frozenset(
 _OPERATOR_FAULTS = frozenset(
     {"UNAUTHENTICATED", "PERMISSION_DENIED", "NOT_FOUND", "FAILED_PRECONDITION"}
 )
+# Our key, billing or model config, not the caller (protocol.md 4.2 rule 1): a Gemini API account
+# out of prepaid credit answers 402 RESOURCE_EXHAUSTED, whatever the status name says.
+_OPERATOR_STATUSES = frozenset({401, 402, 403, 404})
 _TOOL_KEYS = (("description", "description"), ("parameters", "parametersJsonSchema"))
 
 
@@ -424,6 +427,7 @@ class GoogleProvider:
             code = ErrorCode.UPSTREAM_THROTTLED
         elif (
             response.status >= HTTPStatus.INTERNAL_SERVER_ERROR
+            or response.status in _OPERATOR_STATUSES
             or status_name in _OPERATOR_FAULTS
             or any(r.startswith("API_KEY") for r in reasons)
         ):

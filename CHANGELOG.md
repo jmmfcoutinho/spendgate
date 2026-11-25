@@ -23,6 +23,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- Google: a provider 401, 402, 403 or 404 is `upstream_unavailable` (502, our key, billing or model
+  config), as protocol.md 4.2 rule 1 says. A Gemini API account out of prepaid credit (402
+  `RESOURCE_EXHAUSTED`) was reported to the client as `invalid_request` (400). The charge (0, nothing
+  processed) is unchanged.
 - A `server.key_pepper` shorter than 16 bytes is a configuration error naming the setting
   ("server.key_pepper: must be at least 16 bytes", exit code 3) for `check-config`, `serve`,
   `migrate` and every `--local` command. `check-config` used to report "configuration ok" and the
