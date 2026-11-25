@@ -8,6 +8,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `deploy/compose/compose.admin.yaml`: an optional overlay that puts the admin API on an internal
+  `admin` network which only a new `operator` service joins, so an operator container or a
+  `/metrics` scraper can reach the admin port while the apps on `apps` cannot, by name or by
+  address. Set `server.admin.listen: spendgate-admin:8081` with it; the default (loopback inside
+  the guard's container) is unchanged. A perimeter test checks both sides
+  ([ADR-0027](docs/adr/0027-admin-network.md), #11).
 - ElevenLabs speech accepts `language_code` (ISO 639-1, two lowercase letters such as `pt`) on
   `POST /v1/audio/speech` and forwards it, so non-English read-aloud is spoken in the right
   language (#10). It takes effect only on models that support it, such as the v2.5 Turbo and

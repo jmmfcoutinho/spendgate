@@ -79,13 +79,57 @@ The database URL reloads the same way, but only its password may change: rotate 
 in Postgres first (`ALTER ROLE spendgate PASSWORD ...`), then write the new URL. Connections already
 open stay logged in. Details: [rotating secrets](../../docs/operations.md#rotating-secrets).
 
+## Admin API on its own network
+
+By default the admin API listens on 127.0.0.1 inside the guard's container: only `docker compose exec`
+reaches it. To call it from another container (an operator's CLI, a Prometheus scraper for `/metrics`)
+without opening it to the apps, add `compose.admin.yaml`. It puts the guard on an internal `admin`
+network under the name `spendgate-admin`, which exists on that network only, and adds an `operator`
+service that joins `admin` and nothing else:
+
+```
+admin  (internal)  spendgate + operator           apps are not on it; no route to the internet
+```
+
+Bind the admin listener to that name in the config (`spendgate.sqlite.yaml` or `spendgate.postgres.yaml`):
+
+```yaml
+server:
+  admin: { listen: spendgate-admin:8081 }   # the guard's address on `admin`, resolved once at start
+```
+
+Then pass both files on every command (or set `COMPOSE_FILE=compose.yaml:compose.admin.yaml`):
+
+```bash
+docker compose -f compose.yaml -f compose.admin.yaml up -d
+export SPENDGATE_ADMIN_KEY=sga-...    # an admin key (bootstrap `admin_scopes`, `migrate --bootstrap`)
+docker compose -f compose.yaml -f compose.admin.yaml run --rm -e SPENDGATE_ADMIN_KEY operator status
+```
+
+The operator service runs the `spendgate` CLI with `SPENDGATE_URL=http://spendgate-admin:8081` and
+starts only with `run` (profile `operator`). A service of your own reaches the admin API by joining
+`admin`; one that also joins `apps` makes the separation moot. `/metrics` on this port needs no key, so
+whatever joins `admin` can read it.
+
+Never use `0.0.0.0` for the admin listener here: it binds every interface of the guard, including
+the one on `apps`. Forgetting the overlay fails closed: the name does not resolve, so the admin
+listener fails to start rather than falling back to another address. Inside the guard's container, `docker compose exec spendgate spendgate ... --local`
+still works; the HTTP commands there need `--url http://spendgate-admin:8081`, because the CLI
+takes an admin address from the config only on loopback. The key travels in plain HTTP on the
+`admin` bridge, which only the guard and the operator join.
+
+**Kubernetes.** A pod has one network interface, so binding cannot separate the ports there. Keep
+`server.admin.listen: 0.0.0.0:8081` and let a NetworkPolicy admit port 8081 only from the operator's
+and the scraper's pods. This is not yet a tested pattern (see the [roadmap](../../ROADMAP.md)).
+
 ## What the perimeter guarantees
 
 - An app container on `apps` cannot resolve or connect to any provider (or any internet host). It holds no
   provider key, pepper or database URL: those are Docker secrets mounted only into `spendgate`.
 - Every service is `read_only`, `cap_drop: [ALL]`, `no-new-privileges`, with memory and pids limits and a
   tmpfs `/tmp`. Neither spendgate port is published on the host. The admin API listens on 127.0.0.1 inside
-  the container, so apps cannot reach it either.
+  the container, so apps cannot reach it either. With `compose.admin.yaml` it listens on the `admin`
+  network only: the operator reaches it, an app on `apps` cannot, by name or by address.
 - An app that holds its own leaked provider key still cannot use it from `apps`.
 
 ## What it does not

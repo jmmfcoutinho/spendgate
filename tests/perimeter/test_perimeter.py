@@ -78,7 +78,7 @@ def test_no_credential_outside_the_guard(sqlite_stack: Stack) -> None:
     assert {"/run/secrets/openai_api_key", "/run/secrets/spendgate_key_pepper"} <= mounted
 
 
-# T-NET-02, T-NET-03
+# T-NET-02, T-NET-03, T-ADM-03 (the admin port listens on loopback in the guard's container)
 def test_app_cannot_reach_the_internet_but_reaches_the_guard(sqlite_stack: Stack) -> None:
     probe = json.loads(
         sqlite_stack.compose.exec_python("app", _PROBE, json.dumps(_provider_hosts()), GUARD)

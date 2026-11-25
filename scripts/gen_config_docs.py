@@ -102,7 +102,12 @@ D: dict[str, str] = {
     "Server.key_pepper": (
         "Secret used to hash stored key secrets. Keep it: changing it invalidates every key."
     ),
-    "AdminServer.listen": "Admin address, `host:port`. Keep it on loopback or an internal network.",
+    "AdminServer.listen": (
+        "Admin address, `host:port`. Keep it on loopback or an internal network. The host is bound "
+        "as given: an address, or a name resolved once at start (in Compose, a network alias such "
+        "as `spendgate-admin`, so it listens on that one network). `0.0.0.0` binds every "
+        "interface, including the one apps reach."
+    ),
     # Ledger
     "Ledger.backend": "`sqlite` (one host) or `postgres` (shared use); see the two tables below.",
     "Ledger.currency": "ISO 4217 code of every budget and every recorded cost.",

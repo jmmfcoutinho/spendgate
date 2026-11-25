@@ -57,7 +57,7 @@ flowchart LR
 | Boundary | Crosses | Rule |
 |---|---|---|
 | B1 caller to gateway | Key, headers, body | Nothing trusted; authenticate, size-check, then validate |
-| B2 operator to gateway | Admin key | Scoped admin keys, optional separate port, audited |
+| B2 operator to gateway | Admin key | Scoped admin keys, optional separate port (optionally on its own network), audited |
 | B3 gateway to ledger | SQL | Parameterised only; ledger down means refuse |
 | B4 gateway to provider | Provider key, prompt | Hosts from config; responses are untrusted input |
 | B5 build to runtime | Code, image | Pinned digests and SHAs; scanned; SBOM |
@@ -101,7 +101,7 @@ Each control maps to at least one test or CI check. Test ids are stable; the fil
 | C-02 | Per-key scope, model allowlist, budgets, RPM/TPM/concurrency | T-AUTH-02 key cannot use a model or scope it is not allowed; T-LIM-01 limits enforced per key; T-KEY-01 an empty `allowed_models` is refused, never read as "every model" | `tests/integration/test_auth.py`, `tests/integration/test_limits.py` |
 | C-03 | Revoke and rotate without restart; revoked key refused within cache TTL; rotation grace period | T-AUTH-03; T-AUTH-05 a repeated unknown key costs one ledger read per short window, not one per request | `tests/contract/test_keys.py` |
 | C-04 | Admin keys with scopes `usage:read`, `keys:write`, `budgets:write`; a virtual key never works on `/admin/v1` | T-ADM-01 each scope allows only its routes; T-ADM-02 virtual key refused on admin | `tests/integration/test_admin.py` |
-| C-05 | Admin API optionally on a separate port; Compose does not publish it to apps | T-ADM-03 admin port unreachable from the app network | `tests/perimeter/test_perimeter.py` |
+| C-05 | Admin API optionally on a separate port; Compose does not publish it to apps: it listens on loopback in the guard's container, or with `compose.admin.yaml` on an internal `admin` network only the operator service joins ([ADR-0027](adr/0027-admin-network.md)) | T-ADM-03 admin port unreachable from the app network, by name or by address, on loopback and on the `admin` network, while the operator on `admin` reaches it | `tests/perimeter/test_perimeter.py`, `tests/perimeter/test_admin_network.py` |
 | C-06 | Every admin write recorded in `admin_audit` (actor key prefix, action, time, request id, before/after, no secrets); the table is append-only, enforced by triggers (UPDATE and DELETE abort); no hash chain, so root on the host can still rewrite it (R-02) | T-ADM-04 audit row per write; no secrets in row; T-ADM-05 UPDATE and DELETE on `admin_audit` are rejected | `tests/integration/test_admin.py` |
 | C-07 | Provider keys exist only in the gateway container | T-NET-01 no other container has an env var or secret matching any configured provider credential name (all providers); T-NET-04 deliberately leaked key makes T-NET-01 fail | `tests/perimeter/test_perimeter.py` |
 | C-08 | `apps` network `internal: true`; only gateway also joins `egress` | T-NET-02 app cannot reach the internet; T-NET-03 app can reach the gateway | `tests/perimeter/test_perimeter.py` |
@@ -131,7 +131,7 @@ Count: 27 controls, 93 distinct test ids.
 
 `tests/unit/test_threat_model.py` fails when a test id cited in a table above is neither carried by a test (in its name, docstring or a `# T-XX-NN` comment, anywhere under `tests/`) nor listed here. An id listed here is honest about the gap: the control may exist, but no automated test is tagged with it.
 
-- Planned (the control exists or is being built; the test does not carry the id yet): T-ADM-03, T-ATTR-01, T-ATTR-02, T-ATTR-03, T-CAT-04, T-CLK-01, T-CLK-02, T-CTR-01, T-CTR-02, T-DOS-02, T-HOLD-01, T-HOLD-02, T-HOLD-03, T-LOG-02, T-LOG-03, T-MON-01, T-MON-08, T-OBS-02, T-SSRF-02
+- Planned (the control exists or is being built; the test does not carry the id yet): T-ATTR-01, T-ATTR-02, T-ATTR-03, T-CAT-04, T-CLK-01, T-CLK-02, T-CTR-01, T-CTR-02, T-DOS-02, T-HOLD-01, T-HOLD-02, T-HOLD-03, T-LOG-02, T-LOG-03, T-MON-01, T-MON-08, T-OBS-02, T-SSRF-02
 - CI job (the check is a CI step, not a test): T-SUP-03 (`make audit`, pip-audit), T-SUP-04 (Trivy image scan), T-SUP-05 (`make secrets`, detect-secrets)
 
 ## 6. What spendgate does NOT protect against
