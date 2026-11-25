@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `docs/reviews/live-smoke-v0.2.md`: a live smoke test of OpenAI chat, Responses and embeddings,
+  Anthropic, and Google (Gemini API and Vertex AI) through the gateway, every charge matching the
+  catalog to the nano-unit. The contract tests of those adapters now also run on answers recorded
+  from the live APIs, ids and signatures replaced with fakes (#9). AWS Bedrock is still to run.
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
