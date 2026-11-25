@@ -32,10 +32,10 @@ FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf107
 # Patch, then strip what a running service does not need. pip, the package managers, perl and
 # bash go (pip's vendored libraries carry HIGH CVEs; there is nothing to install at runtime), and so
 # do the stdlib test suite, IDLE and Tk. /var/lib/dpkg/status stays so scanners see the OS packages.
-# zlib1g is upgraded to the Debian security fix the pinned base digest predates; drop that once
-# Dependabot refreshes the digest past it.
+# zlib1g and libzstd1 (CVE-2026-124851) are upgraded to the Debian security fixes the pinned base
+# digest predates; drop each once Dependabot refreshes the digest past it.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+    && apt-get install -y --no-install-recommends --only-upgrade zlib1g libzstd1 \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt /var/cache/debconf /var/log/apt /var/log/dpkg.log \
     && rm -rf /usr/local/lib/python3.13/site-packages/pip* /usr/local/bin/pip* \
        /usr/local/lib/python3.13/ensurepip /usr/local/lib/python3.13/idlelib \

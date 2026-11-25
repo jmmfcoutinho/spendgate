@@ -15,6 +15,12 @@ All notable changes to this project are documented here. The format follows
   value is `invalid_request` with `param: language_code`; OpenAI and Azure OpenAI speech still
   refuse the field ([ADR-0026](docs/adr/0026-elevenlabs-language-code.md)).
 
+### Security
+
+- Container image: `libzstd1` is upgraded to Debian's fix for CVE-2026-124851 (zstd information
+  disclosure), which the pinned `python:3.13-slim` digest predates. The 0.2.0 images carry the
+  vulnerable package; rebuild or wait for the next release.
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
