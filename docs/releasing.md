@@ -44,7 +44,17 @@ request, branch or commit message before the advisory is published.
 ## Merging a stack of pull requests
 
 When several pull requests build on each other (each one's base is the previous one's branch), merge
-them in order with **Create a merge commit**. A squash merge rewrites the merged commits, so every
-later pull request in the stack then conflicts and has to be rebased and re-run before it can merge.
-Before each merge, check that the pull request targets `main`; deleting the previous branch after its
-merge retargets the next pull request automatically.
+them in order with a merge commit. A squash merge rewrites the merged commits, so every later pull
+request in the stack then conflicts and has to be rebased and re-run before it can merge.
+
+- **The bypass is needed.** The `main` ruleset allows only squash merges and requires a code owner's
+  review, so the maintainer merges with the admin bypass: `gh pr merge <n> --merge --admin
+  --match-head-commit <full head sha>`, one pull request at a time, in order.
+- **Check the base first.** Deleting the previous branch after its merge retargets the next pull
+  request to `main` automatically; wait until it shows `main` and GitHub has computed whether it can
+  merge.
+- **A retarget does not re-run CI.** The `pull_request` trigger does not fire on a base change, so
+  the green run on the pull request is the one made against the old base. It still covers what lands
+  when merging the head into `main` yields exactly the head's tree:
+  `git merge-tree --write-tree origin/main <head>` equals `git rev-parse <head>^{tree}`. If it does
+  not (`main` moved, or a conflict), merge `main` into the branch and let CI run again.

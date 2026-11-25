@@ -319,8 +319,10 @@ def release_flow(
     if any(not a.not_processed or a.charged_nano != 0 for a in attempts):
         raise ValueError("release needs every attempt not_processed and charged 0")
     outcome = attempts[-1].outcome.value if attempts else None
-    released, *reads = yield from sql.batch(
-        q(sql.RES_RELEASE, id=request_id, outcome=outcome, now=now), *_item_reads(request_id)
+    released, _session, *reads = yield from sql.batch(
+        q(sql.RES_RELEASE, id=request_id, outcome=outcome, now=now),
+        q(sql.RES_SESSION_LOCK, id=request_id),  # before the budgets, as hold takes them
+        *_item_reads(request_id),
     )
     if not released:
         return Settlement(False, (yield from _state_of(request_id)))

@@ -180,6 +180,12 @@ All notable changes to this project are documented here. The format follows
 
 ### Fixed
 
+- A Gemini answer whose parts carry no billed output (thought parts, empty texts, thought
+  signatures) and no `candidatesTokenCount` is charged its real usage instead of the full hold.
+  Gemini bills thoughts in `thoughtsTokenCount`, which such an answer must then carry when it
+  shows thinking; any other part, including one of a kind the adapter does not know, still
+  needs the candidates count, and content after the finish still makes the usage untrusted.
+  Never an under-charge (M-13) (#67).
 - `/readyz` no longer answers 503 while a global kill switch is engaged. The switch is shared, so
   every replica turned unready at once and load balancers dropped them all. Calls are still
   refused with `kill_switch` (503); the admin readiness detail lists the switch as a warning
@@ -188,6 +194,11 @@ All notable changes to this project are documented here. The format follows
 - The `http://`-only-for-localhost rule for a provider `base_url` reads the host the way the HTTP
   client does: a `?` or `#` ends the host part, so text after one is never taken for it, and a
   URL with whitespace or a non-printable character is refused.
+- On Postgres, holds and releases on one session no longer deadlock. A release locked the budgets
+  before the session row it refunds a step to, against the documented lock order (session row,
+  then budgets) that holds follow, so concurrent calls on a session hit 40P01 retries, each
+  costing Postgres's `deadlock_timeout`, until some ran out of retries and answered 503. Release
+  now locks the session row first, in the same batch, with no extra round trip (#66).
 - Provider throttling no longer turns into an outage (issue #36). A 429 without `Retry-After`
   cooled its deployment for the full `routing.cooldown_seconds` and then let one probe through,
   so in the load test's clean scenario (3% injected 429s) a fifth to a third of all calls were
@@ -203,6 +214,10 @@ All notable changes to this project are documented here. The format follows
   that arrives while its deployment cools no longer turns an `upstream_throttled` refusal into
   `upstream_unavailable`, nor closes a failure-opened breaker without its probe.
   See [ADR-0021](docs/adr/0021-short-throttle-cooldown.md).
+- A `file:` secret that is not UTF-8 text is a configuration error naming the file ("secret file …
+  is not UTF-8 text", exit code 3 for `check-config`, `serve` and `migrate`) instead of a
+  traceback, and a hot reload keeps the old value. The decode error, which quotes the file's
+  bytes, is never shown or chained (#64).
 
 ## [0.1.3] - 2026-11-24
 

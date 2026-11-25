@@ -39,6 +39,9 @@ sequences never break the invariant).
 cancel is charged the full hold unless usage was seen; for a stream that is its final usage, never
 a mid-stream running total. So is an answer whose usage lacks a required counter (input or
 output tokens, Gemini's prompt count): a missing counter is unreadable usage, never a zero.
+Gemini leaves its candidates count out when it is zero; that reads as 0 only when no part of the
+answer can carry billed output (only thoughts, empty texts and thought signatures), and then a
+reply that shows thinking needs its thoughts count.
 A call is free only if it was never sent,
 the provider answered with a configured throttling status (429, plus 529 for Anthropic), or it
 rejected the request with a 4xx and no usage (`not_processed` and `charge` in `outcomes.py`).

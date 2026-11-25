@@ -11,7 +11,9 @@ from spendgate.providers.google_shapes import (
     candidate,
     chat_usage,
     finishes,
+    has_billed_output,
     has_output,
+    has_thinking,
     load,
     read_usage,
     shrinks,
@@ -30,7 +32,8 @@ class ChatStream:
         self._include_usage = include_usage  # the client asked for the usage-only chunk
         self._started, self._calls = False, 0
         self._meta: Json = None  # the latest `usageMetadata`; final only once `_final` is set
-        self._output_seen = False  # any content so far: then a candidates count is required
+        self._output_seen = False  # billed content so far: then a candidates count is required
+        self._thinking_seen = False  # a thought or a signature so far: a thoughts count is needed
         self._finished = False  # a terminal finish reason (or a blocked prompt) arrived
         self._final = False  # `_meta` came from that chunk or a later one
         self._unreadable = False  # an event we could not convert: usage is no longer trusted
@@ -59,7 +62,8 @@ class ChatStream:
             if shrinks(self._meta, chunk["usageMetadata"]):
                 self._unreadable = True  # cumulative totals that drop cannot be the final ones
             self._meta = chunk["usageMetadata"]
-        self._output_seen = self._output_seen or has_output(chunk)
+        self._output_seen = self._output_seen or has_billed_output(chunk)
+        self._thinking_seen = self._thinking_seen or has_thinking(chunk)
         self._final = self._finished and ("usageMetadata" in chunk or self._final)
         delta: dict[str, Json] = {} if self._started else {"role": "assistant"}
         self._started = True
@@ -74,7 +78,11 @@ class ChatStream:
 
     def _usage(self) -> Usage | None:
         """The final totals, read against all content seen; None before the finish reason."""
-        return read_usage(self._meta, output_seen=self._output_seen) if self._final else None
+        if not self._final:
+            return None
+        return read_usage(
+            self._meta, output_seen=self._output_seen, thinking_seen=self._thinking_seen
+        )
 
     def usage(self) -> Usage | None:
         """Final usage only: a running total from before the finish reason is never trusted."""
