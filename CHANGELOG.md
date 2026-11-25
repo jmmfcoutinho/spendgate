@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Every test id the threat model cites now has a test (review finding SR-10): new tests for
+  attribution headers (T-ATTR-01..03), the overrun metric (T-CAT-04), a clock jumping back and
+  forward across midnight (T-CLK-01), holds of a crashed instance (T-HOLD-02), a flood of holds
+  from one key (T-HOLD-03), key material, prompts and answers kept out of the ledger and error
+  bodies (T-LOG-02, T-LOG-03), metric labels (T-OBS-02) and provider redirects (T-SSRF-02), plus
+  Docker tests for the admin port (T-ADM-03) and the container's user, read-only root and
+  capabilities (T-CTR-01, T-CTR-02). `tests/unit/test_threat_model.py` also fails when the
+  threat model names a test file that does not exist.
+- A flood of distinct well-formed fake keys still costs one ledger read each, with no per-peer
+  throttle; this is now recorded as accepted risk R-06 (threat TH-20, finding SR-11), and a test
+  (T-AUTH-06) pins that such a key costs that read and nothing else. The owner-versus-sweeper
+  race test (CR-10) is recorded as closed: the two ordered tests force each order.
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
