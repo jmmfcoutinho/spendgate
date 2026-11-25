@@ -100,7 +100,8 @@ D: dict[str, str] = {
         "to let every call finish. See the operations guide, Draining on restart."
     ),
     "Server.key_pepper": (
-        "Secret used to hash stored key secrets. Keep it: changing it invalidates every key."
+        "Secret used to hash stored key secrets: at least 16 bytes (`openssl rand -hex 32`), or "
+        "the configuration is refused. Keep it: changing it invalidates every key."
     ),
     "AdminServer.listen": "Admin address, `host:port`. Keep it on loopback or an internal network.",
     # Ledger
