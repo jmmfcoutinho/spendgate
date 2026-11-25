@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `docs/releasing.md`: how a release and a security release ship (tagging, the environment
+  approvals, the advisory's private fork and its bypass merge), and how to merge a stack of pull
+  requests.
+
 ## [0.1.3] - 2026-11-24
 
 ### Added
