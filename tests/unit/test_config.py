@@ -10,6 +10,7 @@ import yaml
 
 from spendgate.config import ConfigError, Secret, check_config, load
 from spendgate.config.schema import SessionDefaultsSpec
+from spendgate.config.secrets import resolve
 from spendgate.config.yamlio import StrictLoader
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
@@ -197,6 +198,20 @@ def test_missing_secret_file_names_the_path(tmp_path: Path) -> None:
     text = BASE.replace("env:SPENDGATE_KEY_PEPPER", "file:/nonexistent/pepper")
     message = failure(write(tmp_path, text))
     assert "server.key_pepper" in message and "/nonexistent/pepper" in message
+
+
+def test_a_secret_file_that_is_not_utf8_is_a_config_error_naming_only_the_path(
+    tmp_path: Path,
+) -> None:
+    pepper = tmp_path / "pepper"
+    pepper.write_bytes(b"\xff\xfefake-pepper")
+    text = BASE.replace("env:SPENDGATE_KEY_PEPPER", f"file:{pepper}")
+    message = failure(write(tmp_path, text))
+    assert f"server.key_pepper: secret file {pepper} is not UTF-8 text" in message
+    assert "fake-pepper" not in message and "0xff" not in message
+    with pytest.raises(LookupError) as raised:
+        resolve(f"file:{pepper}", {})
+    assert raised.value.__cause__ is None and raised.value.__suppress_context__
 
 
 def test_literal_secret_in_yaml_is_refused_and_never_echoed(tmp_path: Path) -> None:

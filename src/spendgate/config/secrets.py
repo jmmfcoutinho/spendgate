@@ -69,6 +69,9 @@ def resolve(ref: str, env: Mapping[str, str]) -> Secret:
             raw = Path(rest).read_text(encoding="utf-8")
         except OSError as exc:
             raise LookupError(f"secret file {rest} cannot be read ({type(exc).__name__})") from exc
+        except UnicodeDecodeError:
+            # The decode error holds the file's bytes and quotes one: never chain or show it.
+            raise LookupError(f"secret file {rest} is not UTF-8 text") from None
     value = raw.strip()
     if not value:
         raise LookupError(

@@ -193,6 +193,10 @@ All notable changes to this project are documented here. The format follows
   that arrives while its deployment cools no longer turns an `upstream_throttled` refusal into
   `upstream_unavailable`, nor closes a failure-opened breaker without its probe.
   See [ADR-0021](docs/adr/0021-short-throttle-cooldown.md).
+- A `file:` secret that is not UTF-8 text is a configuration error naming the file ("secret file …
+  is not UTF-8 text", exit code 3 for `check-config`, `serve` and `migrate`) instead of a
+  traceback, and a hot reload keeps the old value. The decode error, which quotes the file's
+  bytes, is never shown or chained (#64).
 
 ## [0.1.3] - 2026-11-24
 
