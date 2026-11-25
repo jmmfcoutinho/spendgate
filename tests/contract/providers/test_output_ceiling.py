@@ -99,6 +99,7 @@ def test_m15_the_forwarded_ceiling_is_the_held_one_alone(  # noqa: PLR0913, PLR0
     assert read(sent) == HELD
 
 
+# T-MON-08 (at request: no held ceiling, nothing is translated or sent)
 @pytest.mark.parametrize(("case", "make", "dep", "endpoint", "body", "read"), CASES, ids=IDS)
 def test_m15_a_ceiling_endpoint_without_a_held_ceiling_is_refused(  # noqa: PLR0913, PLR0917
     case: str, make: Callable[[], Provider], dep: Deployment, endpoint: str,

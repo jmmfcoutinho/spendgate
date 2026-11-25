@@ -35,7 +35,7 @@ from spendgate.cli import serve
 from spendgate.config import load
 
 async def main():
-    env = {"SPENDGATE_KEY_PEPPER": "pepper-fake"}
+    env = {"SPENDGATE_KEY_PEPPER": "pepper-fake-0123456789"}
     env["OPENAI_API_KEY"] = "fake-provider-key"  # pragma: allowlist secret
     settings = load(sys.argv[1], env=env)
     assert settings.config.observability.otel.enabled

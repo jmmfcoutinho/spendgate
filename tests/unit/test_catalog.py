@@ -1,4 +1,5 @@
-"""Catalog parsing, merging, dated lookup and the fail-closed rules (T-MON-07/08/09, T-CAT-05)."""
+"""Catalog parsing, merging, dated lookup and the fail-closed rules (T-MON-07, T-MON-08, T-MON-09,
+T-CAT-05)."""
 
 import copy
 import hashlib
@@ -250,6 +251,7 @@ def test_catalog_keeps_its_sha_for_the_call_row() -> None:
 # --- fail closed --------------------------------------------------------------------------------
 
 
+# T-MON-08 (at start: a chat entry with no output ceiling stops the catalog from loading)
 def test_chat_entry_without_max_output_tokens_is_invalid() -> None:
     for mode in ("chat", "responses", "messages"):
         no_limits = entry(mode=mode)

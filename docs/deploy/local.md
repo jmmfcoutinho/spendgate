@@ -234,7 +234,8 @@ SPENDGATE_VARIANT=full docker compose run --rm spendgate migrate
 SPENDGATE_VARIANT=full docker compose up -d
 ```
 
-Postgres, publishing the admin API and the full guarantee list are in
+Postgres, publishing the admin API, putting it on its own network for an operator container
+(`compose.admin.yaml`) and the full guarantee list are in
 [`deploy/compose/README.md`](../../deploy/compose/README.md). Stop and delete everything with
 `docker compose down -v`.
 

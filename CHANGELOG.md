@@ -12,6 +12,48 @@ All notable changes to this project are documented here. The format follows
   Anthropic, and Google (Gemini API and Vertex AI) through the gateway, every charge matching the
   catalog to the nano-unit. The contract tests of those adapters now also run on answers recorded
   from the live APIs, ids and signatures replaced with fakes (#9). AWS Bedrock is still to run.
+- `deploy/compose/compose.admin.yaml`: an optional overlay that puts the admin API on an internal
+  `admin` network which only a new `operator` service joins, so an operator container or a
+  `/metrics` scraper can reach the admin port while the apps on `apps` cannot, by name or by
+  address. Set `server.admin.listen: spendgate-admin:8081` with it; the default (loopback inside
+  the guard's container) is unchanged. A perimeter test checks both sides
+  ([ADR-0027](docs/adr/0027-admin-network.md), #11).
+- ElevenLabs speech accepts `language_code` (ISO 639-1, two lowercase letters such as `pt`) on
+  `POST /v1/audio/speech` and forwards it, so non-English read-aloud is spoken in the right
+  language (#10). It takes effect only on models that support it, such as the v2.5 Turbo and
+  Flash models; ElevenLabs ignores it on others, including `eleven_multilingual_v2`. An invalid
+  value is `invalid_request` with `param: language_code`; OpenAI and Azure OpenAI speech still
+  refuse the field ([ADR-0026](docs/adr/0026-elevenlabs-language-code.md)).
+
+### Fixed
+
+- Google: a provider 401, 402, 403 or 404 is `upstream_unavailable` (502, our key, billing or model
+  config), as protocol.md 4.2 rule 1 says. A Gemini API account out of prepaid credit (402
+  `RESOURCE_EXHAUSTED`) was reported to the client as `invalid_request` (400). The charge (0, nothing
+  processed) is unchanged.
+- A `server.key_pepper` shorter than 16 bytes is a configuration error naming the setting
+  ("server.key_pepper: must be at least 16 bytes", exit code 3) for `check-config`, `serve`,
+  `migrate` and every `--local` command. `check-config` used to report "configuration ok" and the
+  others ended in a `ValueError` traceback (exit 1); nothing started either way. The pepper's
+  value is never shown, and the key store still refuses a short pepper on its own.
+
+### Security
+
+- Every test id the threat model cites now has a test (review finding SR-10): new tests for
+  attribution headers (T-ATTR-01..03), the overrun metric (T-CAT-04), a clock jumping back and
+  forward across midnight (T-CLK-01), holds of a crashed instance (T-HOLD-02), a flood of holds
+  from one key (T-HOLD-03), key material, prompts and answers kept out of the ledger and error
+  bodies (T-LOG-02, T-LOG-03), metric labels (T-OBS-02) and provider redirects (T-SSRF-02), plus
+  Docker tests for the admin port (T-ADM-03) and the container's user, read-only root and
+  capabilities (T-CTR-01, T-CTR-02). `tests/unit/test_threat_model.py` also fails when the
+  threat model names a test file that does not exist.
+- A flood of distinct well-formed fake keys still costs one ledger read each, with no per-peer
+  throttle; this is now recorded as accepted risk R-06 (threat TH-20, finding SR-11), and a test
+  (T-AUTH-06) pins that such a key costs that read and nothing else. The owner-versus-sweeper
+  race test (CR-10) is recorded as closed: the two ordered tests force each order.
+- Container image: `libzstd1` is upgraded to Debian's fix for CVE-2026-124851 (zstd information
+  disclosure), which the pinned `python:3.13-slim` digest predates. The 0.2.0 images carry the
+  vulnerable package; rebuild or wait for the next release.
 
 ## [0.2.0] - 2026-11-25
 

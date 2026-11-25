@@ -163,6 +163,17 @@ def test_speech_limits_and_embedding_shapes() -> None:
     assert validate(shapes.EMBEDDINGS, {"input": ["a", [1, 2]], "dimensions": 8}) is None
 
 
+def test_speech_language_code_is_elevenlabs_only_and_refused_here(
+    provider: OpenAIProvider, deployment: Deployment
+) -> None:
+    body: dict[str, Json] = {"input": "x", "voice": "alloy", "language_code": "pt"}
+    refusal = validate(shapes.SPEECH, body)
+    assert refusal is not None
+    assert refusal.param == "language_code"
+    with pytest.raises(Untranslatable):
+        provider.translate(CleanRequest(shapes.SPEECH, "m", body), deployment)
+
+
 def test_translate_rebuilds_the_body_and_forces_store_false(
     provider: OpenAIProvider, deployment: Deployment
 ) -> None:

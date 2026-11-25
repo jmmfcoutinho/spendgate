@@ -39,7 +39,7 @@ Used at `server`.
 | `max_concurrent_requests` | positive integer | `128` | Most requests being admitted at once; beyond it the proxy refuses fast. It covers intake only: a running stream is limited by the key's concurrency. |
 | `keep_alive_seconds` | positive integer | `75` | How long an idle client connection stays open (default 75). Keep it above the load balancer's idle timeout (60 s on many), or the balancer may send a request on a connection the proxy is closing and answer it with a 502. |
 | `graceful_shutdown_seconds` | positive integer | `30` | Drain deadline after `SIGTERM` (default 30): calls still running then are stopped and settled as cancelled (the full hold once sent, unless usage was seen). Keep it below the orchestrator's grace period minus any `preStop` wait; set it above `max_request_seconds` to let every call finish. See the operations guide, Draining on restart. |
-| `key_pepper` | secret reference (`env:NAME` or `file:/path`) | required | Secret used to hash stored key secrets. Keep it: changing it invalidates every key. |
+| `key_pepper` | secret reference (`env:NAME` or `file:/path`) | required | Secret used to hash stored key secrets: at least 16 bytes (`openssl rand -hex 32`), or the configuration is refused. Keep it: changing it invalidates every key. |
 
 ## Ledger
 
@@ -171,7 +171,7 @@ Used at `server.admin`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `listen` | `host:port` | required | Admin address, `host:port`. Keep it on loopback or an internal network. |
+| `listen` | `host:port` | required | Admin address, `host:port`. Keep it on loopback or an internal network. The host is bound as given: an address, or a name resolved once at start (in Compose, a network alias such as `spendgate-admin`, so it listens on that one network). `0.0.0.0` binds every interface, including the one apps reach. |
 
 ## SqliteLedger
 

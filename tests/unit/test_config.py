@@ -16,7 +16,7 @@ from spendgate.config.yamlio import StrictLoader
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 SECRET = "sk-test-DO-NOT-LEAK-0123456789"  # noqa: S105  # pragma: allowlist secret
 ENV = {
-    "SPENDGATE_KEY_PEPPER": "pepper-value",
+    "SPENDGATE_KEY_PEPPER": "pepper-value-fake-0123",
     "OPENAI_API_KEY": SECRET,
     "SPENDGATE_DATABASE_URL": "postgresql://u:pw-secret@db/spend",  # pragma: allowlist secret
     "AZURE_OPENAI_API_KEY": SECRET,
@@ -41,7 +41,7 @@ def example(tmp_path: Path, name: str) -> Path:
     """Copy an example, pointing its `file:` references at real files under tmp_path."""
     text = (EXAMPLES / name).read_text(encoding="utf-8")
     secret = tmp_path / "secret"
-    secret.write_text("file-secret\n", encoding="utf-8")
+    secret.write_text("file-secret-fake-0123\n", encoding="utf-8")
     return write(tmp_path, re.sub(r"file:/run/secrets/\w+", f"file:{secret}", text), name)
 
 
@@ -55,7 +55,9 @@ def test_examples_load_and_check(tmp_path: Path) -> None:
     sqlite = load(example(tmp_path, "config.yaml"), env=ENV)
     assert sqlite.ledger_currency == "EUR"
     assert sqlite.routes["gpt-6-luna"].deployments[0].credential == Secret(SECRET)
-    assert sqlite.routes["claude-haiku"].deployments[0].credential == Secret("file-secret")
+    assert sqlite.routes["claude-haiku"].deployments[0].credential == Secret(
+        "file-secret-fake-0123"
+    )
     assert sqlite.heartbeat_ms == 20_000 and sqlite.lease_ms == 60_000
     assert sqlite.config.bootstrap.budgets[0].cap.nano == 200 * 10**9
     agent = next(k for k in sqlite.config.bootstrap.keys if k.name == "agent-key")
@@ -214,6 +216,29 @@ def test_a_secret_file_that_is_not_utf8_is_a_config_error_naming_only_the_path(
     assert raised.value.__cause__ is None and raised.value.__suppress_context__
 
 
+@pytest.mark.parametrize("pepper", ["tiny-fake-xyz", "fifteen-bytes-x", "\u00e9" * 7])
+def test_a_key_pepper_under_16_bytes_is_a_config_error_that_never_shows_it(
+    tmp_path: Path, pepper: str
+) -> None:
+    # Threat model C-01: the pepper keys the stored hashes; a short one must not start anything.
+    path = write(tmp_path)
+    message = failure(path, ENV | {"SPENDGATE_KEY_PEPPER": pepper})
+    assert "server.key_pepper: must be at least 16 bytes" in message and pepper not in message
+    report = check_config(path, env=ENV | {"SPENDGATE_KEY_PEPPER": pepper})
+    assert not report.ok and any(e.startswith("server.key_pepper: ") for e in report.errors)
+    assert all(pepper not in e for e in report.errors)
+    file = tmp_path / "pepper"
+    file.write_text(f"  {pepper}\n", encoding="utf-8")  # stripped like every secret
+    message = failure(write(tmp_path, BASE.replace("env:SPENDGATE_KEY_PEPPER", f"file:{file}")))
+    assert "server.key_pepper: must be at least 16 bytes" in message and pepper not in message
+
+
+@pytest.mark.parametrize("pepper", ["sixteen-bytes-xx", "\u00e9" * 8])
+def test_a_key_pepper_of_16_bytes_is_accepted(tmp_path: Path, pepper: str) -> None:
+    settings = load(write(tmp_path), env=ENV | {"SPENDGATE_KEY_PEPPER": pepper})
+    assert settings.key_pepper.reveal() == pepper
+
+
 def test_literal_secret_in_yaml_is_refused_and_never_echoed(tmp_path: Path) -> None:
     text = BASE.replace("env:OPENAI_API_KEY", SECRET)
     message = failure(write(tmp_path, text))
@@ -224,10 +249,10 @@ def test_resolved_secret_is_not_in_reprs_or_errors(tmp_path: Path) -> None:
     s = load(write(tmp_path), env=ENV)
     assert SECRET not in repr(s) and SECRET not in repr(s.routes)
     assert SECRET not in str(s.routes["m"].deployments[0].credential)
-    assert s.key_pepper.reveal() == "pepper-value"
+    assert s.key_pepper.reveal() == "pepper-value-fake-0123"
     # A bad config in the same run must not echo the loaded values either.
     message = failure(write(tmp_path, BASE + "routing: {max_attempts: 0}\n"))
-    assert SECRET not in message and "pepper-value" not in message
+    assert SECRET not in message and "pepper-value-fake-0123" not in message
 
 
 def test_unpriced_routed_model_is_an_error_and_listed(tmp_path: Path) -> None:

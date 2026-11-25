@@ -120,6 +120,26 @@ def test_scenario_06_rollover_with_a_hold_in_flight_settles_into_the_old_period(
     assert_i1(new)
 
 
+def test_t_clk_01_a_clock_jumping_back_and_forward_across_midnight_loses_no_money(rig: Rig) -> None:
+    """Each hold stays in the period row of the clock reading it was made at, whatever the clock
+    reads when it settles. A backward jump does not end the newer period early or forget its
+    spend: when the clock comes back, that spend still counts against its cap."""
+    w = rig.world("1", period=Period.DAY)
+    day5, day6 = _ms(5, 23, 59, 59), _ms(6, 0, 0, 1)
+    rig.hold_ok(w, "fwd", "0.60", day6)  # the clock jumped forward over midnight
+    rig.hold_ok(w, "back", "0.60", day5)  # then back again: day 5's row, its own cap
+    assert rig.settle("fwd", "0.50", day5).applied  # settled while the clock reads day 5
+    assert rig.settle("back", "0.50", day6).applied  # settled while the clock reads day 6
+    old, new = rig.totals(w, day5), rig.totals(w, day6)
+    assert old.period_start != new.period_start
+    assert figures(old) == (E("0.50"), 0, 0, 0)
+    assert figures(new) == (E("0.50"), 0, 0, 0)
+    assert refusal_of(rig.hold(w, "again", "0.60", day6)) is ErrorCode.BUDGET_PERIOD_EXHAUSTED
+    assert refusal_of(rig.hold(w, "again", "0.60", day5)) is ErrorCode.BUDGET_PERIOD_EXHAUSTED
+    assert_i1(old)
+    assert_i1(new)
+
+
 # --- scenarios 7 and 16: cap lowered, then raised --------------------------------------------
 
 
@@ -241,6 +261,7 @@ def test_sweeper_records_excess_when_a_grant_expires_without_traffic(rig: Rig) -
 # --- scenario 11: release then retry ---------------------------------------------------------
 
 
+# T-MON-01
 def test_scenario_11_m02_release_then_retry(rig: Rig) -> None:
     from spendgate.core.sessions import SessionDefaults  # noqa: PLC0415
 
