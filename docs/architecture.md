@@ -1,6 +1,6 @@
 # spendgate architecture
 
-Status: current for v0.1.1 (first written 2026-11-13). Decisions: [decisions.md](./decisions.md). ADRs: [0001](adr/0001-ports-and-adapters.md) to [0010](adr/0010-calls-http-status.md).
+Status: current for v0.1.1 (first written 2026-11-13). Decisions: [decisions.md](./decisions.md). ADRs: [0001](adr/0001-ports-and-adapters.md) to [0022](adr/0022-stable-error-codes.md) (0020 was not used).
 
 ## 1. Components
 
@@ -187,6 +187,14 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0008](adr/0008-scope-display-name.md): scope display name (migration 0003).
 - [ADR-0009](adr/0009-review-hardening.md): behaviour changes from the v0.1 code and security reviews.
 - [ADR-0010](adr/0010-calls-http-status.md): `calls.http_status` is the provider's status, range-checked (migration 0004).
+- [ADR-0011](adr/0011-model-filter-validation-and-late-settle-reservation.md): refuse a `model_filter` that matches no route; a late settle updates the reservation.
+- [ADR-0012](adr/0012-bounded-ledger-waits.md): bounded ledger waits (Postgres session limits, hold deadline).
+- [ADR-0013](adr/0013-safer-agent-defaults.md): safer defaults for agents: `session_required`, a new-session bound and a concurrency limit.
+- [ADR-0014](adr/0014-catalog-import-command.md): `spendgate catalog import` drafts an override file from LiteLLM's price file.
 - [ADR-0015](adr/0015-readiness-and-shutdown.md): a kill switch leaves readiness alone; keep-alive and drain deadline settings.
+- [ADR-0016](adr/0016-alert-webhook.md): budget warnings posted to a signed webhook.
+- [ADR-0017](adr/0017-cloud-identity.md): cloud identity, secret reload on SIGHUP, ledger pool settings.
 - [ADR-0018](adr/0018-migration-policy.md): migrations are a separate step (`serve` migrates Postgres only when asked); code accepts one compatible step ahead.
 - [ADR-0019](adr/0019-otel-extra.md): ledger health metrics and the optional OpenTelemetry extra (`otel`).
+- [ADR-0021](adr/0021-short-throttle-cooldown.md): short jittered throttle cooldown and a bounded wait for a cooling deployment.
+- [ADR-0022](adr/0022-stable-error-codes.md): `calls.error_code` holds stable, documented codes.
