@@ -4,10 +4,11 @@ import re
 
 import pytest
 
+from spendgate.core.pepper import MIN_PEPPER_BYTES
 from spendgate.core.policy import KeyPolicy
 from spendgate.ledger import keys
 from spendgate.ledger.key_types import KeyKind, KeySpec
-from spendgate.ledger.keys import MIN_PEPPER_BYTES, format_key, hash_secret, parse_key
+from spendgate.ledger.keys import format_key, hash_secret, parse_key
 
 PEPPER = b"unit-pepper-0123456789abcdef"
 

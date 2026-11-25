@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A `server.key_pepper` shorter than 16 bytes is a configuration error naming the setting
+  ("server.key_pepper: must be at least 16 bytes", exit code 3) for `check-config`, `serve`,
+  `migrate` and every `--local` command. `check-config` used to report "configuration ok" and the
+  others ended in a `ValueError` traceback (exit 1); nothing started either way. The pepper's
+  value is never shown, and the key store still refuses a short pepper on its own.
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
