@@ -178,6 +178,11 @@ All notable changes to this project are documented here. The format follows
 - The `http://`-only-for-localhost rule for a provider `base_url` reads the host the way the HTTP
   client does: a `?` or `#` ends the host part, so text after one is never taken for it, and a
   URL with whitespace or a non-printable character is refused.
+- On Postgres, holds and releases on one session no longer deadlock. A release locked the budgets
+  before the session row it refunds a step to, against the documented lock order (session row,
+  then budgets) that holds follow, so concurrent calls on a session hit 40P01 retries, each
+  costing Postgres's `deadlock_timeout`, until some ran out of retries and answered 503. Release
+  now locks the session row first, in the same batch, with no extra round trip (#66).
 - Provider throttling no longer turns into an outage (issue #36). A 429 without `Retry-After`
   cooled its deployment for the full `routing.cooldown_seconds` and then let one probe through,
   so in the load test's clean scenario (3% injected 429s) a fifth to a third of all calls were
