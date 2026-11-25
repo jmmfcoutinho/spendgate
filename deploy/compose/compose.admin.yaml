@@ -1,0 +1,44 @@
+# Optional overlay: the admin API on its own network, which only the operator service joins.
+# See README.md, "Admin API on its own network", and docs/adr/0026-admin-network.md.
+#
+#   admin   internal: true  spendgate + operator. Apps are not on it; nothing on it reaches the internet.
+#
+# The guard joins `admin` under the name `spendgate-admin`, which exists on that network only. Set
+# `server.admin.listen: spendgate-admin:8081` in the config: the admin listener then binds the guard's
+# address on `admin` alone, so an app on `apps` cannot open a connection to it by name or by address.
+# Use both files on every command, for example:
+#   docker compose -f compose.yaml -f compose.admin.yaml up -d
+#   docker compose -f compose.yaml -f compose.admin.yaml run --rm -e SPENDGATE_ADMIN_KEY operator status
+name: spendgate
+
+services:
+  spendgate:
+    networks:
+      admin:
+        aliases: [spendgate-admin]
+
+  # The operator's admin CLI on `admin` only. It reuses the spendgate image (entrypoint `spendgate`),
+  # gets no secrets, and starts only with `run` (profile `operator`); the admin key is passed per run.
+  operator:
+    profiles: [operator]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    restart: "no"
+    image: spendgate:${SPENDGATE_VARIANT:-core}
+    user: "10001:10001"
+    healthcheck: { disable: true }   # the image's check targets the guard's port
+    environment:
+      SPENDGATE_URL: http://spendgate-admin:8081
+    tmpfs:
+      - /tmp:size=8m,noexec,nosuid,nodev
+    networks: [admin]
+    depends_on:
+      spendgate:
+        condition: service_healthy
+
+networks:
+  admin:
+    internal: true
