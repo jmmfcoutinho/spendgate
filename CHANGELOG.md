@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `deploy/compose/compose.admin.yaml`: an optional overlay that puts the admin API on an internal
+  `admin` network which only a new `operator` service joins, so an operator container or a
+  `/metrics` scraper can reach the admin port while the apps on `apps` cannot, by name or by
+  address. Set `server.admin.listen: spendgate-admin:8081` with it; the default (loopback inside
+  the guard's container) is unchanged. A perimeter test checks both sides
+  ([ADR-0026](docs/adr/0026-admin-network.md), #11).
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
