@@ -14,6 +14,18 @@ All notable changes to this project are documented here. The format follows
   address. Set `server.admin.listen: spendgate-admin:8081` with it; the default (loopback inside
   the guard's container) is unchanged. A perimeter test checks both sides
   ([ADR-0027](docs/adr/0027-admin-network.md), #11).
+- ElevenLabs speech accepts `language_code` (ISO 639-1, two lowercase letters such as `pt`) on
+  `POST /v1/audio/speech` and forwards it, so non-English read-aloud is spoken in the right
+  language (#10). It takes effect only on models that support it, such as the v2.5 Turbo and
+  Flash models; ElevenLabs ignores it on others, including `eleven_multilingual_v2`. An invalid
+  value is `invalid_request` with `param: language_code`; OpenAI and Azure OpenAI speech still
+  refuse the field ([ADR-0026](docs/adr/0026-elevenlabs-language-code.md)).
+
+### Security
+
+- Container image: `libzstd1` is upgraded to Debian's fix for CVE-2026-124851 (zstd information
+  disclosure), which the pinned `python:3.13-slim` digest predates. The 0.2.0 images carry the
+  vulnerable package; rebuild or wait for the next release.
 
 ## [0.2.0] - 2026-11-25
 
