@@ -57,7 +57,7 @@ flowchart LR
 | Boundary | Crosses | Rule |
 |---|---|---|
 | B1 caller to gateway | Key, headers, body | Nothing trusted; authenticate, size-check, then validate |
-| B2 operator to gateway | Admin key | Scoped admin keys, optional separate port, audited |
+| B2 operator to gateway | Admin key | Scoped admin keys, optional separate port (optionally on its own network), audited |
 | B3 gateway to ledger | SQL | Parameterised only; ledger down means refuse |
 | B4 gateway to provider | Provider key, prompt | Hosts from config; responses are untrusted input |
 | B5 build to runtime | Code, image | Pinned digests and SHAs; scanned; SBOM |
@@ -102,7 +102,7 @@ Each control maps to at least one test or CI check. Test ids are stable; "Where"
 | C-02 | Per-key scope, model allowlist, budgets, RPM/TPM/concurrency | T-AUTH-02 key cannot use a model or scope it is not allowed; T-LIM-01 limits enforced per key; T-KEY-01 an empty `allowed_models` is refused, never read as "every model" | `tests/integration/test_gateway_refusals.py` (T-AUTH-02, T-LIM-01), `tests/contract/test_keys.py` (T-KEY-01) |
 | C-03 | Revoke and rotate without restart; revoked key refused within cache TTL; rotation grace period; a key is shape-checked before any I/O and checked before the body is read | T-AUTH-03; T-AUTH-05 a repeated unknown key costs one ledger read per short window, not one per request; T-AUTH-06 a flood of distinct unknown keys costs one indexed ledger read each and nothing else (no body read, no gate place, no hold, no upstream contact) | `tests/contract/test_keys.py`, `tests/integration/test_unknown_key_flood.py` (T-AUTH-06) |
 | C-04 | Admin keys with scopes `usage:read`, `keys:write`, `budgets:write`; a virtual key never works on `/admin/v1` | T-ADM-01 each scope allows only its routes; T-ADM-02 virtual key refused on admin | `tests/integration/test_admin.py` |
-| C-05 | Admin API optionally on a separate port; Compose does not publish it to apps | T-ADM-03 admin port unreachable from the app network | `tests/perimeter/test_perimeter.py` |
+| C-05 | Admin API optionally on a separate port; Compose does not publish it to apps: it listens on loopback in the guard's container, or with `compose.admin.yaml` on an internal `admin` network only the operator service joins ([ADR-0027](adr/0027-admin-network.md)) | T-ADM-03 admin port unreachable from the app network, by name or by address, on loopback and on the `admin` network, while the operator on `admin` reaches it | `tests/perimeter/test_perimeter.py`, `tests/perimeter/test_admin_network.py` |
 | C-06 | Every admin write recorded in `admin_audit` (actor key prefix, action, time, request id, before/after, no secrets); the table is append-only, enforced by triggers (UPDATE and DELETE abort); no hash chain, so root on the host can still rewrite it (R-02) | T-ADM-04 audit row per write; no secrets in row; T-ADM-05 UPDATE and DELETE on `admin_audit` are rejected | `tests/contract/test_keys.py` (T-ADM-04), `tests/contract/test_sqlite_adapter.py` (T-ADM-05) |
 | C-07 | Provider keys exist only in the gateway container | T-NET-01 no other container has an env var or secret matching any configured provider credential name (all providers); T-NET-04 deliberately leaked key makes T-NET-01 fail | `tests/perimeter/test_perimeter.py` |
 | C-08 | `apps` network `internal: true`; only gateway also joins `egress` | T-NET-02 app cannot reach the internet; T-NET-03 app can reach the gateway | `tests/perimeter/test_perimeter.py` |

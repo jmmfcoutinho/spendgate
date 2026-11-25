@@ -43,8 +43,10 @@ services:
     networks: [apps, egress, db]
     # The data port is reachable by containers on `apps` only. To use it from the host, uncomment:
     # ports: ["127.0.0.1:8080:8080"]
-    # The admin API listens on 127.0.0.1 inside the container, so apps cannot reach it. To publish it
-    # on the host's loopback, set `server.admin.listen: 0.0.0.0:8081` in the config and uncomment:
+    # The admin API listens on 127.0.0.1 inside the container, so apps cannot reach it. For an operator
+    # container, add compose.admin.yaml: its `admin` network keeps the port away from `apps` (README.md).
+    # To publish it on the host's loopback, set `server.admin.listen: 0.0.0.0:8081` in the config and
+    # uncomment the line below; 0.0.0.0 also opens it to every container on `apps`.
     #   ports: ["127.0.0.1:8081:8081"]
     # Never publish either port on 0.0.0.0.
     volumes:

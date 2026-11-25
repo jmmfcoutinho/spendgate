@@ -6,6 +6,21 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `deploy/compose/compose.admin.yaml`: an optional overlay that puts the admin API on an internal
+  `admin` network which only a new `operator` service joins, so an operator container or a
+  `/metrics` scraper can reach the admin port while the apps on `apps` cannot, by name or by
+  address. Set `server.admin.listen: spendgate-admin:8081` with it; the default (loopback inside
+  the guard's container) is unchanged. A perimeter test checks both sides
+  ([ADR-0027](docs/adr/0027-admin-network.md), #11).
+- ElevenLabs speech accepts `language_code` (ISO 639-1, two lowercase letters such as `pt`) on
+  `POST /v1/audio/speech` and forwards it, so non-English read-aloud is spoken in the right
+  language (#10). It takes effect only on models that support it, such as the v2.5 Turbo and
+  Flash models; ElevenLabs ignores it on others, including `eleven_multilingual_v2`. An invalid
+  value is `invalid_request` with `param: language_code`; OpenAI and Azure OpenAI speech still
+  refuse the field ([ADR-0026](docs/adr/0026-elevenlabs-language-code.md)).
+
 ### Security
 
 - Every test id the threat model cites now has a test (review finding SR-10): new tests for
@@ -20,6 +35,9 @@ All notable changes to this project are documented here. The format follows
   throttle; this is now recorded as accepted risk R-06 (threat TH-20, finding SR-11), and a test
   (T-AUTH-06) pins that such a key costs that read and nothing else. The owner-versus-sweeper
   race test (CR-10) is recorded as closed: the two ordered tests force each order.
+- Container image: `libzstd1` is upgraded to Debian's fix for CVE-2026-124851 (zstd information
+  disclosure), which the pinned `python:3.13-slim` digest predates. The 0.2.0 images carry the
+  vulnerable package; rebuild or wait for the next release.
 
 ## [0.2.0] - 2026-11-25
 
