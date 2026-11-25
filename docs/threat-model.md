@@ -88,8 +88,9 @@ S spoofing, T tampering, R repudiation, I information disclosure, D denial of se
 | TH-17 | Timing attack on key lookup | I | L/M | C-01 constant-time compare of hashes | T-AUTH-04 | None |
 | TH-18 | Egress from the gateway to non-provider hosts (compromised gateway exfiltrates prompts) | I | L/H | Optional egress host allowlist is on the roadmap. v0.1 relies on C-09 and C-26 only | Accepted risk R-01 | See R-01 |
 | TH-19 | Unauthenticated probes leak data (`/metrics`, `/readyz`, errors) | I | M/L | C-27 `/livez` minimal; `/readyz` on the data port answers with the status only, its details (reasons, warnings) and `/metrics` are bound to the admin port or an admin key with `usage:read`; labels carry no key secrets or prompt text; optional trace spans carry allowlisted attributes only; error bodies carry code only | T-OBS-01, T-OBS-02, T-OBS-03, T-OBS-04 | Metrics on the same port when no admin port is set: documented |
+| TH-20 | Flood of well-formed fake keys loads the ledger (each distinct prefix is one lookup) | D | M/L | C-03 shape check before any I/O, short negative cache for a repeated unknown key, key checked before the body is read and before any gate place (C-10, SR-01) | T-AUTH-05, T-AUTH-06 | One indexed ledger read per distinct fake key, nothing else; no per-peer throttle: accepted risk R-06 |
 
-Count: 19 threats.
+Count: 20 threats.
 
 ## 5. Controls and proof
 
@@ -99,7 +100,7 @@ Each control maps to at least one test or CI check. Test ids are stable; "Where"
 |---|---|---|---|
 | C-01 | Keys stored as prefix + HMAC-SHA256(server pepper, secret); constant-time compare (`hmac.compare_digest`); pepper from `env:`/`file:` | T-AUTH-01 no plaintext secret in DB or logs; T-AUTH-04 compare is constant-time (uses `hmac.compare_digest`, checked by test and ruff `S`) | `tests/contract/test_keys.py` |
 | C-02 | Per-key scope, model allowlist, budgets, RPM/TPM/concurrency | T-AUTH-02 key cannot use a model or scope it is not allowed; T-LIM-01 limits enforced per key; T-KEY-01 an empty `allowed_models` is refused, never read as "every model" | `tests/integration/test_gateway_refusals.py` (T-AUTH-02, T-LIM-01), `tests/contract/test_keys.py` (T-KEY-01) |
-| C-03 | Revoke and rotate without restart; revoked key refused within cache TTL; rotation grace period | T-AUTH-03; T-AUTH-05 a repeated unknown key costs one ledger read per short window, not one per request | `tests/contract/test_keys.py` |
+| C-03 | Revoke and rotate without restart; revoked key refused within cache TTL; rotation grace period; a key is shape-checked before any I/O and checked before the body is read | T-AUTH-03; T-AUTH-05 a repeated unknown key costs one ledger read per short window, not one per request; T-AUTH-06 a flood of distinct unknown keys costs one indexed ledger read each and nothing else (no body read, no gate place, no hold, no upstream contact) | `tests/contract/test_keys.py`, `tests/integration/test_unknown_key_flood.py` (T-AUTH-06) |
 | C-04 | Admin keys with scopes `usage:read`, `keys:write`, `budgets:write`; a virtual key never works on `/admin/v1` | T-ADM-01 each scope allows only its routes; T-ADM-02 virtual key refused on admin | `tests/integration/test_admin.py` |
 | C-05 | Admin API optionally on a separate port; Compose does not publish it to apps | T-ADM-03 admin port unreachable from the app network | `tests/perimeter/test_perimeter.py` |
 | C-06 | Every admin write recorded in `admin_audit` (actor key prefix, action, time, request id, before/after, no secrets); the table is append-only, enforced by triggers (UPDATE and DELETE abort); no hash chain, so root on the host can still rewrite it (R-02) | T-ADM-04 audit row per write; no secrets in row; T-ADM-05 UPDATE and DELETE on `admin_audit` are rejected | `tests/contract/test_keys.py` (T-ADM-04), `tests/contract/test_sqlite_adapter.py` (T-ADM-05) |
@@ -125,7 +126,7 @@ Each control maps to at least one test or CI check. Test ids are stable; "Where"
 | C-26 | Non-root, read-only, no capabilities, resource limits | T-CTR-01 `docker run <image> id` is UID 10001; T-CTR-02 container started with read-only root and `cap_drop: ALL`, writes outside the data volume fail | `tests/perimeter/test_container.py` |
 | C-27 | Minimal probes; sensitive endpoints behind admin scope; no secrets in metric labels | T-OBS-01 unauthenticated `/metrics` refused when an admin port or key is configured; T-OBS-02 labels contain no key secret or prompt text; T-OBS-03 the data-port `/readyz` returns the status code and `{"status"}` only, details need `usage:read` on `/admin/v1/readiness`; T-OBS-04 optional trace spans carry allowlisted attributes only (no prompt, key, user, tag or session value, no exception message) and only `traceparent` reaches the provider | `tests/integration/test_admin_readiness.py`, `tests/integration/test_admin_reports.py`, `tests/integration/test_otel_tracing.py` |
 
-Count: 27 controls, 95 distinct test ids.
+Count: 27 controls, 96 distinct test ids.
 
 ### Test ids with no test yet
 
@@ -157,6 +158,7 @@ Count: 27 controls, 95 distinct test ids.
 | R-03 | A key holder may mislabel user, tags or session within its own scope | Labels are for reporting; money is bound to the key; policy never trusts labels | Per-end-user billing with untrusted callers is needed |
 | R-04 | Honest-but-wrong provider usage is billed as reported (C-22 flags absurd values, never clamps) | There is no independent source of truth | Reconciliation against invoices shows drift |
 | R-05 | A key holder can lock its own budget with open holds until lease expiry | Bounded by concurrency and lease length; for money it harms only that key's scopes. The process is shared, though: input that costs a lot of CPU or memory can slow every tenant. Found and fixed or bounded in v0.1 review: uploaded audio containers (SR-03, T-AUD-01 to T-AUD-03). Fixed in v0.1: unauthenticated large or stalled bodies (SR-01, SR-02, T-DOS-01, T-DOS-03, T-DOS-04), and one key filling the shared body gate (NF-01); a Matroska file is capped at one million elements (NF-05). One event loop remains a single point of slowdown for any caller (section 6, volume) | Sessions with a very long lease are added, or a multi-tenant deployment is planned |
+| R-06 | No per-peer throttle on failed authentication: a flood of distinct well-formed fake keys costs one ledger read each (SR-11) | The cost is bounded and pinned by T-AUTH-06: one indexed read by prefix, no body read, no gate place, no hold, no write, no upstream contact; guessing a key is hopeless (192-bit secret, constant-time compare). The gateway cannot tell callers apart reliably: behind a reverse proxy, NAT or the Compose network many callers share one peer address, so a per-peer lockout would let one noisy caller refuse every other caller behind it, turning load into a cross-tenant denial of service. Doing it right needs trusted-proxy configuration and a new refusal; volume from the network is already out of scope (section 6) and belongs to a reverse proxy that knows real client addresses | The data port is exposed beyond a trusted network, or failed-key reads show up in load reports |
 
 ## 8. Process
 
