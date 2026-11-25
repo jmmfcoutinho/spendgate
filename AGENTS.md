@@ -36,5 +36,8 @@ Planned work is in [ROADMAP.md](ROADMAP.md).
   data in issues, PRs, commits or tests. Use obviously fake values.
 - A security problem (budget bypass, key leak, auth bypass) is never a public issue: tell the user and point to
   `SECURITY.md` (private advisory).
+- A security fix is never pushed to a public branch, issue or PR before its advisory is published: build and
+  gate it locally and hand it to the maintainer, who ships it through the advisory's private fork
+  (`docs/releasing.md`).
 - One issue or small group per branch from `main`; the PR uses `.github/pull_request_template.md` and says
   "Closes #N"; merge only with CI green.

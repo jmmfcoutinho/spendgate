@@ -8,6 +8,9 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- `docs/releasing.md`: how a release and a security release ship (tagging, the environment
+  approvals, the advisory's private fork and its bypass merge), and how to merge a stack of pull
+  requests.
 - `spendgate catalog import --from-litellm <commit-sha> --out extra.yaml [--providers ...]`
   drafts a catalog override file from LiteLLM's `model_prices_and_context_window.json` at one
   pinned commit (https to raw.githubusercontent.com only, no redirects), or from a local copy
