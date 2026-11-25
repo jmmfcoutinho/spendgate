@@ -36,7 +36,7 @@
 | [protocol.md](./protocol.md) + [admin-openapi.yaml](./admin-openapi.yaml) | Endpoints, allowlists, headers, error codes and statuses, admin API |
 | [data-model.md](./data-model.md) + [ledger-state-machine.md](./ledger-state-machine.md) | Tables (SQL), reservation states, 19 money scenarios (simulated in SQLite) |
 | [catalog-schema.md](./catalog-schema.md) (+ `.json`, example) | Price file format; every price of a private tool that predates spendgate, expressed as data |
-| [threat-model.md](./threat-model.md) | 19 threats, controls, test ids, 5 accepted risks |
+| [threat-model.md](./threat-model.md) | 20 threats, controls, test ids, 6 accepted risks |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) + `lightweight_report.py` | Code style, tests, quality gates, size report, release process |
 | [reviews/](reviews/) | Code, security, load, verification and live-smoke reviews of v0.1, with findings and severities |
 

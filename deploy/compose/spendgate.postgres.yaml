@@ -3,7 +3,9 @@
 # Check it:  docker compose run --rm --no-deps spendgate check-config --config /etc/spendgate/spendgate.yaml
 server:
   listen: 0.0.0.0:8080                 # the data plane; reachable by the app containers on `apps`
-  admin: { listen: 127.0.0.1:8081 }    # inside the container only; see compose.yaml to publish it
+  # Inside the container only. With compose.admin.yaml use `spendgate-admin:8081`: the guard's address
+  # on the `admin` network, which only the operator joins. 0.0.0.0 would open it to the apps too.
+  admin: { listen: 127.0.0.1:8081 }
   key_pepper: file:/run/secrets/spendgate_key_pepper
 
 ledger:

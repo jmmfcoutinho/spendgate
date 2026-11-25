@@ -20,8 +20,9 @@ the entry at once; another process notices it at most `ttl_ms` later, which is t
 revocation bound (T-AUTH-03). Malformed keys never reach the ledger. A well-formed prefix the
 ledger does not know (or that is revoked) is remembered for `min(ttl_ms, 1 s)`, so a client
 retrying one bad key in a loop costs one read a second, not one per request (SR-11); a flood of
-distinct random prefixes still costs a read each. A key created through this service clears the
-negative entries. Single event loop only: the caches have no lock.
+distinct random prefixes still costs a read each, and only that (accepted risk R-06 in the threat
+model, pinned by T-AUTH-06). A key created through this service clears the negative entries.
+Single event loop only: the caches have no lock.
 """
 
 import hashlib

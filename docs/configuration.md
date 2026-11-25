@@ -171,7 +171,7 @@ Used at `server.admin`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `listen` | `host:port` | required | Admin address, `host:port`. Keep it on loopback or an internal network. |
+| `listen` | `host:port` | required | Admin address, `host:port`. Keep it on loopback or an internal network. The host is bound as given: an address, or a name resolved once at start (in Compose, a network alias such as `spendgate-admin`, so it listens on that one network). `0.0.0.0` binds every interface, including the one apps reach. |
 
 ## SqliteLedger
 
