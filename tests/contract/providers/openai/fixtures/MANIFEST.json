@@ -1,11 +1,23 @@
 {
   "recorded_on": "2026-11-17",
-  "kind": "hand-transcribed response shapes, not live recordings (no API key was used)",
+  "kind": "hand-transcribed response shapes, not live recordings (no API key was used), except the files under live",
   "sources": {
     "chat usage/stream_options": "https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create",
     "transcription usage (tokens and duration), speech fields": "https://developers.openai.com/api/reference/resources/audio",
     "responses usage": "OpenAI Responses reference; same fields as tests/fakes/shapes_openai.py",
     "errors": "OpenAI error object {error:{message,type,param,code}}"
   },
-  "secrets": "none; all ids and text are placeholders"
+  "live": {
+    "recorded_on": "2026-11-25",
+    "kind": "captured from the live API (api.openai.com, issue #9), the requests the gateway sends for the spendgate 0.2.0 smoke test",
+    "files": {
+      "chat_completion_live.json": "gpt-6-luna, POST /v1/chat/completions, prompt 'Reply with the single word OK.'",
+      "chat_stream_live.sse": "the same, streamed, with the stream_options.include_usage the gateway adds; raw SSE bytes",
+      "responses_live.json": "gpt-6-luna, POST /v1/responses, store false",
+      "responses_stream_live.sse": "the same, streamed; raw SSE bytes",
+      "embeddings_live.json": "text-embedding-3-small, POST /v1/embeddings, two inputs; each vector cut to its first 3 values"
+    },
+    "scrubbed": "response, item and message ids replaced with fakes of the same format; the reasoning item's encrypted_content replaced with a placeholder; no request or organisation ids were kept (response headers were not recorded)"
+  },
+  "secrets": "none; all ids and text are placeholders or the model's 'OK'"
 }
