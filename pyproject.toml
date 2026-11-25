@@ -1,6 +1,6 @@
 [project]
 name = "spendgate"
-version = "0.2.0"
+version = "0.3.0"
 description = "A small, auditable LLM spend guard: SDK and proxy with hard budgets"
 readme = "README.md"
 authors = [{ name = "jmmfcoutinho" }]
