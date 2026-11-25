@@ -13,7 +13,7 @@ All notable changes to this project are documented here. The format follows
   `/metrics` scraper can reach the admin port while the apps on `apps` cannot, by name or by
   address. Set `server.admin.listen: spendgate-admin:8081` with it; the default (loopback inside
   the guard's container) is unchanged. A perimeter test checks both sides
-  ([ADR-0026](docs/adr/0026-admin-network.md), #11).
+  ([ADR-0027](docs/adr/0027-admin-network.md), #11).
 
 ## [0.2.0] - 2026-11-25
 

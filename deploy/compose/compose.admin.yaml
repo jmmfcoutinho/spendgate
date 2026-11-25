@@ -1,5 +1,5 @@
 # Optional overlay: the admin API on its own network, which only the operator service joins.
-# See README.md, "Admin API on its own network", and docs/adr/0026-admin-network.md.
+# See README.md, "Admin API on its own network", and docs/adr/0027-admin-network.md.
 #
 #   admin   internal: true  spendgate + operator. Apps are not on it; nothing on it reaches the internet.
 #

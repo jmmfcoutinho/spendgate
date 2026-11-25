@@ -1,4 +1,4 @@
-# ADR-0026: The admin API on its own Compose network
+# ADR-0027: The admin API on its own Compose network
 
 **Status:** Accepted
 **Date:** 2026-11-25
