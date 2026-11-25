@@ -474,7 +474,9 @@ file`), because a file renamed over it is not seen inside the container.
 ## Metrics and logs
 
 **Metrics** are Prometheus text at `GET /metrics`, served by the admin app only: open to whoever
-can reach a separate admin port, or needing an admin key with `usage:read` on a shared port.
+can reach a separate admin port, or needing an admin key with `usage:read` on a shared port. In
+Compose, scrape it from the `admin` network so the apps cannot read it
+([Admin API on its own network](../deploy/compose/README.md#admin-api-on-its-own-network)).
 Probes `GET /livez` and `GET /readyz` are on the data port; `/readyz` answers with the status code
 and `{"status"}` only. The reasons and warnings (clock skew, a catalog older than 30 days, an
 engaged global kill switch or a failed read of it) are at `GET /admin/v1/readiness` with a

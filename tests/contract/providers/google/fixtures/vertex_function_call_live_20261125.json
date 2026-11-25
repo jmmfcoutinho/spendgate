@@ -1,0 +1,43 @@
+{"_note": "Captured from the live API on 2026-11-25 (spendgate 0.2.0 smoke test, issue #9), gemini-3.5-flash-lite, Vertex AI (aiplatform.googleapis.com, location global); ids and signatures replaced with fakes.", 
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [
+          {
+            "functionCall": {
+              "name": "get_weather",
+              "args": {
+                "city": "Lisbon"
+              },
+              "id": "call_00000000000000000001"
+            },
+            "thoughtSignature": "Zml4dHVyZS10aG91Z2h0LXNpZ25hdHVyZS0y"
+          }
+        ]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 32,
+    "candidatesTokenCount": 17,
+    "totalTokenCount": 49,
+    "trafficType": "ON_DEMAND",
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 32
+      }
+    ],
+    "candidatesTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 17
+      }
+    ]
+  },
+  "modelVersion": "gemini-3.5-flash-lite",
+  "createTime": "2026-11-25T13:02:06.546829Z",
+  "responseId": "Fixture0000000000000003"
+}

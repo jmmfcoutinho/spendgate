@@ -10,6 +10,7 @@ from tests.contract.test_ledger import assert_i1, figures, spend
 # --- scenarios 2, 3, 5: leases ---------------------------------------------------------------
 
 
+# T-HOLD-01
 def test_scenario_02_crash_mid_call_is_charged_in_full_by_the_sweeper(rig: Rig) -> None:
     w = rig.world("20")
     spend(rig, w, "9.40")
@@ -98,6 +99,30 @@ def test_restarting_one_process_never_touches_any_hold(rig: Rig) -> None:
     assert after == before
     assert rig.totals(w) == totals_before
     assert all(r is not None and r.state is ReservationState.PENDING for r in after)
+
+
+def test_t_hold_02_a_crashed_instances_holds_are_charged_by_another_instances_sweeper(
+    rig: Rig,
+) -> None:
+    """A dies mid-call; B is alive and renews its own hold. B's sweeper charges A's holds in full
+    once their lease ends and leaves its own live hold alone (scenario 5, variant)."""
+    w = rig.world("20")
+    rig.hold_ok(w, "a-1", "1", instance="A")
+    rig.hold_ok(w, "a-2", "2", instance="A")
+    rig.hold_ok(w, "b-1", "3", instance="B")
+    for beat in (20, 40, 60):  # only B is still beating
+        now = T0 + beat * SECOND
+        assert rig.run(rig.ledger.renew_all("B", {"b-1"}, now, LEASE_MS)) == ("b-1",)
+    assert rig.sweep(T0 + LEASE_MS - 1) == ()  # A's lease has not ended yet
+    assert sorted(rig.sweep(T0 + LEASE_MS + 1)) == ["a-1", "a-2"]
+    assert figures(rig.totals(w)) == (E("3"), E("3"), 0, 0)  # A's holds charged, B's still held
+    for rid, held in (("a-1", "1"), ("a-2", "2")):
+        (row,) = rig.run(rig.ledger.get_calls(rid))
+        assert (row.outcome, row.settled_by, row.charged_nano) == (
+            Outcome.EXPIRED, "sweeper", E(held)
+        )  # fmt: skip
+    assert rig.settle("b-1", "0.50", T0 + LEASE_MS + 2).applied  # B finishes normally
+    assert figures(rig.totals(w)) == (E("3.50"), 0, 0, 0)
 
 
 # --- scenario 12: owner versus sweeper -------------------------------------------------------

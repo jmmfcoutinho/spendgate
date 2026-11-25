@@ -1,4 +1,4 @@
-"""`serve` hands keep-alive and the drain deadline to uvicorn, on every listener (ADR-0015)."""
+"""`serve` hands each listener's address, keep-alive and drain deadline to uvicorn (ADR-0015)."""
 
 import asyncio
 import signal
@@ -71,6 +71,22 @@ async def test_server_keep_alive_and_graceful_shutdown_reach_both_uvicorn_listen
     for config in (data, admin):
         assert (config.timeout_keep_alive, config.timeout_graceful_shutdown) == (91, 17)
     assert (data.lifespan, admin.lifespan) == ("on", "off")
+
+
+@async_test
+async def test_the_admin_listener_binds_the_configured_host_not_a_wildcard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A name on one network (compose.admin.yaml) or one address is bound as given (issue #11)."""
+    for listen, host in (
+        ("spendgate-admin:8081", "spendgate-admin"),
+        ("10.89.0.7:8081", "10.89.0.7"),
+        ("[fd00::7]:8081", "fd00::7"),
+    ):
+        extra = f'admin: {{listen: "{listen}"}}'
+        admin, data = await _configs_built(tmp_path, monkeypatch, extra)
+        assert (admin.host, admin.port) == (host, 8081)
+        assert (data.host, data.port) == ("127.0.0.1", 8080)  # the data listener is unchanged
 
 
 @async_test

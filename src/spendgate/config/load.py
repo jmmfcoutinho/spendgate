@@ -29,6 +29,7 @@ from spendgate.config.settings import (
 from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.catalog import Catalog, CatalogError, ModelNotPriced, parse
 from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
+from spendgate.core.pepper import MIN_PEPPER_BYTES
 
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
@@ -144,6 +145,18 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
     except LookupError as exc:
         ctx.issues.append((path, str(exc)))
         return None
+
+
+def _pepper(ref: str, ctx: _Ctx) -> Secret | None:
+    """The key pepper, long enough to key the stored hashes; the error never shows its value."""
+    pepper = _secret(ref, "server.key_pepper", ctx)
+    if pepper is not None and len(pepper.reveal().encode()) < MIN_PEPPER_BYTES:
+        hint = "e.g. `openssl rand -hex 32`"
+        ctx.issues.append(
+            ("server.key_pepper", f"must be at least {MIN_PEPPER_BYTES} bytes ({hint})")
+        )
+        return None
+    return pepper
 
 
 def _base_url_issue(url: str) -> str | None:
@@ -318,7 +331,7 @@ def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: lis
         ) from None
     except CatalogError as exc:
         raise ConfigError(name, [("catalog", str(exc))]) from None
-    pepper = _secret(cfg.server.key_pepper, "server.key_pepper", ctx)
+    pepper = _pepper(cfg.server.key_pepper, ctx)
     backend = cfg.ledger.backend
     dsn = ledger_path = None
     if backend.kind == "postgres":

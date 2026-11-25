@@ -153,7 +153,7 @@ def test_hints_repeat_the_flags_the_user_typed() -> None:
 def test_check_config_prints_each_error_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setenv("SPENDGATE_KEY_PEPPER", "pepper-value")
+    monkeypatch.setenv("SPENDGATE_KEY_PEPPER", "pepper-value-fake-0123")
     monkeypatch.delenv("FAKE_OPENAI_KEY", raising=False)
     path = tmp_path / "spendgate.yaml"
     unpriced = "    u: {catalog_id: openai/gpt-0-nothing, deployments: [{provider: openai}]}\n"
@@ -163,6 +163,38 @@ def test_check_config_prints_each_error_once(
     assert len(lines) == len(set(lines)) == 2  # three deployments share one missing credential
     assert all(line.startswith("error: ") for line in lines)
     assert any("gpt-0-nothing" in line for line in lines)
+
+
+SHORT_PEPPER = "tiny-fake-xyz"  # 13 bytes: under the 16-byte minimum
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["check-config"],
+        ["serve"],
+        ["migrate"],
+        ["usage", "--local", "--by", "model"],
+        ["keys", "list", "--local"],
+        ["status", "--local"],
+    ],
+)
+def test_a_short_key_pepper_exits_3_naming_the_setting_before_anything_starts(
+    argv: list[str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("SPENDGATE_KEY_PEPPER", SHORT_PEPPER)
+    monkeypatch.setenv("FAKE_OPENAI_KEY", "sk-fake-not-a-key")  # pragma: allowlist secret
+    path = tmp_path / "spendgate.yaml"
+    path.write_text(CONFIG.format(server="listen: 127.0.0.1:8080"), encoding="utf-8")
+    assert main([*argv, "--config", str(path)]) == 3
+    out = capsys.readouterr()
+    assert "server.key_pepper: must be at least 16 bytes" in out.err
+    assert "configuration ok" not in out.out and "Traceback" not in out.err
+    assert SHORT_PEPPER not in out.out + out.err
+    assert not (tmp_path / "l.db").exists()  # no ledger was opened
 
 
 @pytest.mark.parametrize("listen", ["evil.example:80", "10.0.0.5:80", "'[2001:db8::1]:80'"])

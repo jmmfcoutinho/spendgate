@@ -93,6 +93,27 @@ def test_a_cited_id_with_no_test_and_no_listing_is_caught(tmp_path: Path) -> Non
     assert uncovered_test_ids(table, [carrier, comment]) == []
 
 
+CITED_FILE = re.compile(r"`(tests/[^`\s]+\.py)`")
+
+
+def missing_test_files(text: str, root: Path) -> list[str]:
+    """Test files the document names (in backticks) that do not exist under `root`."""
+    return sorted({name for name in CITED_FILE.findall(text) if not (root / name).is_file()})
+
+
+def test_every_test_file_the_document_names_exists() -> None:
+    text = THREAT_MODEL.read_text("utf-8")
+    assert len(set(CITED_FILE.findall(text))) > 20  # the pattern still sees the "Where" column
+    assert missing_test_files(text, ROOT) == []
+
+
+def test_a_named_test_file_that_does_not_exist_is_caught(tmp_path: Path) -> None:
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_real.py").write_text("")
+    row = "| C-99 | x | T-X-01 | `tests/test_real.py`, `tests/test_gone.py` (T-X-01) |"
+    assert missing_test_files(row, tmp_path) == ["tests/test_gone.py"]
+
+
 def test_every_threat_has_a_control_and_a_test_or_accepted_risk() -> None:
     assert check_threat_model(THREAT_MODEL.read_text("utf-8")) == []
 

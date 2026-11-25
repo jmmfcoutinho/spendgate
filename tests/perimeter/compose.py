@@ -18,6 +18,8 @@ PROJECT = "sg-perim"
 REPO = Path(__file__).resolve().parents[2]
 COMPOSE_DIR = REPO / "deploy" / "compose"
 GUARD = "http://spendgate:8080"
+ADMIN_OVERLAY = COMPOSE_DIR / "compose.admin.yaml"
+ADMIN_HOST, ADMIN_PORT = "spendgate-admin", 8081  # the guard's name on the `admin` network only
 
 # Runs inside the app container: argv = path, key ("" for none), body ("" for GET). Prints one JSON
 # line with the HTTP status and the error code (None on success), never the response body.
@@ -135,6 +137,11 @@ class Compose:
     def exec_python(self, service: str, code: str, *argv: str) -> str:
         return self.run("exec", "-T", service, "python", "-c", code, *argv).stdout
 
+    def run_python(self, service: str, code: str, *argv: str) -> str:
+        """Python in a one-off container of `service`, for a service that is not kept running."""
+        args = ("run", "--rm", "--no-deps", "-T", "--entrypoint", "python", service, "-c", code)
+        return self.run(*args, *argv).stdout
+
     def request(
         self, path: str, *, key: str = "", body: Mapping[str, object] | None = None
     ) -> Reply:
@@ -160,6 +167,21 @@ class Compose:
         return secret
 
     # --- inspection ------------------------------------------------------------------------
+
+    def addresses(self, service: str) -> dict[str, str]:
+        """IPv4 address of the running `service` container on each network, by short name."""
+        for box in self.inspect_all():
+            labels = box["Config"]["Labels"]  # type: ignore[index]
+            if labels.get("com.docker.compose.oneoff") == "True" or (
+                labels["com.docker.compose.service"] != service
+            ):
+                continue
+            networks = box["NetworkSettings"]["Networks"]  # type: ignore[index]
+            return {
+                str(name).removeprefix(f"{PROJECT}_"): str(net["IPAddress"])
+                for name, net in networks.items()
+            }
+        raise AssertionError(f"no running {service} container")
 
     def inspect_all(self) -> list[dict[str, object]]:
         """`docker inspect` of every container of the project, one-off runs included."""

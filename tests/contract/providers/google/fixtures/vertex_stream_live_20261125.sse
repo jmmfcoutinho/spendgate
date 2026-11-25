@@ -1,0 +1,6 @@
+: Captured from the live API on 2026-11-25 (spendgate 0.2.0 smoke test, issue #9), gemini-3.5-flash-lite, Vertex AI (aiplatform.googleapis.com, location global); ids and signatures replaced with fakes.
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "OK"}]}}],"usageMetadata": {"trafficType": "ON_DEMAND"},"modelVersion": "gemini-3.5-flash-lite","createTime": "2026-11-25T13:02:04.127669Z","responseId": "Fixture0000000000000001"}
+
+data: {"candidates": [{"content": {"role": "model","parts": [{"text": "","thoughtSignature": "Zml4dHVyZS10aG91Z2h0LXNpZ25hdHVyZS0y"}]},"finishReason": "STOP"}],"usageMetadata": {"promptTokenCount": 7,"candidatesTokenCount": 1,"totalTokenCount": 8,"trafficType": "ON_DEMAND","promptTokensDetails": [{"modality": "TEXT","tokenCount": 7}],"candidatesTokensDetails": [{"modality": "TEXT","tokenCount": 1}]},"modelVersion": "gemini-3.5-flash-lite","createTime": "2026-11-25T13:02:04.127669Z","responseId": "Fixture0000000000000001"}
+

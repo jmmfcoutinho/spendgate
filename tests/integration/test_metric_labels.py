@@ -13,7 +13,8 @@ from spendgate.core.sessions import SessionDefaults
 from spendgate.gateway.logs import configure_json_logging
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.wiring import GatewayObserver
-from tests.integration.harness import async_test, open_stack
+from tests.fakes import Script
+from tests.integration.harness import PEPPER, async_test, open_stack
 
 LUNA = "openai/gpt-6-luna"
 
@@ -76,3 +77,22 @@ async def test_session_user_and_tag_headers_still_never_become_labels(tmp_path: 
     assert refused.status_code >= 400
     assert "4711" not in metrics.render()
     assert metrics.requests.value(outcome="ok", model=LUNA) == 1
+
+
+@async_test
+async def test_t_obs_02_no_label_carries_a_key_secret_or_prompt_text(tmp_path: Path) -> None:
+    metrics, obs = observer()
+    prompt = "fake-prompt-for-metrics-4711"
+    async with open_stack(tmp_path, pipeline_kwargs={"observer": obs}) as s:
+        body: dict[str, object] = {"model": "alpha", "max_tokens": 100, "user": "fake-user-4711"}
+        body["messages"] = [{"role": "user", "content": prompt}]
+        assert (await s.post("/v1/chat/completions", body)).status_code == 200
+        s.fake.enqueue(Script(status=429))  # a throttle and a cooldown: deployment labels too
+        assert (await s.post("/v1/chat/completions", body)).status_code == 200
+        wrong = s.secret[:-4] + "0000"
+        assert (await s.post("/v1/chat/completions", body, key=wrong)).status_code == 401
+        prefix, secret = s.secret.split("-")[1:]
+    text = metrics.render()
+    assert "spendgate_spend_nano_total{" in text and "spendgate_throttles_total{" in text
+    for marker in (prompt, "4711", s.secret, wrong, secret, prefix, PEPPER.decode()):
+        assert marker not in text, marker
