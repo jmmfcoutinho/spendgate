@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from spendgate.config import Settings, load
+from spendgate.config.schema import DEFAULT_CONCURRENCY
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.limits import InMemoryLimitStore
 from spendgate.core.policy import KeyPolicy, Limits
@@ -14,8 +15,8 @@ from spendgate.ledger.key_types import Principal
 from spendgate.ledger.port import LedgerUnavailable
 from spendgate.pipeline import steps
 from spendgate.pipeline.auth import authenticate, presented_key
+from spendgate.pipeline.candidates import Router
 from spendgate.pipeline.model import CHAT, EMBEDDINGS, MESSAGES, TRANSCRIPTIONS, Endpoint, Inbound
-from spendgate.pipeline.routing import Router
 from spendgate.pipeline.steps import Context, Prepared
 from spendgate.providers.anthropic import AnthropicProvider
 from spendgate.providers.openai import OpenAIProvider
@@ -206,7 +207,8 @@ def test_prepared_facts(tmp_path: Path) -> None:
     assert p.request.response_id == "chatcmpl-01abc" and p.request.created == NOW_MS // 1000
     assert p.user_label == "u1" and p.free_statuses == frozenset({429})
     assert p.pricing.worst.nano > 0 and p.pricing.worst.currency == "USD"
-    assert p.limits == Limits(5, None, None)  # config defaults.limits.rpm fills the key's gaps
+    # The config's defaults.limits fill the key's gaps: rpm from the file, concurrency built in.
+    assert p.limits == Limits(5, None, DEFAULT_CONCURRENCY)
     assert steps._limits(Limits(9, 3, 2), s) == Limits(9, 3, 2)
 
 

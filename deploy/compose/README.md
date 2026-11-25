@@ -22,7 +22,9 @@ openssl rand -hex 32 | tr -d '\n' > secrets/spendgate_key_pepper
 # world-readable; the 0700 directory is what keeps other host users out.
 chmod 700 secrets && chmod 644 secrets/*
 
-docker compose up -d --build        # builds spendgate:core; waits until the guard is healthy
+docker compose build                         # builds spendgate:core
+docker compose run --rm spendgate migrate    # creates the ledger (and upgrades it after a new release)
+docker compose up -d                         # waits until the guard is healthy
 docker compose logs demo            # the demo app: guard answers, internet does not
 
 # Create a key (the secret is printed once) and call the guard with it from an app container.
@@ -44,11 +46,38 @@ The `full` image carries the Postgres driver; the config differs only in `ledger
 printf '%s' "$(openssl rand -hex 16)" > secrets/postgres_password
 printf 'postgresql://spendgate:%s@db:5432/spendgate' "$(cat secrets/postgres_password)" > secrets/spendgate_database_url  # pragma: allowlist secret
 chmod 644 secrets/*
-SPENDGATE_VARIANT=full SPENDGATE_LEDGER=postgres docker compose --profile postgres up -d --build
+export SPENDGATE_VARIANT=full SPENDGATE_LEDGER=postgres
+docker compose --profile postgres build
+docker compose --profile postgres run --rm spendgate migrate   # starts db, migrates, exits
+docker compose --profile postgres up -d
 ```
 
 `--profile postgres` adds the `db` service; `SPENDGATE_LEDGER=postgres` selects `spendgate.postgres.yaml`.
 Set both together. (Compose cannot switch a service's config by profile alone.)
+
+## Upgrading
+
+Migrating is a separate step: `serve` on Postgres refuses a schema that is behind and says so. After
+pulling or building a new image, run `docker compose run --rm spendgate migrate` (add
+`--profile postgres` for Postgres), then `docker compose up -d`. The migrate container is a one-off of
+the `spendgate` service, so it gets the same secrets and networks and is deleted when it exits. Before a
+release that changes the schema, back up the ledger. Rollbacks and the compatibility rules are in
+[Upgrades and rollbacks](../../docs/operations.md#upgrades-and-rollbacks).
+
+## Rotating a key or password
+
+Overwrite the secret file in place (the container sees the bind-mounted file, not a new one renamed over
+it), then tell the guard to read its `file:` secrets again; no restart, calls in flight are not cut:
+
+```bash
+printf '%s' "$NEW_OPENAI_API_KEY" > secrets/openai_api_key
+docker compose kill -s HUP spendgate
+docker compose logs spendgate | grep secrets_reloaded    # the paths read and changed, never a value
+```
+
+The database URL reloads the same way, but only its password may change: rotate the role's password
+in Postgres first (`ALTER ROLE spendgate PASSWORD ...`), then write the new URL. Connections already
+open stay logged in. Details: [rotating secrets](../../docs/operations.md#rotating-secrets).
 
 ## What the perimeter guarantees
 

@@ -36,9 +36,10 @@ GATEWAYS = {"sqlite": 4, "postgres": 3}
 # Budget size (in worst-case holds) per backend and scenario. PostgreSQL serialises every call on
 # the shared budget rows, and with 8 x 50 callers over three instances its queues grow until a run
 # takes minutes (docs/reviews/load-v0.1.md), so its runs are smaller and the crash run uses 4 x 25.
+# The crash run's budget must outlast the kill: spent before it, the victim holds nothing.
 BASE_SCALE = {
     "sqlite": {"clean": 3, "overrun": 3, "crash": 3},
-    "postgres": {"clean": 1, "overrun": 1, "crash": 1},
+    "postgres": {"clean": 1, "overrun": 1, "crash": 3},
 }
 CLIENT_SIZE = {("postgres", "crash"): {"clients": 4, "concurrency": 25}}
 OVERHEAD_SAMPLES = {"sqlite": 600, "postgres": 300}

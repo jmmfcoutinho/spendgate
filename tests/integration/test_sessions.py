@@ -34,6 +34,8 @@ CAP = "0.01"
 # Each call uses its whole `max_tokens`, so its cost is close to its hold: an admission that let
 # concurrent holds through would show as spend over the cap, not hide in the gap to the hold.
 FULL = FakeUsage(output_tokens=100)
+# Every worker must be in flight at once for the cap to be tested under contention, so the loop
+# key allows WORKERS calls at once instead of the default concurrency limit (16).
 MAX_LOOPS = 100  # per worker; reaching it means the budget never stopped the loop
 LOOP_BODY: dict[str, object] = {
     "model": "alpha", "max_tokens": 100, "messages": [{"role": "user", "content": "hi"}],
@@ -61,7 +63,7 @@ def full_upstream() -> FakeUpstream:
 
 @asynccontextmanager
 async def sqlite_books(tmp_path: Path) -> AsyncIterator[tuple[Stack, Books]]:
-    async with open_stack(tmp_path, budget=CAP, fake=full_upstream()) as s:
+    async with open_stack(tmp_path, budget=CAP, fake=full_upstream(), max_concurrent=WORKERS) as s:
         yield s, Books(s.ledger, s.scope.id, s.budget.id, s.secret)
 
 
@@ -74,7 +76,8 @@ async def postgres_books(tmp_path: Path) -> AsyncIterator[tuple[Stack, Books]]:
         org = await ledger.create_scope(ScopeKind.ORG, "acme", None, now=NOW_MS)
         scope = await ledger.create_scope(ScopeKind.USER, "u1", org.id, now=NOW_MS)
         budget = await ledger.create_budget(scope.id, Period.NONE, usd(CAP), now=NOW_MS)
-        made = await keys.create_key(KeySpec(scope.id, "loop"), actor="test", now=NOW_MS)
+        spec = KeySpec(scope.id, "loop", max_concurrent=WORKERS)
+        made = await keys.create_key(spec, actor="test", now=NOW_MS)
         swap = {"ledger": ledger, "keys": keys}
         async with open_stack(tmp_path, fake=full_upstream(), pipeline_kwargs=swap) as s:
             yield s, Books(ledger, scope.id, budget.id, made.secret)

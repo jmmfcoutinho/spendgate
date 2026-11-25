@@ -12,20 +12,25 @@ from dataclasses import dataclass
 from decimal import Decimal
 from importlib import resources
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import ValidationError
 
 from spendgate.config.schema import Config, DeploymentSpec, Provider
-from spendgate.config.secrets import Secret, check_ref, resolve
+from spendgate.config.secrets import ADC, Secret, check_ref, resolve
+from spendgate.config.settings import (
+    CheckReport,
+    ResolvedDeployment,
+    Route,
+    Settings,
+    WebhookTarget,
+)
 from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.catalog import Catalog, CatalogError, ModelNotPriced, parse
-from spendgate.core.health import HealthConfig
 from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
-from spendgate.core.policy import model_filter_matches
 
-_MS = 1000
-_LOOPBACK = ("localhost", "127.0.0.1", "[::1]")
+_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
 
 class ConfigError(Exception):
@@ -38,130 +43,6 @@ class ConfigError(Exception):
         super().__init__(
             "; ".join(f"{file}: {p}: {m}" if p else f"{file}: {m}" for p, m in self.issues)
         )
-
-
-@dataclass(frozen=True, slots=True)
-class ResolvedDeployment:
-    """A routable target with its credential resolved (hidden from reprs)."""
-
-    provider: str
-    base_url: str
-    model: str
-    auth: str
-    region: str | None
-    api_version: str | None
-    credential: Secret | None
-
-
-@dataclass(frozen=True, slots=True)
-class Route:
-    alias: str
-    catalog_id: str
-    deployments: tuple[ResolvedDeployment, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class Settings:
-    """Everything the gateway needs, validated. Secrets are `Secret` holders."""
-
-    source: Path
-    config: Config
-    catalog: Catalog
-    catalog_documents: tuple[Mapping[str, object], ...]
-    catalog_sha256: str  # combined hash of every catalog file, recorded on calls (T-CAT-05)
-    fx: tuple[FxSnapshot, ...]
-    key_pepper: Secret
-    ledger_dsn: Secret | None  # postgres only
-    ledger_path: Path | None  # sqlite only, resolved against the config file's directory
-    routes: Mapping[str, Route]
-
-    @property
-    def ledger_currency(self) -> str:
-        return self.config.ledger.currency
-
-    @property
-    def lease_ms(self) -> int:
-        return self.config.ledger.lease_seconds * _MS
-
-    @property
-    def sweep_ms(self) -> int:
-        return self.config.ledger.sweep_seconds * _MS
-
-    @property
-    def heartbeat_ms(self) -> int:
-        beat = self.config.ledger.heartbeat_seconds
-        return beat * _MS if beat is not None else self.lease_ms // 3
-
-    @property
-    def health(self) -> HealthConfig:
-        r = self.config.routing
-        return HealthConfig(
-            cooldown_ms=r.cooldown_seconds * _MS, failure_threshold_pct=r.failure_threshold_pct,
-            min_requests=r.min_requests, window_ms=r.window_seconds * _MS,
-            max_cooldown_ms=r.max_cooldown_seconds * _MS,
-        )  # fmt: skip
-
-    def fail_open_summary(self) -> list[str]:
-        """Lines the gateway logs (as warnings) at start: every enabled opt-out, or none."""
-        lines = []
-        if self.config.fail_open.allow_remote_media:
-            lines.append(
-                "fail_open.allow_remote_media is ON: URLs in request bodies are accepted and "
-                "fetched by the provider (SSRF exposure)"
-            )
-        return lines or ["fail_open: no opt-outs enabled"]
-
-    def unverified_summary(self) -> str | None:
-        """One warning line naming the catalog entries with `verified: false`, or None."""
-        return unverified_summary(self.catalog)
-
-    def unmatched_filters(self) -> list[str]:
-        """A warning per bootstrap budget whose `model_filter` matches no routed catalog id.
-
-        Not an error: the routes may grow into the filter later. Until then the budget takes
-        part in no hold; the usual cause is a filter written against an alias.
-        """
-        routed = sorted({r.catalog_id for r in self.routes.values()})
-        shown = ", ".join(routed[:_IDS_SHOWN])
-        return [
-            f"bootstrap.budgets.{i}.model_filter {b.model_filter!r} matches no routed catalog "
-            f"id, so the budget never applies (filters match catalog ids such as {shown}, "
-            "not aliases)"
-            for i, b in enumerate(self.config.bootstrap.budgets)
-            if b.model_filter is not None
-            and not any(model_filter_matches(b.model_filter, m) for m in routed)
-        ]
-
-
-_IDS_SHOWN = 5
-
-
-def unverified_summary(catalog: Catalog) -> str | None:
-    """A warning naming how many effective entries have `verified: false` and the first few ids."""
-    ids = sorted({e.price_id for e in catalog.entries() if not e.verified})
-    if not ids:
-        return None
-    shown = ", ".join(ids[:_IDS_SHOWN])
-    more = f" and {len(ids) - _IDS_SHOWN} more" if len(ids) > _IDS_SHOWN else ""
-    noun = "entry has" if len(ids) == 1 else "entries have"
-    return (
-        f"{len(ids)} catalog {noun} unverified prices (verified: false; not compared with the "
-        f"provider's page): {shown}{more}"
-    )
-
-
-@dataclass(frozen=True, slots=True)
-class CheckReport:
-    """Result of `check_config`: nothing is started."""
-
-    errors: tuple[str, ...]
-    unpriced: tuple[str, ...]  # routed catalog ids without a price
-    unverified: str | None = None  # warning line when the catalog has unverified prices
-    unmatched_filters: tuple[str, ...] = ()  # bootstrap budgets whose filter matches no route
-
-    @property
-    def ok(self) -> bool:
-        return not self.errors
 
 
 Issues = list[tuple[str, str]]
@@ -266,13 +147,37 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
 
 
 def _base_url_issue(url: str) -> str | None:
-    scheme, _, rest = url.partition("://")
-    host = rest.split("/", 1)[0].rsplit("@", 1)[-1].rsplit(":", 1)[0] if rest else ""
+    scheme = url.partition("://")[0]
+    plain = url.isprintable() and not any(c.isspace() for c in url)  # urlsplit drops tabs, CR, LF
+    try:  # the host as the HTTP client parses it: an `@` after a `?` or `#` is not userinfo
+        host = (urlsplit(url).hostname or "") if plain else ""
+    except ValueError:  # e.g. an unclosed `[` in an IPv6 literal
+        host = ""
     if scheme == "https" and host:
         return None
-    if scheme == "http" and host in {h.rsplit(":", 1)[0] for h in _LOOPBACK} | set(_LOOPBACK):
+    if scheme == "http" and host in _LOOPBACK:
         return None  # plain HTTP only to this machine (tests, sidecars)
     return "must be an https:// URL (http:// only for localhost)"
+
+
+def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
+    hook = cfg.alerts.webhook
+    if hook is None:
+        return None
+    url = _secret(hook.url, "alerts.webhook.url", ctx)
+    key = _secret(hook.signing_secret, "alerts.webhook.signing_secret", ctx)
+    # The same rule as a provider base_url; the message never quotes the URL.
+    if url is not None and (problem := _base_url_issue(url.reveal())) is not None:
+        ctx.issues.append(("alerts.webhook.url", problem))
+        return None
+    # The HMAC key is the secret's UTF-8 bytes. A non-UTF-8 environment value arrives as
+    # surrogate escapes (the only text UTF-8 cannot encode) and would fail only when signing.
+    if key is not None and any("\ud800" <= c <= "\udfff" for c in key.reveal()):
+        ctx.issues.append(("alerts.webhook.signing_secret", "must be UTF-8 text"))
+        return None
+    if url is None or key is None:
+        return None
+    return WebhookTarget(url, key, hook.timeout_seconds, hook.max_attempts, hook.queue_size)
 
 
 def _deployment(
@@ -296,14 +201,27 @@ def _deployment(
         issues.append((f"{at}.base_url", problem))
     if auth != "sigv4" and ref is None:
         issues.append((at, f"auth {auth} needs a credential (env:NAME or file:/path)"))
-    where = f"{at}.credential" if spec.credential else f"providers.{spec.provider}.credential"
-    credential = _secret(ref, where, ctx)
+    where = credential_path(spec, at)
+    if ref == ADC and (spec.provider != "google" or auth != "bearer_token"):
+        issues.append((where, "adc is for Google Vertex AI only (auth bearer_token)"))
+    credential = None if ref == ADC else _secret(ref, where, ctx)
     if base_url is None:
         return None
     return ResolvedDeployment(
-        spec.provider, base_url, spec.model or model_part, auth,
-        spec.region or prov.region, spec.api_version or prov.api_version, credential,
-    )  # fmt: skip
+        spec.provider,
+        base_url,
+        spec.model or model_part,
+        auth,
+        spec.region or prov.region,
+        spec.api_version or prov.api_version,
+        credential,
+        ref == ADC,
+    )
+
+
+def credential_path(spec: DeploymentSpec, at: str) -> str:
+    """Where the deployment's credential reference is written: its own key or its provider's."""
+    return f"{at}.credential" if spec.credential else f"providers.{spec.provider}.credential"
 
 
 def _priced(catalog: Catalog, catalog_id: str, now_ms: int | None) -> bool:
@@ -410,10 +328,11 @@ def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: lis
         if (problem := _ledger_file_issue(ledger_path)) is not None:
             issues.append(("ledger.backend.path", problem))
     routes = _routes(cfg, catalog, now_ms, ctx)
+    webhook = _webhook(cfg, ctx)
     _bootstrap_issues(cfg, catalog, issues)
     if issues or pepper is None:
         raise ConfigError(name, issues)
-    return Settings(path, cfg, catalog, docs, sha, fx, pepper, dsn, ledger_path, routes)
+    return Settings(path, cfg, catalog, docs, sha, fx, pepper, dsn, ledger_path, routes, webhook)
 
 
 def load(path: str | Path, *, env: Mapping[str, str], now_ms: int | None = None) -> Settings:
@@ -435,4 +354,10 @@ def check_config(
     except ConfigError as exc:
         errors = tuple(f"{p}: {m}" if p else m for p, m in exc.issues)
         return CheckReport(errors, tuple(sorted(set(unpriced))))
-    return CheckReport((), (), settings.unverified_summary(), tuple(settings.unmatched_filters()))
+    return CheckReport(
+        (),
+        (),
+        settings.unverified_summary(),
+        tuple(settings.unmatched_filters()),
+        settings.superseded_summary(),
+    )

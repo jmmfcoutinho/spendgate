@@ -47,8 +47,10 @@ paths:
       summary: Readiness in detail
       description: >-
         What `/readyz` on the data port withholds: the failing reasons (`ledger_unreachable`,
-        `catalog_not_loaded`, `kill_switch_engaged`) and the warnings (`clock_skew`,
-        `catalog_stale`). The status code is 200 when ready and 503 when not. Needs `usage:read`.
+        `catalog_not_loaded`) and the warnings (`clock_skew`, `clock_probe_failed`,
+        `kill_switch_engaged`, `kill_switch_probe_failed`, `catalog_stale`). A kill switch is never a failing reason: calls are
+        refused with `kill_switch` instead. The status code is 200 when ready and 503 when not.
+        Needs `usage:read`.
       x-required-scope: usage:read
       responses:
         '200':
@@ -562,14 +564,18 @@ components:
       type: object
       description: >-
         On keys only (column keys.session_defaults). A session header on a key without defaults is
-        `invalid_request`. Clients cannot request limits. Money is integer nano-units.
+        `invalid_request`. Clients cannot request limits. Money is integer nano-units. Absent
+        limits are not enforced, except `max_new_sessions_per_hour`, which is 60 when absent from a
+        request body; send `null` to remove that bound. A key in a response always carries
+        `max_new_sessions_per_hour` (`null` when unbounded), so sending back what a GET returned
+        keeps the stored value.
       additionalProperties: false
       properties:
         budget_nano: {type: integer, minimum: 0}
         max_steps: {type: integer, minimum: 1}
         max_seconds: {type: integer, minimum: 1}
         idle_seconds: {type: integer, minimum: 1}
-        max_new_sessions_per_hour: {type: integer, minimum: 1}
+        max_new_sessions_per_hour: {type: [integer, 'null'], minimum: 1, default: 60}
     ScopeCreate:
       type: object
       required: [path]
@@ -632,6 +638,13 @@ components:
         allowed_models: {type: array, items: {type: string}, description: Empty or absent means the models listed in config}
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        session_required:
+          type: boolean
+          default: false
+          description: >-
+            Refuse every call on the key that does not send `X-Spendgate-Session` (`invalid_request`,
+            `param: X-Spendgate-Session`), before any hold. Needs `session_defaults`, else
+            `invalid_request` with `param: session_required`.
         expires_at: {type: [string, 'null'], format: date-time}
     KeyUpdate:
       type: object
@@ -640,10 +653,11 @@ components:
         allowed_models: {type: array, items: {type: string}}
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        session_required: {type: boolean, description: Absent keeps the stored value. Needs session_defaults (sent or stored).}
         expires_at: {type: [string, 'null'], format: date-time}
     Key:
       type: object
-      required: [id, prefix, scope_id, created_at, revoked]
+      required: [id, prefix, scope_id, created_at, revoked, session_required]
       properties:
         id: {type: string}
         prefix: {type: string, description: The `<prefix>` part of sg-<prefix>-<secret>}
@@ -652,6 +666,7 @@ components:
         allowed_models: {type: array, items: {type: string}}
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
+        session_required: {type: boolean}
         created_at: {type: string, format: date-time}
         expires_at: {type: [string, 'null'], format: date-time}
         last_used_at: {type: [string, 'null'], format: date-time}
@@ -677,7 +692,7 @@ components:
       properties:
         period: {$ref: '#/components/schemas/Period'}
         cap: {$ref: '#/components/schemas/Money'}
-        soft_pct: {type: integer, minimum: 1, maximum: 99, default: 80, description: Warning threshold in percent, never blocks}
+        soft_pct: {type: integer, minimum: 1, maximum: 99, default: 80, description: 'Warning threshold in percent, never blocks'}
         model_filter: {type: [string, 'null'], description: 'Case-sensitive glob over the catalog id (provider/model, such as openai/gpt-6-*), never over aliases; null means all models. A filter that matches no routed catalog id is refused with invalid_request (param model_filter).'}
         strict_overrun:
           type: boolean
@@ -806,9 +821,9 @@ components:
         usage_cost_nano: {type: [integer, 'null'], minimum: 0, description: Cost computed from reported usage; null when no usage was seen}
         hold_nano: {type: integer, minimum: 0}
         overrun_nano: {type: integer, minimum: 0}
-        http_status: {type: [integer, 'null'], minimum: 100, maximum: 599, description: The HTTP status the provider answered this attempt with (for a stream, the opened response); null when the request was never sent or no response arrived (connect failure, timeout before headers, cancel before the answer, sweeper expiry)}
+        http_status: {type: [integer, 'null'], minimum: 100, maximum: 599, description: 'The HTTP status the provider answered this attempt with (for a stream, the opened response); null when the request was never sent or no response arrived (connect failure, timeout before headers, cancel before the answer, sweeper expiry)'}
         outcome: {$ref: '#/components/schemas/Outcome'}
-        error_code: {type: [string, 'null']}
+        error_code: {type: [string, 'null'], description: 'Why the attempt failed: a stable code listed in data-model.md (calls.error_code values); older rows may hold a legacy exception class name; null when none applies'}
         streamed: {type: boolean}
         settled_by: {type: string, enum: [owner, sweeper]}
         review_required_at: {type: [string, 'null'], format: date-time}

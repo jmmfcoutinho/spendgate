@@ -10,8 +10,8 @@ minor versions. v0.1 targets local deployments: one machine, Docker Compose, SQL
 spendgate is a small, auditable guard for LLM spending: an OpenAI- and Anthropic-compatible proxy
 plus a Python SDK and a no-server library mode. Before a call is forwarded it holds the worst-case
 cost in every budget the call belongs to, refuses anything it cannot price, and settles the real
-cost exactly once afterwards. Small means about 12.7k product lines today, provider adapters not
-counted, as measured by `scripts/lightweight_report.py`.
+cost exactly once afterwards. Small means about 16.9k formatted product lines today, provider
+adapters not counted, as measured by `scripts/lightweight_report.py`.
 
 ## What it guarantees
 
@@ -28,8 +28,10 @@ tests that prove it.
 - **Overruns are recorded, never clamped.** Usage above the hold is booked as reported. A breach of
   the cap blocks the budget until an operator acknowledges it (the default, `strict_overrun`).
 - **Session limits.** A call that sends `X-Spendgate-Session` gets that session's budget, step
-  limit, time limit and idle expiry, so a runaway loop ends with `session_limit_reached`. A call
-  without the header has no session limits; the key's parent budgets are the backstop.
+  limit, time limit and idle expiry, so a runaway loop ends with `session_limit_reached`. Give an
+  agent a key with `session_required: true`: a call without the header is then refused, and a key
+  starts at most 60 new sessions an hour unless configured, so the agent can neither drop the
+  header nor mint ids to escape its limits. Each key has at most 16 calls in flight by default.
 - **Throttling costs nothing.** A provider 429 cools that deployment down and the call goes to the
   next deployment of the same model inside the same reservation, at no charge.
 - **A perimeter you can test.** In the reference Docker Compose setup only the proxy holds provider
@@ -159,9 +161,11 @@ The bundled catalog ships about 26 priced models across these providers. A model
 routed in `models:` is refused with `model_not_allowed`, and routing a catalog id with no price in
 force fails `check-config` and `serve` ("has no price in the catalog"); `model_not_priced` is the
 request-time refusal when an entry cannot price that particular request. To use another model,
-give it a price in an override file ([adding a model](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md), or draft entries
-from LiteLLM's price file as in
-[section 6](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)).
+give it a price in an override file ([adding a model](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md)).
+For breadth, `spendgate catalog import --from-litellm <commit-sha> --out extra.yaml` drafts an
+override file of `verified: false` entries from LiteLLM's price file at one pinned commit; nothing
+is fetched at serve time. Read it before loading it
+([section 6](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)).
 
 ## Documentation
 

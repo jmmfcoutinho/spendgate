@@ -112,9 +112,14 @@ def set_key_expiry_flow(
     yield q(sql.KEY_SET_EXPIRY, id=key_id, expires_at=expires_at)
     after = replace(before, expires_at=expires_at)
     yield from audit(
-        ctx, now, actor, "key.update", ("key", key_id),
-        {"expires_at": before.expires_at}, {"expires_at": expires_at},
-    )  # fmt: skip
+        ctx,
+        now,
+        actor,
+        "key.update",
+        ("key", key_id),
+        {"expires_at": before.expires_at},
+        {"expires_at": expires_at},
+    )
     return after
 
 

@@ -9,6 +9,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
+from spendgate.config.schema import DEFAULT_NEW_SESSIONS_PER_HOUR
+
 MAX_REASON = 500
 _AMOUNT = r"^[0-9]+(\.[0-9]{1,9})?$"
 _SCOPE_PATH = (
@@ -72,7 +74,8 @@ class SessionDefaultsIn(_In):
     max_steps: PosInt | None = None
     max_seconds: PosInt | None = None
     idle_seconds: PosInt | None = None
-    max_new_sessions_per_hour: PosInt | None = None
+    # The same default as the config's `session_defaults`; an explicit null opts out.
+    max_new_sessions_per_hour: PosInt | None = DEFAULT_NEW_SESSIONS_PER_HOUR
 
 
 class KeyCreateIn(_In):
@@ -81,6 +84,7 @@ class KeyCreateIn(_In):
     allowed_models: ModelList | None = None
     limits: KeyLimitsIn | None = None
     session_defaults: SessionDefaultsIn | None = None
+    session_required: bool = False  # needs session_defaults
     expires_at: Time | None = None
 
 
@@ -91,6 +95,7 @@ class KeyUpdateIn(_In):
     allowed_models: ModelList | None = None
     limits: KeyLimitsIn | None = None
     session_defaults: SessionDefaultsIn | None = None
+    session_required: bool = False  # absent keeps the stored value
     expires_at: Time | None = None
 
 

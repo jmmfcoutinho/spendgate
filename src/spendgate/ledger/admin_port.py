@@ -1,17 +1,20 @@
-"""What the admin API and CLI read beyond `LedgerPort`, plus the plain data those reads return.
+"""The admin port: what the admin API, the CLI and set-up use beyond `MoneyLedger`, plus the plain
+data its reads return.
 
 `AdminLedger` extends the money port: every backend implements it through `LedgerEngine`, so the
-gateway's admin layer and the CLI's `--local` mode share one set of functions.
+gateway's admin layer and the CLI's `--local` mode share one set of functions. Code on the
+request path takes `MoneyLedger` only.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from spendgate.core.budgets import Budget, ScopeKind
-from spendgate.core.policy import KillSwitch
-from spendgate.ledger.key_types import KeyRecord
-from spendgate.ledger.port import BudgetTotals, LedgerPort, ScopeRow
+from spendgate.core.budgets import Budget, Period, ScopeKind
+from spendgate.core.policy import KeyPolicy, KillSwitch
+from spendgate.ledger.key_types import AdminScope, KeyKind, KeyRecord, KeySpec, NewKey, StoredKey
+from spendgate.ledger.port import BudgetTotals, CallRow, MoneyLedger, ReservationRow, ScopeRow
+from spendgate.ledger.usage import RetentionResult, UsageQuery, UsageResult
 
 # One `calls` row with the column names as keys (the admin `Call` schema mirrors the table).
 type CallFields = Mapping[str, int | str | None]
@@ -70,9 +73,132 @@ class CallCursor:
     attempt: int
 
 
-class AdminLedger(LedgerPort, Protocol):
-    """Reads and the few extra writes the admin surface needs. Names follow the operation ids."""
+class AdminLedger(MoneyLedger, Protocol):
+    """The admin writes and reads on top of the money port. Names follow the admin operation ids."""
 
+    # Admin side: the smallest set that creates and changes the state the scenarios run on.
+    async def create_scope(  # noqa: PLR0913 - mirrors the admin ScopeCreate body
+        self,
+        kind: ScopeKind,
+        name: str,
+        parent_id: str | None,
+        *,
+        now: int,
+        actor: str = "system",
+        display_name: str | None = None,
+    ) -> ScopeRow: ...
+
+    async def create_budget(  # noqa: PLR0913 - mirrors the admin BudgetCreate body
+        self,
+        scope_id: str,
+        period: Period,
+        cap_nano: int,
+        *,
+        now: int,
+        soft_pct: int = 80,
+        model_filter: str | None = None,
+        strict_overrun: bool = True,
+        note: str | None = None,
+        actor: str = "system",
+        budget_id: str | None = None,
+    ) -> Budget: ...
+
+    async def update_budget(  # noqa: PLR0913 - mirrors the admin BudgetUpdate body
+        self,
+        budget_id: str,
+        *,
+        actor: str,
+        now: int,
+        cap_nano: int | None = None,
+        soft_pct: int | None = None,
+        strict_overrun: bool | None = None,
+        note: str | None = None,
+    ) -> Budget: ...
+
+    async def create_grant(  # noqa: PLR0913 - mirrors the admin GrantCreate body
+        self,
+        budget_id: str,
+        *,
+        amount_nano: int,
+        valid_from: int,
+        valid_until: int,
+        actor: str,
+        reason: str,
+        now: int,
+    ) -> str: ...
+
+    async def ack_overrun(self, budget_id: str, *, actor: str, reason: str, now: int) -> None: ...
+
+    async def engage_kill_switch(
+        self, switch: KillSwitch, *, actor: str, reason: str, now: int
+    ) -> str: ...
+
+    async def lift_kill_switch(self, switch_id: str, *, actor: str, now: int) -> None: ...
+
+    async def delete_budget(self, budget_id: str, *, actor: str, now: int) -> None: ...
+
+    async def disable_scope(self, scope_id: str, *, actor: str, now: int) -> None: ...
+
+    async def add_key_record(self, key_id: str, scope_id: str, *, now: int) -> None:
+        """Thin primitive that satisfies `reservations.key_id`; key flows handle real keys."""
+        ...
+
+    # Keys. `pepper` is passed in by the caller and never stored.
+    async def create_key(self, spec: KeySpec, *, pepper: bytes, actor: str, now: int) -> NewKey: ...
+
+    async def create_admin_key(  # noqa: PLR0913 - an admin key's whole definition
+        self,
+        scope_id: str,
+        name: str,
+        admin_scopes: frozenset[AdminScope],
+        *,
+        pepper: bytes,
+        actor: str,
+        now: int,
+        expires_at: int | None = None,
+    ) -> NewKey: ...
+
+    async def list_keys(
+        self, scope_id: str | None = None, *, kind: KeyKind = KeyKind.API
+    ) -> tuple[KeyRecord, ...]: ...
+
+    async def get_key(self, key_id: str) -> KeyRecord | None: ...
+
+    async def find_key(self, prefix: str) -> StoredKey | None:
+        """Lookup by the public prefix, with the stored hash; used by `keys.KeyService`."""
+        ...
+
+    async def revoke_key(self, key_id: str, *, actor: str, now: int) -> KeyRecord: ...
+
+    async def rotate_key(
+        self, key_id: str, *, grace_ms: int, pepper: bytes, actor: str, now: int
+    ) -> NewKey: ...
+
+    async def set_key_policy(
+        self, policy: KeyPolicy, *, name: str | None = None, actor: str, now: int
+    ) -> KeyRecord: ...
+
+    async def find_scope(self, path: str) -> ScopeRow | None:
+        """A scope by its unique path (`org:acme/user:u1`), or None. Ids never match."""
+        ...
+
+    async def get_reservation(self, request_id: str) -> ReservationRow | None: ...
+
+    async def get_calls(self, request_id: str) -> tuple[CallRow, ...]: ...
+
+    # Usage and retention. `retention_days` makes `usage` refuse a `since` older than
+    # the configured window even before the first deletion run.
+    async def usage(
+        self, query: UsageQuery, *, now: int, retention_days: int | None = None
+    ) -> UsageResult: ...
+
+    async def delete_calls_older_than(
+        self, days: int, now: int, batch: int = 1_000
+    ) -> RetentionResult:
+        """Whole UTC days of calls (plus old terminal reservations and closed sessions)."""
+        ...
+
+    # Reads and the few extra writes only the admin surface needs.
     async def global_kill_engaged(self) -> bool:
         """True while a global kill switch is active (the `/readyz` probe)."""
         ...

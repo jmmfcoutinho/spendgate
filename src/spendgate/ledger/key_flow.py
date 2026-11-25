@@ -8,6 +8,7 @@ import json
 from dataclasses import replace
 
 from spendgate.core.policy import KeyPolicy
+from spendgate.core.sessions import LIMIT_FIELDS as _SESSION_FIELDS
 from spendgate.core.sessions import SessionDefaults
 from spendgate.ledger import keys, sql
 from spendgate.ledger.common import Ctx, audit, oi, s
@@ -24,7 +25,6 @@ from spendgate.ledger.sql import Flow, Row, Value, q
 
 _ATTEMPTS = 5  # prefix collisions: 48 random bits, so one retry is already astronomically rare
 _LIMIT_FIELDS = ("rpm", "tpm", "max_concurrent", "max_output_tokens", "per_call_ceiling_nano")
-_SESSION_FIELDS = tuple(SessionDefaults.__slots__)
 
 
 # --- row <-> record --------------------------------------------------------------------------
@@ -48,6 +48,13 @@ def _opt_int(obj: dict[str, object], name: str) -> int | None:
     return value
 
 
+def _flag(obj: dict[str, object], name: str) -> bool:
+    value = obj.get(name, False)
+    if not isinstance(value, bool):
+        raise TypeError(f"{name} is not a boolean")
+    return value
+
+
 def _json_list(text: Value) -> list[str] | None:
     if text is None:
         return None
@@ -63,7 +70,9 @@ def record_from_row(row: Row) -> KeyRecord:
     sessions = None
     if row["session_defaults"] is not None:
         raw = _json_object(row["session_defaults"])
-        sessions = SessionDefaults(**{f: _opt_int(raw, f) for f in _SESSION_FIELDS})
+        sessions = SessionDefaults(
+            **{f: _opt_int(raw, f) for f in _SESSION_FIELDS}, required=_flag(raw, "required")
+        )
     policy = KeyPolicy(
         s(row, "id"),
         s(row, "scope_id"),
@@ -99,19 +108,28 @@ def _created(row: Row) -> int:
 
 def _policy_columns(policy: KeyPolicy) -> dict[str, Value]:
     limits = {f: getattr(policy, f) for f in _LIMIT_FIELDS if getattr(policy, f) is not None}
-    sessions = policy.session_defaults
     return {
         "allowed_models": None
         if policy.allowed_models is None
         else json.dumps(policy.allowed_models),
         "limits": json.dumps(limits, sort_keys=True) if limits else None,
-        "session_defaults": None
-        if sessions is None
-        else json.dumps(
-            {f: getattr(sessions, f) for f in _SESSION_FIELDS if getattr(sessions, f) is not None},
-            sort_keys=True,
-        ),
+        "session_defaults": _sessions_json(policy.session_defaults),
     }
+
+
+def _sessions_json(sessions: SessionDefaults | None) -> str | None:
+    """`required` lives in the same object: it means nothing on a key without session defaults.
+
+    Written only when true, so the rows of keys that do not use it are unchanged.
+    """
+    if sessions is None:
+        return None
+    out: dict[str, object] = {
+        f: getattr(sessions, f) for f in _SESSION_FIELDS if getattr(sessions, f) is not None
+    }
+    if sessions.required:
+        out["required"] = True
+    return json.dumps(out, sort_keys=True)
 
 
 def _audit_view(rec: KeyRecord) -> dict[str, Value]:

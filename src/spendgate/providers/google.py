@@ -1,4 +1,4 @@
-"""Google adapter: Gemini API (API key) and Vertex AI (service account), chat only.
+"""Google adapter: Gemini API (API key) and Vertex AI (service account or ADC), chat only.
 
 One adapter, two auth strategies, one wire shape. `translate()` rebuilds a Gemini body from
 validated OpenAI chat fields (refusing what it cannot carry, never dropping silently);
@@ -63,8 +63,11 @@ _TOOL_KEYS = (("description", "description"), ("parameters", "parametersJsonSche
 
 
 class Credentials(Protocol):
-    token: str | None
-    project_id: str | None
+    @property
+    def token(self) -> str | None: ...
+
+    @property
+    def project_id(self) -> str | None: ...
 
     @property
     def valid(self) -> bool: ...
@@ -234,7 +237,60 @@ def _service_account(deployment: Deployment) -> Credentials:
     return creds
 
 
+class _Token(Protocol):
+    """What ADC objects share: a token and its refresh (`project_id` is optional on them)."""
+
+    @property
+    def token(self) -> str | None: ...
+
+    @property
+    def valid(self) -> bool: ...
+
+    def refresh(self, request: object) -> None: ...
+
+
+class _Ambient:
+    """`google.auth.default()` credentials plus the project it found.
+
+    Only service-account credentials carry a `project_id`; workload identity, the metadata server
+    and a developer login do not, so the project `default()` returned is kept beside them.
+    """
+
+    def __init__(self, creds: _Token, project: str | None) -> None:
+        self._creds = creds
+        self._project = project
+
+    @property
+    def token(self) -> str | None:
+        return self._creds.token
+
+    @property
+    def project_id(self) -> str | None:
+        return getattr(self._creds, "project_id", None) or self._project
+
+    @property
+    def valid(self) -> bool:
+        return self._creds.valid
+
+    def refresh(self, request: object) -> None:
+        self._creds.refresh(request)
+
+
+def _application_default() -> Credentials:
+    """Application default credentials (workload identity, metadata server, `gcloud` login).
+
+    `default()` may ask the metadata server for the project, a blocking call; it runs where the
+    token refresh does, in `prepare`'s worker thread.
+    """
+    import google.auth  # noqa: PLC0415 - optional extra, Vertex only
+
+    creds, project = google.auth.default(scopes=[_SCOPE])
+    return _Ambient(creds, project)
+
+
 def _digest(deployment: Deployment) -> str:
+    if deployment.ambient:
+        return "adc"  # one identity per process: every ADC deployment shares its token
     return hashlib.sha256(deployment.credential.encode()).hexdigest()
 
 
@@ -243,8 +299,14 @@ class GoogleProvider:
 
     name = "google"
 
-    def __init__(self, credentials: Callable[[Deployment], Credentials] | None = None) -> None:
+    def __init__(
+        self,
+        credentials: Callable[[Deployment], Credentials] | None = None,
+        *,
+        ambient: Callable[[], Credentials] | None = None,
+    ) -> None:
         self._source = credentials or _service_account
+        self._ambient = ambient or _application_default
         self._cache: dict[str, Credentials] = {}  # keyed by a digest, never by the secret
         self._refreshes = Refreshes()
 
@@ -257,7 +319,7 @@ class GoogleProvider:
         return None
 
     async def prepare(self, deployment: Deployment) -> None:
-        """Vertex: load and refresh the service-account token in a worker thread when stale."""
+        """Vertex: load and refresh the token (service account or ADC) in a worker thread."""
         if deployment.auth is not AuthMode.BEARER_TOKEN:
             return  # a Gemini API key never expires
         key = _digest(deployment)
@@ -308,7 +370,9 @@ class GoogleProvider:
 
     def _credentials(self, d: Deployment) -> Credentials:
         key = _digest(d)
-        creds = self._cache.get(key) or self._cache.setdefault(key, self._source(d))
+        if (creds := self._cache.get(key)) is None:
+            made = self._ambient() if d.ambient else self._source(d)
+            creds = self._cache.setdefault(key, made)
         if not creds.valid:  # google-auth treats a token near expiry as invalid (network refresh)
             from google.auth.transport import requests  # noqa: PLC0415 - optional extra
 

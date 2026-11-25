@@ -86,8 +86,18 @@ def lock_budget(
     rows = yield q(sql.BUDGET_LOCK, id=budget_id)
     if not rows or (skip_disabled and rows[0]["disabled_at"] is not None):
         return None
-    row = rows[0]
     grants = yield q(sql.GRANTS_OF, id=budget_id)
+    return budget_from(rows[0], grants, scope)
+
+
+def read_budget(budget_id: str) -> Flow[Budget | None]:
+    """The budget with its grants, without a lock: for reports, never for a money decision."""
+    rows = yield q(sql.BUDGET_GET, id=budget_id)
+    return budget_from(rows[0], (yield q(sql.GRANTS_OF, id=budget_id))) if rows else None
+
+
+def budget_from(row: Row, grants: list[Row], scope: tuple[ScopeKind, str] | None = None) -> Budget:
+    """A budget row and its grant rows as a `Budget`; `scope` names its owner when known."""
     kind, path = scope if scope is not None else (ScopeKind.SERVICE, "")
     return Budget(
         id=s(row, "id"),
@@ -220,7 +230,7 @@ def attempt_params(a: AttemptRecord, *, charged: int, overrun: int) -> dict[str,
         "overrun_nano": overrun,
         "http_status": a.http_status,
         "outcome": a.outcome.value,
-        "error_code": a.error_code,
+        "error_code": None if a.error_code is None else a.error_code.value,
         "streamed": int(a.streamed),
         "review_required_at": a.finished_at if a.review_required else None,
         "started_at": a.started_at,

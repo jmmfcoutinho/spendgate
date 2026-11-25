@@ -21,13 +21,21 @@ from urllib.parse import urlsplit
 import httpx
 
 from spendgate import package_version
-from spendgate.cli import serve
-from spendgate.cli.client import EXIT_AUTH, EXIT_CONFIG, EXIT_OK, Client, CliError
+from spendgate.cli import catalog, serve
+from spendgate.cli.client import (
+    EXIT_AUTH,
+    EXIT_CONFIG,
+    EXIT_OK,
+    EXIT_UNAVAILABLE,
+    Client,
+    CliError,
+)
 from spendgate.cli.commands import COMMANDS, Command
 from spendgate.cli.runtime import open_runtime
 from spendgate.config import ConfigError, read_config
 from spendgate.gateway.admin import create_admin_app
 from spendgate.gateway.admin_http import AdminContext
+from spendgate.ledger.port import LedgerUnavailable
 
 FALLBACK_URL = "http://127.0.0.1:8080"  # no --url, $SPENDGATE_URL or config: the README's listen
 ENV_KEY, ENV_URL, ENV_CONFIG = "SPENDGATE_ADMIN_KEY", "SPENDGATE_URL", "SPENDGATE_CONFIG"
@@ -128,6 +136,9 @@ def build_parser() -> argparse.ArgumentParser:
     top = parser.add_subparsers(dest="command", required=True)
     s = top.add_parser("serve", parents=[config], help="run the gateway and the admin API")
     s.add_argument("--no-bootstrap", action="store_true", help="skip the config bootstrap section")
+    s.add_argument(
+        "--migrate", action="store_true", help="apply pending ledger migrations before serving"
+    )
     top.add_parser(
         "check-config", parents=[config], help="validate the configuration, start nothing"
     )
@@ -152,6 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
     u.add_argument("--basis", choices=("charged", "usage"))
     u.add_argument("--limit", type=int)
     _leaf(top, "status", common, "gateway status, kill switches and budget alerts")
+    catalog.add_parser(top)
     return parser
 
 
@@ -239,21 +251,32 @@ def resolve_defaults(args: argparse.Namespace) -> None:
     args.config = args.config or os.environ.get(ENV_CONFIG) or DEFAULT_CONFIG
 
 
+def _dispatch(args: argparse.Namespace) -> int:
+    if args.command == "catalog":  # no config and no admin key: an offline file tool
+        return catalog.main(args)
+    resolve_defaults(args)
+    match args.command:
+        case "serve":
+            return serve.run_serve(
+                args.config, bootstrap=not args.no_bootstrap, migrate=args.migrate
+            )
+        case "check-config":
+            return serve.run_check_config(args.config)
+        case "migrate":
+            return serve.run_migrate(args.config, bootstrap=args.bootstrap)
+        case _:
+            return asyncio.run(_run_admin(args))
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    resolve_defaults(args)
     try:
-        match args.command:
-            case "serve":
-                return serve.run_serve(args.config, bootstrap=not args.no_bootstrap)
-            case "check-config":
-                return serve.run_check_config(args.config)
-            case "migrate":
-                return serve.run_migrate(args.config, bootstrap=args.bootstrap)
-            case _:
-                return asyncio.run(_run_admin(args))
+        return _dispatch(args)
     except CliError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return exc.code
+    except LedgerUnavailable as exc:  # at open: a schema behind or ahead, or no database
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_UNAVAILABLE
     except KeyboardInterrupt:
         return EXIT_OK

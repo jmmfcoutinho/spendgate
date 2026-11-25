@@ -17,7 +17,8 @@ Planned work is in [ROADMAP.md](ROADMAP.md).
 - **Respect the layers:** `cli > gateway | local > pipeline > ledger, providers, config, client > core`.
   `core` is pure: no I/O, no internal imports. `uv run lint-imports` enforces this.
 - **Money is integer nano-units**, never `float`. Fail closed on anything unknown.
-- **Keep it small.** Modules up to ~400 lines, functions up to ~50, at most 6 runtime
+- **Keep it small.** Modules at most 400 and functions at most 50 ruff-formatted lines (hard,
+  `make size`; `# fmt: skip` only on module- or class-level tables), at most 6 runtime
   dependencies. Readable over clever; comments explain why, not what.
 - **No network in tests.** Inject the clock; never `sleep`. Mark real-provider tests `live`.
 - **Every money rule has a test named for it** (rule ids `M-NN` in CONTRIBUTING.md section 7).

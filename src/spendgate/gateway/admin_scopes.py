@@ -112,8 +112,17 @@ def _limits(body: KeyLimitsIn | None) -> dict[str, int | None]:
     return {n: getattr(given, n) for n in KeyLimitsIn.model_fields}
 
 
-def _sessions(body: SessionDefaultsIn | None) -> SessionDefaults | None:
-    return None if body is None else SessionDefaults(**body.model_dump())
+def _sessions(body: SessionDefaultsIn | None, required: bool) -> SessionDefaults | None:
+    """`session_required` is stored with the session defaults, so it cannot stand without them."""
+    if body is None:
+        if required:
+            raise ApiError(
+                ErrorCode.INVALID_REQUEST,
+                "session_required needs session_defaults.",
+                "session_required",
+            )
+        return None
+    return SessionDefaults(**body.model_dump(), required=required)
 
 
 async def create_key(call: Call) -> Response:
@@ -130,7 +139,7 @@ async def create_key(call: Call) -> Response:
         limits.rpm,
         limits.tpm,
         limits.max_concurrent,
-        _sessions(body.session_defaults),
+        _sessions(body.session_defaults, body.session_required),
         expires_at=body.expires_at,
     )
     made = await call.ctx.keys.create_key(spec, actor=call.actor, now=call.now)
@@ -168,6 +177,20 @@ async def get_key(call: Call) -> Response:
     return respond(key_json(await need_api_key(call)))
 
 
+def _patched_sessions(current: SessionDefaults | None, body: KeyUpdateIn) -> SessionDefaults | None:
+    """Absent fields keep their stored value: new limits keep `required`, and the reverse."""
+    given = body.model_fields_set
+    if "session_required" in given:
+        required = body.session_required
+    else:
+        required = current is not None and current.required
+    if "session_defaults" not in given:
+        if current is None:
+            return _sessions(None, required)
+        return replace(current, required=required)
+    return _sessions(body.session_defaults, required)
+
+
 def _patched_policy(current: KeyPolicy, body: KeyUpdateIn) -> KeyPolicy:
     changes: dict[str, object] = {}
     given = body.model_fields_set
@@ -175,8 +198,8 @@ def _patched_policy(current: KeyPolicy, body: KeyUpdateIn) -> KeyPolicy:
         changes["allowed_models"] = (
             None if body.allowed_models is None else tuple(body.allowed_models)
         )
-    if "session_defaults" in given:
-        changes["session_defaults"] = _sessions(body.session_defaults)
+    if given & {"session_defaults", "session_required"}:
+        changes["session_defaults"] = _patched_sessions(current.session_defaults, body)
     if "limits" in given:  # the whole limits object is replaced, as a PATCH of that field
         changes.update(_limits(body.limits))
     return replace(current, **changes)  # type: ignore[arg-type]
@@ -187,11 +210,13 @@ async def update_key(call: Call) -> Response:
     body = await call.body(KeyUpdateIn)
     given = body.model_fields_set
     record = current
-    if given & {"name", "allowed_models", "limits", "session_defaults"}:
+    if given & {"name", "allowed_models", "limits", "session_defaults", "session_required"}:
         record = await call.ctx.keys.set_key_policy(
-            _patched_policy(current.policy, body), name=body.name,
-            actor=call.actor, now=call.now,
-        )  # fmt: skip
+            _patched_policy(current.policy, body),
+            name=body.name,
+            actor=call.actor,
+            now=call.now,
+        )
     if "expires_at" in given:
         record = await call.ctx.ledger.set_key_expiry(
             current.id, body.expires_at, actor=call.actor, now=call.now

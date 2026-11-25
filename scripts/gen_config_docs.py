@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 
 from spendgate.config import schema
-from spendgate.config.secrets import check_ref
+from spendgate.config.secrets import check_credential_ref, check_ref
 from spendgate.core.money import Money
 
 OUTPUT = Path(__file__).resolve().parent.parent / "docs" / "configuration.md"
@@ -54,6 +54,11 @@ D: dict[str, str] = {
     ),
     "Config.anthropic": "Request header allowlists for the Anthropic endpoint.",
     "Config.routing": "Failover and cooldown behaviour across deployments of one model.",
+    "Config.alerts": (
+        "Where budget warnings are sent besides the log. Unset: the `spendgate.budget` log "
+        "lines only."
+    ),
+    "Config.observability": "Optional tracing. Prometheus metrics need no setting.",
     # Server
     "Server.listen": "Data-plane address, `host:port`.",
     "Server.admin": (
@@ -83,6 +88,17 @@ D: dict[str, str] = {
         "Most requests being admitted at once; beyond it the proxy refuses fast. It covers "
         "intake only: a running stream is limited by the key's concurrency."
     ),
+    "Server.keep_alive_seconds": (
+        "How long an idle client connection stays open (default 75). Keep it above the load "
+        "balancer's idle timeout (60 s on many), or the balancer may send a request on a "
+        "connection the proxy is closing and answer it with a 502."
+    ),
+    "Server.graceful_shutdown_seconds": (
+        "Drain deadline after `SIGTERM` (default 30): calls still running then are stopped and "
+        "settled as cancelled (the full hold once sent, unless usage was seen). Keep it below the "
+        "orchestrator's grace period minus any `preStop` wait; set it above `max_request_seconds` "
+        "to let every call finish. See the operations guide, Draining on restart."
+    ),
     "Server.key_pepper": (
         "Secret used to hash stored key secrets. Keep it: changing it invalidates every key."
     ),
@@ -103,6 +119,23 @@ D: dict[str, str] = {
         "Calls older than this many whole UTC days are deleted once a day. Usage reports cover "
         "only this window."
     ),
+    "Ledger.auto_migrate": (
+        "Whether `serve` applies pending migrations at start. Unset means `true` for SQLite "
+        "(one file on one host) and `false` for Postgres. When false, `serve` refuses a schema "
+        "that is behind and says to run `spendgate migrate` (or `serve --migrate`): see "
+        "[upgrades](operations.md#upgrades-and-rollbacks)."
+    ),
+    "Ledger.pool_min": (
+        "Postgres only: connections each instance keeps open (default 1). Not used by SQLite."
+    ),
+    "Ledger.pool_max": (
+        "Postgres only: most connections each instance opens (default 10). Size the server's "
+        "`max_connections` for this times the number of instances, plus migrations and admin."
+    ),
+    "Ledger.pool_timeout_seconds": (
+        "Postgres only: how long a call waits for a free pooled connection (default 10) before "
+        "it is refused with `ledger_unavailable`."
+    ),
     "SqliteLedger.kind": "Always `sqlite`.",
     "SqliteLedger.path": (
         "Database file. A relative path is relative to the config file. The file must be mode "
@@ -114,7 +147,28 @@ D: dict[str, str] = {
         "when the server is on another host. Each connection gets lock, statement and "
         "idle-in-transaction timeouts plus TCP keepalives and a TCP user timeout unless the "
         "URL or the server sets them: "
-        "see [Postgres connections](operations.md#postgres-connections)."
+        "see [Postgres connections](operations.md#postgres-connections). A `file:` DSN is "
+        "read again on `SIGHUP`; only its password may change there."
+    ),
+    "PostgresLedger.auth": (
+        "Sign in with a short-lived token from the host's cloud identity instead of a password; "
+        "the DSN then names the user and carries no password. See "
+        "[cloud identity](operations.md#cloud-identity-for-the-database)."
+    ),
+    "RdsIamAuth.kind": (
+        "`rds_iam`: an Amazon RDS or Aurora IAM auth token, signed with the standard AWS "
+        "credential chain. Needs the `bedrock` extra (botocore)."
+    ),
+    "RdsIamAuth.region": "AWS region of the database. Default: the AWS chain's region.",
+    "EntraAuth.kind": (
+        "`entra`: a Microsoft Entra ID token from `DefaultAzureCredential` (managed or "
+        "workload identity, environment) for Azure Database for PostgreSQL. Needs the `azure` "
+        "extra."
+    ),
+    "EntraAuth.scope": "Token audience. The default is the one Azure documents for PostgreSQL.",
+    "CloudSqlIamAuth.kind": (
+        "`cloudsql_iam`: a Google access token from application default credentials, for "
+        "Cloud SQL IAM database sign-in. Needs the `google` extra."
     ),
     # Fx
     "Fx.rates": (
@@ -139,7 +193,9 @@ D: dict[str, str] = {
     "Provider.auth": "How the proxy authenticates to the provider.",
     "Provider.credential": (
         "Secret reference for the key or token. Not used with `sigv4`, which reads the standard "
-        "AWS credential chain."
+        "AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the "
+        "service-account JSON, or `adc` for application default credentials (workload "
+        "identity, the metadata server). A `file:` credential is read again on `SIGHUP`."
     ),
     "Provider.region": "Provider region, where the adapter needs one (Bedrock, Azure).",
     "Provider.api_version": (
@@ -168,13 +224,25 @@ D: dict[str, str] = {
         "next, at no cost."
     ),
     # Limits
-    "Limits.rpm": "Requests per minute. Unset means no limit.",
+    "Limits.rpm": "Requests per minute. Unset means the `defaults.limits.rpm` value applies.",
     "Limits.tpm": (
-        "Estimated tokens per minute. Unset means no limit. The estimate is the worst case: each "
-        "image counts at the model's image ceiling, up to 61,000 tokens on a model without a "
-        "documented one."
+        "Estimated tokens per minute. Unset means the `defaults.limits.tpm` value applies. The "
+        "estimate is the worst case: each image counts at the model's image ceiling, up to 61,000 "
+        "tokens on a model without a documented one."
     ),
-    "Limits.concurrency": "Calls in flight at once. Unset means no limit.",
+    "Limits.concurrency": (
+        "Calls in flight at once. Unset means the `defaults.limits.concurrency` value applies."
+    ),
+    # DefaultLimits
+    "DefaultLimits.rpm": "Requests per minute for keys with none of their own. Unset: no limit.",
+    "DefaultLimits.tpm": (
+        "Estimated tokens per minute for keys with none of their own. Unset: no limit. The "
+        "estimate is the worst case, as for a key's own `tpm`."
+    ),
+    "DefaultLimits.concurrency": (
+        "Calls in flight at once, per key, for keys with none of their own. It also bounds the "
+        "overrun at a cap crossing (see how-money-is-protected.md). `null` removes the bound."
+    ),
     # Defaults
     "Defaults.limits": "Applied to a key for each limit the key does not set itself.",
     "Defaults.max_output_tokens": (
@@ -197,9 +265,13 @@ D: dict[str, str] = {
     # Routing
     "Routing.max_attempts": "Most deployments tried for one request.",
     "Routing.cooldown_seconds": (
-        "How long a deployment is skipped after the provider throttles it (429) or its circuit "
-        "breaker opens. A connect failure alone does not cool a deployment. Must not exceed "
-        "`max_cooldown_seconds`. A `Retry-After` header is honoured."
+        "How long a deployment is skipped after its circuit breaker opens, or after the "
+        "provider answers 429 for a quota or billing reason or with an unreadable `Retry-After`. "
+        "A busy 429 cools it for its `Retry-After` as given (seconds or an HTTP-date), or "
+        "without one for a random 250 to 500 ms, doubled for each 429 in a row up to this value; "
+        "a call that finds every deployment cooling waits up to 1 s for one to come back. A "
+        "connect failure alone does not cool a deployment. Must not exceed "
+        "`max_cooldown_seconds`."
     ),
     "Routing.failure_threshold_pct": (
         "Failure percentage in the window that puts a deployment into cooldown."
@@ -211,6 +283,15 @@ D: dict[str, str] = {
         "How long to wait for the TCP/TLS connection to the provider (DNS included) before the "
         "attempt counts as unreachable. Read and total timeouts are not affected."
     ),
+    # Observability
+    "Observability.otel": "OpenTelemetry tracing of the hold, forward and settle steps.",
+    "Otel.enabled": (
+        "Export one span per hold, forward and settle over OTLP/HTTP, and pass the caller's "
+        "`traceparent` on to the provider. Needs the `otel` extra (`spendgate[otel]`); "
+        "without it `serve` warns at start and traces nothing. The exporter reads the standard "
+        "`OTEL_EXPORTER_OTLP_*` variables."
+    ),
+    "Otel.service_name": "The `service.name` resource attribute of every span.",
     # Anthropic
     "Anthropic.allowed_versions": "`anthropic-version` header values the proxy accepts.",
     "Anthropic.allowed_betas": "`anthropic-beta` header values the proxy accepts. Empty: none.",
@@ -238,13 +319,46 @@ D: dict[str, str] = {
     "BootstrapKey.session_defaults": (
         "Limits for sessions on this key. A request that names a session needs them."
     ),
+    "BootstrapKey.session_required": (
+        "Refuse every call on this key that does not send `X-Spendgate-Session` "
+        "(`invalid_request`), so an agent cannot leave its session limits behind. Needs "
+        "`session_defaults`. Like every key setting it applies when the key is created; use "
+        "`PATCH /admin/v1/keys/{key_id}` for existing keys (`migrate --bootstrap` warns when "
+        "an existing key differs)."
+    ),
     "SessionDefaultsSpec.budget": "Cap of one session, inside the shared budgets.",
     "SessionDefaultsSpec.max_steps": "Most requests in one session.",
     "SessionDefaultsSpec.max_seconds": "Wall-clock limit from the first call of a session.",
     "SessionDefaultsSpec.idle_seconds": (
         "A session idle this long is closed and the same id starts a fresh one."
     ),
-    "SessionDefaultsSpec.max_new_sessions_per_hour": "Bounds how fast a key can start sessions.",
+    "SessionDefaultsSpec.max_new_sessions_per_hour": (
+        "Most new sessions this key may start in an hour, idle restarts included, so minting "
+        "session ids cannot dodge the limits. `null` removes the bound."
+    ),
+    # Alerts
+    "Alerts.webhook": (
+        "Post each budget warning (`soft_threshold`, `cap_breached`, `blocked`) to one HTTPS "
+        "endpoint, signed. Used by `spendgate serve` only; library mode logs them. See "
+        "[budget warnings](operations.md#budget-warning-webhook)."
+    ),
+    "AlertWebhook.url": (
+        "Secret reference to the receiver URL (it often carries a token). `https` only, or "
+        "`http` for loopback; redirects are not followed."
+    ),
+    "AlertWebhook.signing_secret": (
+        "Secret reference to the HMAC-SHA256 key (UTF-8 text; its UTF-8 bytes are the key). Each "
+        "post carries `X-Spendgate-Signature: sha256=<hex>` over the exact body bytes."
+    ),
+    "AlertWebhook.timeout_seconds": "Longest one delivery attempt may take, end to end.",
+    "AlertWebhook.max_attempts": (
+        "Tries per warning. A network error, a timeout, a 429 or a 5xx is retried after 1, 2, "
+        "4, ... seconds (at most 30); any other answer outside 2xx is final."
+    ),
+    "AlertWebhook.queue_size": (
+        "Warnings waiting to be posted. When full, a new warning is dropped and counted in "
+        '`spendgate_alert_webhooks_total{result="dropped"}`; calls are never delayed.'
+    ),
 }
 
 # Type text for the validated aliases, recognised by their constraints.
@@ -254,6 +368,7 @@ _PATTERNS = {
     "^[a-z][a-z0-9_]*/.+$": "catalog id `provider/model`",
     "^[A-Za-z0-9][A-Za-z0-9._-]*$": "name",
     r"^\d{4}-\d{2}-\d{2}$": "date `YYYY-MM-DD`",
+    "^[a-z0-9-]+$": "region name",
 }
 
 
@@ -277,6 +392,22 @@ def _constraints(meta: list[Any]) -> tuple[str | None, str | None]:
 
 def render_type(field: FieldInfo, links: Callable[[str], str]) -> str:
     return _render(field.annotation, list(field.metadata), links)
+
+
+# AfterValidator function -> how a string it checks is described.
+_VALIDATED_STR: dict[object, str] = {
+    check_ref: "secret reference (`env:NAME` or `file:/path`)",
+    check_credential_ref: "secret reference (`env:NAME` or `file:/path`) or `adc`",
+    schema._decimal_text: "quoted decimal",
+}
+
+
+def _render_str(meta: list[Any]) -> str:
+    for m in meta:
+        if (text := _VALIDATED_STR.get(getattr(m, "func", None))) is not None:
+            return text
+    pattern, _ = _constraints(meta)
+    return pattern or "string"
 
 
 def _render(tp: Any, meta: list[Any], links: Callable[[str], str]) -> str:  # noqa: ANN401, PLR0911
@@ -307,12 +438,7 @@ def _render(tp: Any, meta: list[Any], links: Callable[[str], str]) -> str:  # no
     if tp is bool:
         return "boolean"
     if tp is str:
-        pattern, _ = _constraints(meta)
-        if any(getattr(m, "func", None) is check_ref for m in meta):
-            return "secret reference (`env:NAME` or `file:/path`)"
-        if any(getattr(m, "func", None) is schema._decimal_text for m in meta):
-            return "quoted decimal"
-        return pattern or "string"
+        return _render_str(meta)
     if tp is int:
         _, bound = _constraints(meta)
         return bound or "integer"

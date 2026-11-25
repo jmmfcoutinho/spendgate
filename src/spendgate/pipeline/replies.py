@@ -117,10 +117,16 @@ def models_reply(names: list[str], shape: Shape, request_id: str, single: bool) 
             {"type": "model", "id": n, "display_name": n, "created_at": "1970-01-01T00:00:00Z"}
             for n in names
         ]
-        anthropic: dict[str, object] = items[0] if single else {
-            "data": items, "has_more": False,
-            "first_id": names[0] if names else None, "last_id": names[-1] if names else None,
-        }  # fmt: skip
+        anthropic: dict[str, object] = (
+            items[0]
+            if single
+            else {
+                "data": items,
+                "has_more": False,
+                "first_id": names[0] if names else None,
+                "last_id": names[-1] if names else None,
+            }
+        )
         body = anthropic
     else:
         models: list[dict[str, object]] = [

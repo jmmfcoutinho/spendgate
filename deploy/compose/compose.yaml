@@ -7,8 +7,13 @@
 # Provider keys, the key pepper and the database URL are Docker secrets files: they reach only the
 # spendgate container, never an app container's environment or filesystem.
 #
-#   SQLite (default):  docker compose up -d --build
-#   Postgres:          SPENDGATE_LEDGER=postgres docker compose --profile postgres up -d --build
+# Migrating is its own step, before `up` (docs/operations.md, Upgrades and rollbacks):
+#   SQLite (default):  docker compose build && docker compose run --rm spendgate migrate
+#                      docker compose up -d
+#   Postgres:          export SPENDGATE_VARIANT=full SPENDGATE_LEDGER=postgres
+#                      docker compose --profile postgres build
+#                      docker compose --profile postgres run --rm spendgate migrate
+#                      docker compose --profile postgres up -d
 name: spendgate
 
 x-hardening: &hardening
@@ -28,6 +33,9 @@ services:
     image: spendgate:${SPENDGATE_VARIANT:-core}
     user: "10001:10001"
     mem_limit: 512m
+    # Above server.graceful_shutdown_seconds (30) plus time to settle: Docker's 10 s default would
+    # kill a drain halfway. See docs/operations.md, "Draining on restart".
+    stop_grace_period: 50s
     environment:
       SPENDGATE_CONFIG: /etc/spendgate/spendgate.yaml   # so `docker compose exec spendgate spendgate ...` finds it
     tmpfs:

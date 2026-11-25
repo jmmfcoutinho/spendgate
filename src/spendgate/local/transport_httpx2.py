@@ -4,7 +4,6 @@ Imported only by `guard().anthropic()` or by callers who build an `httpx2` clien
 a base install without the `anthropic` extra never loads it.
 """
 
-from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Literal, overload
 
@@ -14,35 +13,22 @@ import httpx2
 from spendgate.config import Settings
 from spendgate.local.bridge import (
     AsyncBridge,
+    AsyncChunks,
     SyncBridge,
+    SyncChunks,
     response_headers,
 )
-from spendgate.local.transport import make_runtime
-from spendgate.pipeline.model import ByteStream, Clock
-from spendgate.pipeline.pipeline import system_ms
+from spendgate.local.factory import make_runtime
+from spendgate.pipeline.assembly import system_ms
+from spendgate.pipeline.model import Clock
 
 
-class _SyncStream(httpx2.SyncByteStream):
-    def __init__(self, bridge: SyncBridge, chunks: ByteStream) -> None:
-        self._bridge, self._chunks = bridge, chunks
-
-    def __iter__(self) -> Iterator[bytes]:
-        return self._bridge.chunks(self._chunks)
-
-    def close(self) -> None:
-        self._bridge.close_stream(self._chunks)
+class _SyncStream(SyncChunks, httpx2.SyncByteStream):
+    pass
 
 
-class _AsyncStream(httpx2.AsyncByteStream):
-    def __init__(self, chunks: ByteStream) -> None:
-        self._chunks = chunks
-
-    async def __aiter__(self) -> AsyncIterator[bytes]:
-        async for chunk in self._chunks:
-            yield chunk
-
-    async def aclose(self) -> None:
-        await self._chunks.aclose()
+class _AsyncStream(AsyncChunks, httpx2.AsyncByteStream):
+    pass
 
 
 class LocalTransport2(httpx2.BaseTransport):
@@ -78,21 +64,33 @@ class AsyncLocalTransport2(httpx2.AsyncBaseTransport):
 
 @overload
 def transport2(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[False] = ..., cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[False] = ...,
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> LocalTransport2: ...  # fmt: skip
+) -> LocalTransport2: ...
 @overload
 def transport2(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[True], cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[True],
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> AsyncLocalTransport2: ...  # fmt: skip
+) -> AsyncLocalTransport2: ...
 def transport2(  # noqa: PLR0913 - mirrors `transport`
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = None,
-    async_: bool = False, cap: str | None = None, client: httpx.AsyncClient | None = None,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = None,
+    async_: bool = False,
+    cap: str | None = None,
+    client: httpx.AsyncClient | None = None,
     now_ms: Clock = system_ms,
-) -> LocalTransport2 | AsyncLocalTransport2:  # fmt: skip
+) -> LocalTransport2 | AsyncLocalTransport2:
     """`transport()` for `httpx2` clients; provider calls still use an `httpx.AsyncClient`."""
     runtime = make_runtime(settings_or_path, ledger_path, cap, client, now_ms)
     if async_:

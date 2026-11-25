@@ -24,7 +24,7 @@ from spendgate.ledger.admin_flow import currency_flow
 from spendgate.ledger.engine import LedgerEngine
 from spendgate.ledger.ids import new_id as default_new_id
 from spendgate.ledger.port import LedgerError, LedgerUnavailable
-from spendgate.ledger.sql import SQLITE, Flow, Row, Stmt, Tx, render
+from spendgate.ledger.sql import SQLITE, Batch, Flow, Row, Stmt, Tx, end_of, render
 
 _MODE = 0o600
 
@@ -82,39 +82,61 @@ def _statements(script: str) -> list[str]:
     return found
 
 
-def _migrate(conn: sqlite3.Connection, clock: Callable[[], int]) -> None:
-    """Apply pending migrations in one write transaction.
+_BOOKKEEPING = (
+    "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, "
+    "name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL, "
+    "compatible INTEGER NOT NULL DEFAULT 0 CHECK (compatible IN (0, 1)))"
+)
+
+
+def _applied(conn: sqlite3.Connection) -> dict[int, migrations.Applied]:
+    """The recorded migrations; none when the table does not exist yet (a new file)."""
+    found = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'"
+    ).fetchone()
+    if found is None:
+        return {}
+    return migrations.recorded(dict(r) for r in conn.execute("SELECT * FROM schema_migrations"))
+
+
+def _ensure_bookkeeping(conn: sqlite3.Connection) -> None:
+    conn.execute(_BOOKKEEPING)
+    columns = {r["name"] for r in conn.execute("PRAGMA table_info(schema_migrations)")}
+    if "compatible" not in columns:
+        conn.execute(
+            "ALTER TABLE schema_migrations ADD COLUMN compatible INTEGER NOT NULL DEFAULT 0 "
+            "CHECK (compatible IN (0, 1))"
+        )
+
+
+def _migrate(conn: sqlite3.Connection, clock: Callable[[], int], *, apply: bool) -> None:
+    """Apply pending migrations in one write transaction, or (`apply` False) only check.
 
     The applied-version check happens after `BEGIN IMMEDIATE`, so a second process opening the
     same new file waits for the first, then finds everything applied and does nothing.
     """
-    conn.execute("BEGIN IMMEDIATE")
+    conn.execute("BEGIN IMMEDIATE" if apply else "BEGIN")
     try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, "
-            "name TEXT NOT NULL, checksum TEXT NOT NULL, applied_at BIGINT NOT NULL)"
-        )
-        applied = {
-            r[0]: r[1] for r in conn.execute("SELECT version, checksum FROM schema_migrations")
-        }
+        applied = _applied(conn)
         packaged = migrations.load("sqlite")
-        if set(applied) - {m.version for m in packaged}:
-            raise LedgerUnavailable(
-                "the ledger was migrated by a newer spendgate; refusing to start"
-            )
-        for migration in packaged:
-            if migration.version in applied:
-                if applied[migration.version] != migration.checksum:
-                    raise LedgerUnavailable(
-                        f"migration {migration.version} changed after it was applied"
-                    )
-                continue
+        todo = migrations.pending_migrations(applied, packaged)
+        if not apply:
+            migrations.require_current(todo, applied)
+        else:
+            _ensure_bookkeeping(conn)
+        for migration in todo:
             for statement in _statements(migration.sql):
                 conn.execute(statement)
             conn.execute(
-                "INSERT INTO schema_migrations (version, name, checksum, applied_at) "
-                "VALUES (?, ?, ?, ?)",
-                (migration.version, migration.name, migration.checksum, clock()),
+                "INSERT INTO schema_migrations (version, name, checksum, applied_at, compatible) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    migration.version,
+                    migration.name,
+                    migration.checksum,
+                    clock(),
+                    int(migration.compatible),
+                ),
             )
         conn.execute("COMMIT")
     except BaseException:
@@ -139,9 +161,13 @@ class SqliteLedger(LedgerEngine):
         synchronous: Literal["FULL", "NORMAL", "OFF"] = "FULL",
         busy_timeout_ms: int = 30_000,
         clock: Callable[[], int] = lambda: time.time_ns() // 1_000_000,
+        migrate: bool = True,
     ) -> Self:
-        """Open (creating it 0600) and migrate. Never touches a reservation."""
+        """Open (creating it 0600) and migrate, or with `migrate` False refuse a schema that is
+        behind (`SchemaBehind`). Never touches a reservation."""
         file = Path(path)
+        if not migrate and not file.exists():  # refuse before creating an empty file
+            migrations.require_current(migrations.load("sqlite"), {})
         _prepare_file(file)
         try:
             conn = sqlite3.connect(
@@ -154,7 +180,7 @@ class SqliteLedger(LedgerEngine):
             _enable_wal(conn, busy_timeout_ms / 1000)
             conn.execute(f"PRAGMA synchronous = {synchronous}")
             conn.execute("PRAGMA foreign_keys = ON")
-            _migrate(conn, clock)
+            _migrate(conn, clock, apply=migrate)
         except (sqlite3.Error, LedgerUnavailable) as exc:
             conn.close()
             if isinstance(exc, LedgerUnavailable):
@@ -209,15 +235,21 @@ class SqliteLedger(LedgerEngine):
     def _step_through[T](self, flow: Flow[T]) -> T:
         try:
             step = next(flow)
-            while True:
+            while not (isinstance(step, Batch) and step.last):
                 step = flow.send(self._apply(step))
         except StopIteration as done:
             result: T = done.value
             return result
+        result = end_of(flow)  # as on Postgres: the last writes go out once the flow has finished
+        self._apply(step)
+        return result
 
-    def _apply(self, step: Stmt | Tx) -> list[Row]:
+    def _apply(self, step: Stmt | Batch | Tx) -> list[Row]:
         if isinstance(step, Tx):
             self._conn.execute("BEGIN IMMEDIATE" if step is Tx.BEGIN else step.value.upper())
+            return []
+        if isinstance(step, Batch):  # no round trips to save in process: one after the other
+            step.results.extend(self._apply(stmt) for stmt in step.stmts)
             return []
         cursor = self._conn.execute(render(step.sql, SQLITE), step.params)
         return [dict(row) for row in cursor.fetchall()]

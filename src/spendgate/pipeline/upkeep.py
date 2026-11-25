@@ -6,23 +6,29 @@ so the sweeper would charge calls still in flight in full and open streams would
 """
 
 import asyncio
+import contextlib
 import logging
 from collections.abc import Awaitable, Callable, Sequence
 
-from spendgate.ledger.port import LedgerPort
+from spendgate.ledger.port import MoneyLedger
 from spendgate.pipeline.closing import Closer
 from spendgate.pipeline.leases import Leases
-from spendgate.pipeline.model import Clock
+from spendgate.pipeline.model import Clock, NoopObserver, Observer, report_ledger
 
 _log = logging.getLogger("spendgate.pipeline")
 type Step = tuple[str, Callable[[], Awaitable[object]]]
 
 
 async def heartbeat(
-    interval: float, steps: Sequence[Step],
+    interval: float,
+    steps: Sequence[Step],
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-) -> None:  # fmt: skip
-    """Run `steps` in order every `interval` seconds until cancelled; one failing never stops it."""
+    on_failure: Callable[[str], None] | None = None,
+) -> None:
+    """Run `steps` in order every `interval` seconds until cancelled; one failing never stops it.
+
+    `on_failure` gets the failed step's name (a metric); if it raises, that is ignored.
+    """
     while True:
         await sleep(interval)
         for name, step in steps:
@@ -31,9 +37,9 @@ async def heartbeat(
             except asyncio.CancelledError:
                 if _stopping():
                     raise  # the loop itself was cancelled: stop
-                _failed(name, "CancelledError")  # a step's own inner await was cancelled
+                _failed(name, "CancelledError", on_failure)  # a step's own inner await
             except Exception as exc:
-                _failed(name, type(exc).__name__)
+                _failed(name, type(exc).__name__, on_failure)
 
 
 def _stopping() -> bool:
@@ -41,20 +47,31 @@ def _stopping() -> bool:
     return task is None or task.cancelling() > 0
 
 
-def _failed(step: str, reason: str) -> None:
+def _failed(step: str, reason: str, on_failure: Callable[[str], None] | None) -> None:
     """The next beat retries. Only the type is logged: messages may hold URLs or ids."""
     _log.error("heartbeat step failed step=%s reason=%s", step, reason)
+    if on_failure is not None:
+        with contextlib.suppress(Exception):
+            on_failure(step)
 
 
 class Upkeep:
     """What the heartbeat does, over the ledger, leases and closer the pipeline owns."""
 
     def __init__(  # noqa: PLR0913, PLR0917 - the pipeline's own collaborators, passed through
-        self, ledger: LedgerPort, closer: Closer, leases: Leases, owned: set[str],
-        now: Clock, instance: str, lease_ms: int,
-    ) -> None:  # fmt: skip
+        self,
+        ledger: MoneyLedger,
+        closer: Closer,
+        leases: Leases,
+        owned: set[str],
+        now: Clock,
+        instance: str,
+        lease_ms: int,
+        observer: Observer | None = None,
+    ) -> None:
         self._ledger, self._closer, self._leases, self._owned = ledger, closer, leases, owned
         self._now, self._instance, self._lease_ms = now, instance, lease_ms
+        self._observer = observer or NoopObserver()
 
     async def watch_streams(self) -> None:
         """Stop open streams a kill switch or their session's time limit now forbids (2.8)."""
@@ -81,6 +98,9 @@ class Upkeep:
         try:
             renewed = await self._ledger.renew_all(self._instance, owned, now, self._lease_ms)
         except Exception:  # nobody knows the leases are alive: streams stop, the next beat retries
+            report_ledger(self._observer, "renew", now, self._now(), ok=False)
             self._leases.failed(watched)
             return
+        if owned:  # an empty renewal never reaches the ledger: no latency to report
+            report_ledger(self._observer, "renew", now, self._now(), ok=True)
         self._leases.renewed(now, watched, frozenset(renewed))

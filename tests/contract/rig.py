@@ -22,6 +22,7 @@ from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.core.policy import KeyPolicy
 from spendgate.core.sessions import SessionDefaults
+from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.port import (
     AttemptRecord,
     BudgetTotals,
@@ -29,7 +30,6 @@ from spendgate.ledger.port import (
     Held,
     HoldMeta,
     HoldRequest,
-    LedgerPort,
     Refused,
     ScopeRow,
     Settlement,
@@ -57,7 +57,7 @@ def open_ledger(
     *,
     new_id: Callable[[], str] | None = None,
     synchronous: str = "FULL",
-) -> LedgerPort:
+) -> AdminLedger:
     """Open an adapter on `location` (sqlite: a file path; postgres: a DSN naming its schema)."""
     kwargs: dict[str, Any] = {"currency": CURRENCY}
     if new_id is not None:
@@ -70,7 +70,7 @@ def open_ledger(
     raise NotImplementedError(f"no contract-test hook for the {kind!r} adapter yet")
 
 
-def close_ledger(ledger: LedgerPort) -> None:
+def close_ledger(ledger: AdminLedger) -> None:
     if isinstance(ledger, PostgresLedger):
         if ledger.loop is not None and not ledger.loop.is_closed():
             ledger.loop.run_until_complete(ledger.aclose())  # the pool is bound to that loop

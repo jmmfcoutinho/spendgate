@@ -9,6 +9,7 @@ import pytest
 import yaml
 
 from spendgate.config import ConfigError, Secret, check_config, load
+from spendgate.config.schema import SessionDefaultsSpec
 from spendgate.config.yamlio import StrictLoader
 
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
@@ -56,6 +57,8 @@ def test_examples_load_and_check(tmp_path: Path) -> None:
     assert sqlite.routes["claude-haiku"].deployments[0].credential == Secret("file-secret")
     assert sqlite.heartbeat_ms == 20_000 and sqlite.lease_ms == 60_000
     assert sqlite.config.bootstrap.budgets[0].cap.nano == 200 * 10**9
+    agent = next(k for k in sqlite.config.bootstrap.keys if k.name == "agent-key")
+    assert agent.session_required and agent.limits.concurrency  # the agent example is bounded
     postgres = load(example(tmp_path, "config.postgres.yaml"), env=ENV)
     assert postgres.ledger_dsn is not None and postgres.routes["gpt-6-luna"].deployments[1].region
     assert postgres.routes["gpt-6-luna"].deployments[0].model == "alpha-prod"
@@ -88,6 +91,48 @@ def test_defaults_come_from_the_docs(tmp_path: Path) -> None:
     assert c.anthropic.allowed_betas == []
     assert s.health.cooldown_ms == 5_000
     assert s.fail_open_summary() == ["fail_open: no opt-outs enabled"]
+
+
+def test_concurrency_has_a_finite_default_and_null_is_the_explicit_opt_out(
+    tmp_path: Path,
+) -> None:
+    assert load(write(tmp_path), env=ENV).config.defaults.limits.concurrency == 16
+    rpm_only = load(write(tmp_path, BASE + "defaults: {limits: {rpm: 5}}\n"), env=ENV)
+    assert rpm_only.config.defaults.limits.concurrency == 16  # setting one limit keeps the rest
+    opted_out = BASE + "defaults: {limits: {concurrency: null}}\n"
+    assert load(write(tmp_path, opted_out), env=ENV).config.defaults.limits.concurrency is None
+
+
+AGENT_KEY = "bootstrap:\n  scopes: ['org:a']\n  keys: [{name: k, scope: 'org:a', %s}]\n"
+
+
+def test_m11_session_defaults_bound_new_sessions_per_hour_unless_null(tmp_path: Path) -> None:
+    def sessions_of(fields: str) -> SessionDefaultsSpec:
+        key = load(write(tmp_path, BASE + AGENT_KEY % fields), env=ENV).config.bootstrap.keys[0]
+        assert key.session_defaults is not None and key.session_required is False
+        return key.session_defaults
+
+    assert sessions_of("session_defaults: {max_steps: 5}").max_new_sessions_per_hour == 60
+    unbounded = sessions_of("session_defaults: {max_new_sessions_per_hour: null}")
+    assert unbounded.max_new_sessions_per_hour is None
+
+
+def test_session_required_needs_session_defaults(tmp_path: Path) -> None:
+    assert "session_required needs session_defaults" in failure(
+        write(tmp_path, BASE + AGENT_KEY % "session_required: true")
+    )
+    fields = "session_required: true, session_defaults: {max_steps: 5}"
+    key = load(write(tmp_path, BASE + AGENT_KEY % fields), env=ENV).config.bootstrap.keys[0]
+    assert key.session_required is True
+
+
+def test_tracing_is_off_by_default_and_its_keys_are_checked(tmp_path: Path) -> None:
+    otel = load(write(tmp_path), env=ENV).config.observability.otel
+    assert (otel.enabled, otel.service_name) == (False, "spendgate")
+    on = BASE + "observability: {otel: {enabled: true, service_name: gw-eu}}\n"
+    assert load(write(tmp_path, on), env=ENV).config.observability.otel.service_name == "gw-eu"
+    typo = BASE + "observability: {otel: {enabled: true, endpoint: http://x}}\n"
+    assert "observability.otel.endpoint" in failure(write(tmp_path, typo))
 
 
 def test_fail_open_opt_out_is_listed(tmp_path: Path) -> None:
@@ -212,11 +257,47 @@ def test_heartbeat_must_be_shorter_than_lease(tmp_path: Path) -> None:
     assert "heartbeat_seconds must be shorter" in failure(write(tmp_path, text))
 
 
+SQLITE_BACKEND = "backend: {kind: sqlite, path: ./l.db}"
+POSTGRES_BACKEND = 'backend: {kind: postgres, dsn: "env:SPENDGATE_DATABASE_URL"}'
+
+
+@pytest.mark.parametrize(
+    ("ledger", "migrates"),
+    [
+        (SQLITE_BACKEND, True),  # one file on one host: nothing older can run on it
+        (POSTGRES_BACKEND, False),  # shared: migrating is the operator's step (ADR-0018)
+        ("auto_migrate: false, " + SQLITE_BACKEND, False),
+        ("auto_migrate: true, " + POSTGRES_BACKEND, True),
+    ],
+)
+def test_auto_migrate_defaults_by_backend_and_an_explicit_value_wins(
+    tmp_path: Path, ledger: str, migrates: bool
+) -> None:
+    text = BASE.replace(SQLITE_BACKEND, ledger)
+    assert load(write(tmp_path, text), env=ENV).config.ledger.migrates_on_start is migrates
+
+
 def test_plain_http_only_for_loopback(tmp_path: Path) -> None:
     bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", "http://api.openai.com/v1"))
     assert "models.m.deployments.0.base_url" in failure(bad)
     ok = write(tmp_path, BASE.replace("https://api.openai.com/v1", "http://127.0.0.1:9000/v1"))
     assert load(ok, env=ENV).routes["m"].deployments[0].base_url == "http://127.0.0.1:9000/v1"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://x.test?x=@127.0.0.1/v1",
+        "http://x.test#@localhost/v1",
+        "http://local\thost/v1",
+        "http://x.test\r\n@localhost/v1",
+    ],
+)
+def test_plain_http_is_judged_by_the_host_the_client_parses(tmp_path: Path, url: str) -> None:
+    # Written as YAML escapes inside the double-quoted scalar, so the loader sees the raw bytes.
+    escaped = url.encode("unicode_escape").decode()
+    bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", escaped))
+    assert "models.m.deployments.0.base_url: must be an https:// URL" in failure(bad)
 
 
 def test_missing_credential_for_api_key_auth(tmp_path: Path) -> None:
@@ -275,3 +356,74 @@ def test_strict_loader_accepts_anchors_and_merge_keys() -> None:
 def test_catalog_override_invalid_refuses_start(tmp_path: Path) -> None:
     (tmp_path / "o.yaml").write_text("catalog_version: 1\nmodels: [{id: nope}]\n", encoding="utf-8")
     assert "catalog" in failure(write(tmp_path, BASE + "catalog: {paths: [o.yaml]}\n"))
+
+
+HOOK_ENV = ENV | {
+    "HOOK_URL": "https://hooks.example.test/budget?token=fake-hook-token",
+    "HOOK_SECRET": "fake-signing-secret",  # pragma: allowlist secret
+}
+HOOK = (
+    'alerts: {webhook: {url: "env:HOOK_URL", '
+    'signing_secret: "env:HOOK_SECRET"}}\n'  # pragma: allowlist secret
+)
+
+
+def test_no_alert_webhook_by_default(tmp_path: Path) -> None:
+    assert load(write(tmp_path), env=ENV).alert_webhook is None
+
+
+def test_the_alert_webhook_resolves_its_url_and_secret_as_secrets(tmp_path: Path) -> None:
+    hook = load(write(tmp_path, BASE + HOOK), env=HOOK_ENV).alert_webhook
+    assert hook is not None
+    assert hook.url.reveal() == HOOK_ENV["HOOK_URL"]
+    assert hook.signing_secret.reveal() == "fake-signing-secret"  # pragma: allowlist secret
+    assert (hook.timeout_seconds, hook.max_attempts, hook.queue_size) == (5, 5, 1000)
+    assert "fake-hook-token" not in repr(hook) and "fake-signing-secret" not in repr(hook)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://hooks.example.test/budget?token=fake-hook-token",
+        "ftp://x.test/a",
+        "https://",
+        # An `@` after `?` or `#` is not userinfo: the host is x.test, not the loopback name.
+        "http://x.test?x=@127.0.0.1/hook",
+        "http://x.test#@localhost/",
+        "http://local\thost/hook",  # a tab or a newline is refused, not stripped
+        "http://x.test\r\n@localhost/hook",
+    ],
+)
+def test_the_alert_webhook_url_must_be_https_and_is_never_echoed(tmp_path: Path, url: str) -> None:
+    message = failure(write(tmp_path, BASE + HOOK), HOOK_ENV | {"HOOK_URL": url})
+    assert "alerts.webhook.url: must be an https:// URL" in message
+    assert "fake-hook-token" not in message and "x.test" not in message
+
+
+def test_the_alert_webhook_may_use_plain_http_to_localhost(tmp_path: Path) -> None:
+    env = HOOK_ENV | {"HOOK_URL": "http://127.0.0.1:9000/hook"}
+    hook = load(write(tmp_path, BASE + HOOK), env=env).alert_webhook
+    assert hook is not None and hook.url.reveal() == "http://127.0.0.1:9000/hook"
+
+
+def test_the_alert_webhook_needs_references_not_values(tmp_path: Path) -> None:
+    pasted = HOOK.replace('"env:HOOK_SECRET"', '"pasted-signing-value"')
+    message = failure(write(tmp_path, BASE + pasted), HOOK_ENV)
+    assert "alerts.webhook.signing_secret" in message and "pasted-signing-value" not in message
+    unset = failure(write(tmp_path, BASE + HOOK), ENV)
+    assert "alerts.webhook.url: environment variable HOOK_URL is not set" in unset
+    assert "alerts.webhook.signing_secret: environment variable HOOK_SECRET" in unset
+
+
+def test_the_alert_webhook_signing_secret_must_be_utf8_text(tmp_path: Path) -> None:
+    # An undecodable environment byte, as Python escapes it.
+    env = HOOK_ENV | {"HOOK_SECRET": "fake\udcff"}  # pragma: allowlist secret
+    message = failure(write(tmp_path, BASE + HOOK), env)
+    assert "alerts.webhook.signing_secret: must be UTF-8 text" in message
+    assert "fake" not in message
+
+
+@pytest.mark.parametrize("knob", ["max_attempts: 0", "max_attempts: 11", "queue_size: 0"])
+def test_alert_webhook_bounds(tmp_path: Path, knob: str) -> None:
+    text = BASE + HOOK.replace("signing_secret:", f"{knob}, signing_secret:")
+    assert f"alerts.webhook.{knob.partition(':')[0]}" in failure(write(tmp_path, text), HOOK_ENV)

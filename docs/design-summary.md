@@ -13,8 +13,8 @@
    - bad key
 
    Price data cannot switch this off. Any opt-out lives in `spendgate.yaml` under `fail_open:` and is logged at start.
-3. **Agent sessions are bounded.** A call that sends `X-Spendgate-Session` gets that session's budget, step limit, time limit and idle expiry, taken from the key's defaults. A runaway loop gets `session_limit_reached`. A call without the header has no session limits; the key's parent budgets are the backstop.
-4. **Provider throttling handled.** A provider 429 cools that deployment down (honouring `Retry-After`). The guard then tries the next deployment of the same model within the same reservation. Failover happens only when the provider did not process the attempt, so it is free and never double-charged. If none is left, it returns `upstream_throttled`, never `budget_exhausted`.
+3. **Agent sessions are bounded.** A call that sends `X-Spendgate-Session` gets that session's budget, step limit, time limit and idle expiry, taken from the key's defaults. A runaway loop gets `session_limit_reached`. A call without the header has no session limits (the key's parent budgets are the backstop) unless the key sets `session_required`, which refuses it; `max_new_sessions_per_hour` (60 by default) bounds how fast ids can be minted.
+4. **Provider throttling handled.** A provider 429 cools that deployment down: for `Retry-After` when given, else for a short random 250 to 500 ms ([ADR-0021](adr/0021-short-throttle-cooldown.md)). The guard then tries the next deployment of the same model within the same reservation, and a call that finds every deployment cooling waits up to 1 s for one to come back. Failover happens only when the provider did not process the attempt, so it is free and never double-charged. If none is left, it returns `upstream_throttled`, never `budget_exhausted`.
 5. **Traceable.** Every call records key, scopes, session, user, tags, model, deployment, tokens, price row, catalog checksum, cost, FX and latency. `spendgate usage --by service,model --since 7d` answers who spent what.
 6. **Unbypassable when deployed with the perimeter.** In Docker Compose, apps sit on an internal network and only the guard has provider keys and internet access. Automated tests prove it.
 
@@ -25,7 +25,7 @@
 - **Providers:** one small adapter per provider (OpenAI, Azure OpenAI, Anthropic, Bedrock, Google, Azure Speech, ElevenLabs).
 - **Ledger:** SQLite for one host, Postgres for shared use, behind one contract tested identically on both.
 - **Prices are data:** `catalog/prices.yaml`, with a JSON Schema. A new model is a data edit.
-- **Small and auditable** (checked in CI): modules ≤ 400 lines and functions ≤ 50 (the total-size limit was dropped by [ADR-0007](adr/0007-drop-the-total-size-limit.md)), ≤ 6 base dependencies, no ORM, no Redis, no telemetry, and a one-page `how-money-is-protected.md` naming the files and tests behind each guarantee.
+- **Small and auditable** (hard limits checked in CI): modules ≤ 400 formatted lines and functions ≤ 50, with `# fmt: skip` on tables only (the total-size limit was dropped by [ADR-0007](adr/0007-drop-the-total-size-limit.md)), ≤ 6 base dependencies, no ORM, no Redis, no telemetry, and a one-page `how-money-is-protected.md` naming the files and tests behind each guarantee.
 
 ## Design documents
 

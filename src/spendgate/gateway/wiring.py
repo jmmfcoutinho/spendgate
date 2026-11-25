@@ -5,31 +5,40 @@
 """
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Collection, Mapping
 from datetime import UTC, date, datetime
+from typing import Protocol, Unpack, runtime_checkable
 
 from spendgate.config import Settings
+from spendgate.core.errors import ErrorCode
 from spendgate.core.outcomes import Outcome
 from spendgate.gateway.logs import log_call, log_event, log_internal
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.observability import ReadinessChecks
 from spendgate.ledger.admin_port import AdminLedger
-from spendgate.ledger.port import LedgerPort
+from spendgate.ledger.port import MoneyLedger, PoolStats
 from spendgate.pipeline.adapters import build_providers
+from spendgate.pipeline.assembly import Knobs
 from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import (
     AttemptEvent,
     Clock,
     HeldEvent,
     KeyVerifier,
+    LedgerEvent,
     RefusedEvent,
     Sender,
     SettledEvent,
 )
-from spendgate.pipeline.pipeline import Pipeline, system_ms
+from spendgate.pipeline.pipeline import Pipeline
 from spendgate.providers.port import Provider
 
 _UNKNOWN = "unknown"
+_OTHER = "other"
+# Label values the pipeline sends; anything else is folded into "other" so a new caller can never
+# mint unbounded series.
+LEDGER_OPS = frozenset({"hold", "settle", "release", "renew"})
+HEARTBEAT_STEPS = frozenset({"renew_leases", "watch_streams", "sweep"})
 
 
 class GatewayObserver:
@@ -42,6 +51,8 @@ class GatewayObserver:
     def on_refused(self, event: RefusedEvent) -> None:
         model = event.model or _UNKNOWN
         self._metrics.requests.inc(outcome=event.code.value, model=model)
+        if event.code is ErrorCode.LEDGER_UNAVAILABLE:
+            self._metrics.ledger_unavailable.inc()
 
     def on_held(self, event: HeldEvent) -> None:
         self._metrics.hold_opened()
@@ -73,22 +84,72 @@ class GatewayObserver:
             m.set_remaining(scope=scope, nano=event.remaining.nano)
         if event.ttft_ms is not None:  # streams only
             m.ttft.observe(event.ttft_ms, model=event.model, deployment=event.deployment)
+        m.overhead.observe(max(event.latency_ms - event.upstream_ms, 0))
         if event.review_required:
             m.review_required.inc(model=event.model)
             log_event(
-                self._logger, "usage_review_required", logging.WARNING,
-                request_id=event.request_id, model=event.model, scope_path=scope,
-            )  # fmt: skip
+                self._logger,
+                "usage_review_required",
+                logging.WARNING,
+                request_id=event.request_id,
+                model=event.model,
+                scope_path=scope,
+            )
         log_call(
-            self._logger, request_id=event.request_id, key_prefix_=event.key_id[:8],
-            scope_path=scope, model=event.model, deployment=event.deployment,
-            outcome=event.outcome, input_tokens=usage.input_tokens if usage else 0,
-            output_tokens=usage.output_tokens if usage else 0, cost=event.charged,
-            latency_ms=event.latency_ms, http_status=event.http_status,
-        )  # fmt: skip
+            self._logger,
+            request_id=event.request_id,
+            key_prefix_=event.key_id[:8],
+            scope_path=scope,
+            model=event.model,
+            deployment=event.deployment,
+            outcome=event.outcome,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            cost=event.charged,
+            latency_ms=event.latency_ms,
+            http_status=event.http_status,
+        )
 
     def on_internal(self, event: InternalEvent) -> None:
         log_internal(self._logger, event)
+
+    def on_ledger(self, event: LedgerEvent) -> None:
+        op = event.op if event.op in LEDGER_OPS else _OTHER
+        self._metrics.ledger_latency.observe(event.ms, op=op)
+        if not event.ok:
+            self._metrics.ledger_errors.inc(op=op)
+
+    def on_heartbeat_failed(self, step: str) -> None:
+        self._metrics.heartbeat_failures.inc(step=step if step in HEARTBEAT_STEPS else _OTHER)
+
+
+@runtime_checkable
+class PooledLedger(Protocol):
+    """A ledger with a connection pool to report (Postgres); SQLite has none."""
+
+    pool_wait: Callable[[float], None] | None
+
+    def pool_stats(self) -> PoolStats | None: ...
+
+
+def bind_runtime_metrics(
+    metrics: Metrics, unsettled: Callable[[], Collection[str]], ledger: object
+) -> None:
+    """Sample the closer's unsettled closes (`Pipeline.unsettled`) and the ledger pool at each
+    scrape, and time the pool's connection waits."""
+    metrics.on_render(lambda: metrics.unsettled_closes.set(len(unsettled())))
+    if not isinstance(ledger, PooledLedger):
+        return
+    ledger.pool_wait = metrics.pool_wait.observe
+
+    def pool() -> None:
+        stats = ledger.pool_stats()
+        if stats is not None:  # the pool opens with the first transaction
+            metrics.pool_size.set(stats.size)
+            metrics.pool_in_use.set(stats.in_use)
+            metrics.pool_max.set(stats.max_size)
+
+    metrics.on_render(pool)
 
 
 def catalog_age_seconds(settings: Settings, now_ms: int) -> float | None:
@@ -126,18 +187,21 @@ def bind_catalog_metrics(metrics: Metrics, settings: Settings, now: Clock) -> No
 
 
 def default_readiness(ledger: AdminLedger, settings: Settings, now: Clock) -> ReadinessChecks:
-    """Probes over the ledger: reachable, no global kill switch, database clock for skew.
+    """Probes over the ledger: reachable, database clock for skew, a global kill switch.
 
-    `ReadinessChecks.kill_switch_engaged` is synchronous but the ledger read is not, so the
-    reachability probe (which `/readyz` always awaits first) also refreshes the flag the sync
-    probe reports. A probe that fails leaves the flag as it was; `/readyz` is already 503 then.
+    The kill switch is only a warning on the admin detail (ADR-0015). `kill_switch_engaged` is
+    synchronous but the ledger read is not, so the reachability probe (which `/readyz` always
+    awaits first) also refreshes the flag the sync probe reports: None when that read failed.
     """
-    engaged = False
+    engaged: bool | None = False
 
     async def ledger_ok() -> bool:
         nonlocal engaged
         await ledger.get_scope("readyz-probe")  # a cheap read; raises when the store is down
-        engaged = await ledger.global_kill_engaged()
+        try:
+            engaged = await ledger.global_kill_engaged()
+        except Exception:
+            engaged = None  # a warning only: the kill switch never decides readiness
         return True
 
     def catalog_days() -> float | None:
@@ -154,14 +218,30 @@ def default_readiness(ledger: AdminLedger, settings: Settings, now: Clock) -> Re
     )
 
 
-def build_pipeline(  # noqa: PLR0913 - the gateway's composition root
-    settings: Settings, ledger: LedgerPort, keys: KeyVerifier, sender: Sender, *,
-    metrics: Metrics | None = None, logger: logging.Logger | None = None,
-    providers: Mapping[str, Provider] | None = None, now_ms: Clock = system_ms,
-) -> Pipeline:  # fmt: skip
+class PipelineKnobs(Knobs, total=False):
+    """The optional `Pipeline` arguments `build_pipeline` passes through unchanged.
+
+    `serve` sets `tracer`; tests tune the rest. Left out, each takes the `Pipeline` default, except
+    `providers` (built from the settings) and `observer` (metrics and logs, when both are given).
+    The knobs themselves are `pipeline.assembly.Knobs`, so the two lists cannot drift apart.
+    """
+
+    providers: Mapping[str, Provider]
+
+
+def build_pipeline(  # noqa: PLR0913 - the ports plus metrics and logs
+    settings: Settings,
+    ledger: MoneyLedger,
+    keys: KeyVerifier,
+    sender: Sender,
+    *,
+    metrics: Metrics | None = None,
+    logger: logging.Logger | None = None,
+    **knobs: Unpack[PipelineKnobs],
+) -> Pipeline:
     """A `Pipeline` with the default adapters, and metrics and logs when both are given."""
-    observer = GatewayObserver(metrics, logger) if metrics and logger else None
-    return Pipeline(
-        settings=settings, ledger=ledger, keys=keys, sender=sender, now_ms=now_ms,
-        providers=providers or build_providers(settings), observer=observer,
-    )  # fmt: skip
+    if not knobs.get("providers"):
+        knobs["providers"] = build_providers(settings)
+    if "observer" not in knobs:
+        knobs["observer"] = GatewayObserver(metrics, logger) if metrics and logger else None
+    return Pipeline(settings=settings, ledger=ledger, keys=keys, sender=sender, **knobs)

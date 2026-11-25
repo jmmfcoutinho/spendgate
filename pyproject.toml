@@ -31,6 +31,8 @@ dependencies = [
 [project.optional-dependencies]
 postgres = [
     "psycopg[binary,pool]>=3.3.8",
+    # 3.3 reads the DSN and connection options per connection (rotated passwords, IAM tokens).
+    "psycopg-pool>=3.3.0",
 ]
 tokenizer = [
     "tiktoken>=0.14.0",
@@ -50,6 +52,11 @@ openai = [
 ]
 anthropic = [
     "anthropic>=2.6.0",
+]
+otel = [
+    "opentelemetry-api>=1.45.2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45.2",
+    "opentelemetry-sdk>=1.45.2",
 ]
 
 [project.urls]
@@ -191,12 +198,30 @@ forbidden_modules = ["starlette"]
 ignore_imports = ["spendgate.gateway.** -> starlette"]
 allow_indirect_imports = true
 
+# `spendgate catalog import` downloads by operator action; nothing that serves calls may reach it.
+[[tool.importlinter.contracts]]
+name = "only the catalog command uses the LiteLLM mapper"
+type = "forbidden"
+source_modules = [
+  "spendgate.gateway", "spendgate.local", "spendgate.pipeline", "spendgate.ledger",
+  "spendgate.providers", "spendgate.config", "spendgate.client", "spendgate.cli.serve",
+]
+forbidden_modules = ["spendgate.core.litellm", "spendgate.cli.catalog"]
+
 [[tool.importlinter.contracts]]
 name = "only cli.serve imports uvicorn"
 type = "forbidden"
 source_modules = ["spendgate"]
 forbidden_modules = ["uvicorn"]
 ignore_imports = ["spendgate.cli.serve -> uvicorn"]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "only gateway.otel imports OpenTelemetry"
+type = "forbidden"
+source_modules = ["spendgate"]
+forbidden_modules = ["opentelemetry"]
+ignore_imports = ["spendgate.gateway.otel -> opentelemetry"]
 allow_indirect_imports = true
 
 [tool.uv]

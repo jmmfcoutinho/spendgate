@@ -41,6 +41,9 @@ ledger:
 providers:
   openai: {{base_url: "http://127.0.0.1:{fake_port}", credential: "env:OPENAI_KEY"}}
 routing: {{max_attempts: 3, cooldown_seconds: 1}}
+# The overshoot scenarios need every caller in flight at once against the shared caps, so the rig
+# removes the default per-key concurrency limit (16) on purpose instead of letting it refuse them.
+defaults: {{limits: {{concurrency: null}}}}
 models:
   {model}:
     catalog_id: openai/gpt-6-luna
@@ -227,4 +230,5 @@ async def build_world(  # noqa: PLR0913
 
 
 def open_runtime_for(rig: Rig) -> AbstractAsyncContextManager[Runtime]:
-    return open_runtime(rig.settings())
+    """Migrates, as `spendgate migrate` would, so the gateways start on a current schema."""
+    return open_runtime(rig.settings(), migrate=True)

@@ -41,7 +41,7 @@ say "documented").
 | End-user (customer) budgets | Documented: a budget keyed on the request's `user` field, without a key per customer, shared across keys and teams ([users](https://docs.litellm.ai/docs/proxy/users)) | A `user:` scope with its own budget, reached through a key on that scope. The `X-Spendgate-User` header and the body's `user` field are labels for reports only and never choose a budget |
 | Team budgets | Documented: team budgets, with per-member limits inside a team ([users](https://docs.litellm.ai/docs/proxy/users)) | No team object: a budget on any scope of the chain (organisation, project, service, user, session), and every budget on the chain is held at once |
 | Budget windows | Documented: `budget_duration` resets a budget after a duration such as `30d`; resets are checked periodically ([users](https://docs.litellm.ai/docs/proxy/users)) | `period: none` (lifetime), `day` or `month`, reset at UTC calendar boundaries; no custom durations |
-| Soft-budget alerts | Documented: a `soft_budget` alerts before the hard limit, sent to Slack and other webhooks ([alerting](https://docs.litellm.ai/docs/proxy/alerting)); soft-budget email alerts are listed as an enterprise feature ([enterprise](https://docs.litellm.ai/docs/enterprise)) | `soft_pct` (default 80) marks a budget past its threshold in `spendgate status` and the admin API; nothing is sent. Alert from the Prometheus metrics |
+| Soft-budget alerts | Documented: a `soft_budget` alerts before the hard limit, sent to Slack and other webhooks ([alerting](https://docs.litellm.ai/docs/proxy/alerting)); soft-budget email alerts are listed as an enterprise feature ([enterprise](https://docs.litellm.ai/docs/enterprise)) | `soft_pct` (default 80) marks a budget past its threshold in `spendgate status` and the admin API and writes a `spendgate.budget` warning; with `alerts.webhook` the warning is also posted, signed, to one HTTPS endpoint ([operations](operations.md#budget-warning-webhook)). No Slack or email integration |
 | Admin UI and SSO | Documented: an admin UI; SSO for it is free up to 5 users, then needs an enterprise licence ([enterprise](https://docs.litellm.ai/docs/enterprise)) | No UI and no SSO: a CLI and an [admin API](admin-openapi.yaml) on its own listener, with scoped admin keys |
 | Guardrails and caching | Documented: guardrails (some open source, some enterprise; [enterprise](https://docs.litellm.ai/docs/enterprise)) and response caching ([caching](https://docs.litellm.ai/docs/proxy/caching)) | Out of scope. Nothing is cached and content is not inspected: every allowed request is forwarded, priced and charged |
 | Budgets without a database server | Documented: budgets require a database, and the setup lists Postgres; without one, the global budget does not block ([users](https://docs.litellm.ai/docs/proxy/users)) | Budgets always live in a ledger, but for one host that is a SQLite file, and library mode needs no server at all. Postgres only to share a ledger |
@@ -60,7 +60,8 @@ other jobs.
 - Cover providers beyond its seven, or Realtime and hosted tools.
 - Route across different models, or balance load by latency.
 - Offer a web UI or SSO; administration is a CLI and an [admin API](admin-openapi.yaml).
-- Send alerts itself (Slack, email, webhooks); it exposes metrics and status to alert from.
+- Send alerts through Slack or email; budget warnings go to the log and, optionally, one signed
+  webhook, and metrics and status are there to alert from.
 - Cache responses, or inspect content (guardrails, PII masking, moderation).
 - Share rate limits (requests, tokens, concurrency) between instances; budgets are exact in the
   ledger, but those limits are per process in v0.1.

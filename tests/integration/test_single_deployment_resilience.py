@@ -44,7 +44,7 @@ async def test_a_provider_429_still_cools_a_single_deployment(tmp_path: Path) ->
         s.fake.enqueue(Script(status=429, retry_after="2"))
         first = await s.chat("alpha-one")
         assert first.status_code == 429
-        assert [a.cooldown_ms for a in s.observer.attempts] == [5000]
+        assert [a.cooldown_ms for a in s.observer.attempts] == [2000]  # Retry-After, as given
         calls = s.fake.calls
         second = await s.chat("alpha-one")  # cooling: refused without contacting the provider
         assert second.status_code == 429 and s.fake.calls == calls

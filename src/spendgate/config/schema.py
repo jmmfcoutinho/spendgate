@@ -10,13 +10,15 @@ from typing import Annotated, Literal, Self
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
-from spendgate.config.secrets import check_ref
+from spendgate.config.secrets import check_credential_ref, check_ref
 from spendgate.core.money import Money, MoneyError, parse_amount
 
 # Must match providers.anthropic: older SDKs send 2023-06-01; 2026-10-21 is the current version.
 ANTHROPIC_VERSIONS = ("2023-06-01", "2026-10-21")
 DEFAULT_MAX_BODY_BYTES = 26_214_400  # 25 MiB: protocol.md "25 MB" body and 25 MB transcription file
 DEFAULT_MAX_JSON_BODY_BYTES = 4_194_304  # 4 MiB: JSON parses into ~25x its size (SR-01)
+# Azure Database for PostgreSQL: the token audience Microsoft documents for Entra sign-in.
+ENTRA_DB_SCOPE = "https://ossrdbms-aad.database.windows.net/.default"
 _SCOPE = r"(org|project|service|user):[A-Za-z0-9._-]+"
 _SCOPE_PATH = rf"^{_SCOPE}(/{_SCOPE})*$"
 
@@ -39,6 +41,7 @@ def _decimal_text(value: object) -> str:
 
 Amount = Annotated[Money, BeforeValidator(_money)]
 SecretRef = Annotated[str, AfterValidator(check_ref)]
+CredentialRef = Annotated[str, AfterValidator(check_credential_ref)]  # a SecretRef or `adc`
 PosInt = Annotated[int, Field(strict=True, gt=0)]
 Currency = Annotated[str, Field(strict=True, pattern=r"^[A-Z]{3}$")]  # ISO 4217 code
 ScopePath = Annotated[str, Field(strict=True, pattern=_SCOPE_PATH)]
@@ -63,6 +66,11 @@ class Server(_Strict):
     body_read_timeout_seconds: PosInt = 30  # whole-body deadline: a stalled upload frees its slot
     max_request_seconds: PosInt = 900  # one call or stream, end to end (SR-13)
     max_concurrent_requests: PosInt = 128  # not in the docs; the pipeline needs a bound (5.1)
+    # Above common load balancer idle timeouts (60 s), so the balancer closes an idle connection
+    # first and never reuses one this side already dropped (ADR-0015).
+    keep_alive_seconds: PosInt = 75
+    # Drain deadline on SIGTERM; must end before the orchestrator's kill (ADR-0015).
+    graceful_shutdown_seconds: PosInt = 30
     key_pepper: SecretRef  # HMAC key for stored key secrets (threat model C-01)
 
 
@@ -71,9 +79,27 @@ class SqliteLedger(_Strict):
     path: Annotated[str, Field(strict=True, min_length=1)]
 
 
+class RdsIamAuth(_Strict):
+    kind: Literal["rds_iam"]
+    region: Annotated[str, Field(strict=True, pattern=r"^[a-z0-9-]+$")] | None = None
+
+
+class EntraAuth(_Strict):
+    kind: Literal["entra"]
+    scope: Annotated[str, Field(strict=True, min_length=1)] = ENTRA_DB_SCOPE
+
+
+class CloudSqlIamAuth(_Strict):
+    kind: Literal["cloudsql_iam"]
+
+
+DbAuth = Annotated[RdsIamAuth | EntraAuth | CloudSqlIamAuth, Field(discriminator="kind")]
+
+
 class PostgresLedger(_Strict):
     kind: Literal["postgres"]
     dsn: SecretRef  # a DSN carries the password, so it is referenced like a secret
+    auth: DbAuth | None = None  # a short-lived token as the password of every new connection
 
 
 class Ledger(_Strict):
@@ -83,11 +109,32 @@ class Ledger(_Strict):
     heartbeat_seconds: PosInt | None = None  # default lease/3 (ledger-state-machine.md)
     sweep_seconds: PosInt = 30  # how often the server charges and releases expired holds
     retention_days: PosInt = 90
+    auto_migrate: bool | None = None  # None: SQLite yes, Postgres no (ADR-0018)
+    pool_min: Annotated[int, Field(strict=True, ge=0)] = 1  # Postgres only
+    pool_max: PosInt = 10
+    pool_timeout_seconds: PosInt = 10  # longest wait for a pooled connection
+
+    @property
+    def migrates_on_start(self) -> bool:
+        """Whether `serve` (and `--local`) may apply pending migrations without `--migrate`.
+
+        SQLite is one file on one host, so nothing older can be running on it while this
+        process starts. Postgres is shared: a schema change there is an operator's step.
+        """
+        if self.auto_migrate is not None:
+            return self.auto_migrate
+        return self.backend.kind == "sqlite"
 
     @model_validator(mode="after")
     def _heartbeat_inside_lease(self) -> Self:
         if self.heartbeat_seconds is not None and self.heartbeat_seconds >= self.lease_seconds:
             raise ValueError("heartbeat_seconds must be shorter than lease_seconds")
+        return self
+
+    @model_validator(mode="after")
+    def _pool_order(self) -> Self:
+        if self.pool_min > self.pool_max:
+            raise ValueError("pool_min must not exceed pool_max")
         return self
 
 
@@ -114,7 +161,7 @@ class Provider(_Strict):
 
     base_url: Annotated[str, Field(strict=True, min_length=1)] | None = None
     auth: AuthName = "api_key"
-    credential: SecretRef | None = None  # none for sigv4 (the standard AWS chain)
+    credential: CredentialRef | None = None  # none for sigv4 (the standard AWS chain)
     region: str | None = None
     api_version: str | None = None
 
@@ -124,7 +171,7 @@ class DeploymentSpec(_Strict):
     model: Annotated[str, Field(strict=True, min_length=1)] | None = None  # default: catalog model
     base_url: Annotated[str, Field(strict=True, min_length=1)] | None = None
     auth: AuthName | None = None
-    credential: SecretRef | None = None
+    credential: CredentialRef | None = None
     region: str | None = None
     api_version: str | None = None
 
@@ -136,14 +183,28 @@ class ModelRoute(_Strict):
     deployments: Annotated[list[DeploymentSpec], Field(min_length=1)]
 
 
+# Calls in flight per key when neither the key nor `defaults.limits` says otherwise: it bounds
+# the overrun at a cap crossing (how-money-is-protected.md) and matches the Compose reference.
+DEFAULT_CONCURRENCY = 16
+# New sessions per key and hour once a key has `session_defaults`, so minting ids cannot dodge
+# the session limits at an unbounded rate (TH-09). `null` is the explicit opt-out.
+DEFAULT_NEW_SESSIONS_PER_HOUR = 60
+
+
 class Limits(_Strict):
     rpm: PosInt | None = None
     tpm: PosInt | None = None
     concurrency: PosInt | None = None
 
 
+class DefaultLimits(Limits):
+    """`defaults.limits`: like a key's limits, but concurrency is bounded unless set to null."""
+
+    concurrency: PosInt | None = DEFAULT_CONCURRENCY
+
+
 class Defaults(_Strict):
-    limits: Limits = Field(default_factory=Limits)
+    limits: DefaultLimits = Field(default_factory=DefaultLimits)
     max_output_tokens: PosInt | None = None
     max_embedding_items: PosInt = 256
     strict_overrun: bool = True
@@ -171,6 +232,17 @@ class Routing(_Strict):
         return self
 
 
+class Otel(_Strict):
+    """OpenTelemetry tracing (the `otel` extra). The exporter reads the standard OTEL_* vars."""
+
+    enabled: bool = False
+    service_name: Annotated[str, Field(strict=True, min_length=1, max_length=128)] = "spendgate"
+
+
+class Observability(_Strict):
+    otel: Otel = Field(default_factory=Otel)
+
+
 class Anthropic(_Strict):
     allowed_versions: list[str] = Field(default_factory=lambda: list(ANTHROPIC_VERSIONS))
     allowed_betas: list[str] = Field(default_factory=list)
@@ -191,7 +263,7 @@ class SessionDefaultsSpec(_Strict):
     max_steps: PosInt | None = None
     max_seconds: PosInt | None = None
     idle_seconds: PosInt | None = None
-    max_new_sessions_per_hour: PosInt | None = None
+    max_new_sessions_per_hour: PosInt | None = DEFAULT_NEW_SESSIONS_PER_HOUR
 
 
 class BootstrapKey(_Strict):
@@ -202,11 +274,14 @@ class BootstrapKey(_Strict):
     limits: Limits = Field(default_factory=Limits)
     max_output_tokens: PosInt | None = None
     session_defaults: SessionDefaultsSpec | None = None
+    session_required: bool = False  # every call must send X-Spendgate-Session
 
     @model_validator(mode="after")
     def _data_xor_admin(self) -> Self:
         if (self.scope is None) == (self.admin_scopes is None):
             raise ValueError("give exactly one of scope (data key) or admin_scopes (admin key)")
+        if self.session_required and self.session_defaults is None:
+            raise ValueError("session_required needs session_defaults")
         return self
 
 
@@ -216,6 +291,20 @@ class Bootstrap(_Strict):
     scopes: list[ScopePath] = Field(default_factory=list)
     budgets: list[BootstrapBudget] = Field(default_factory=list)
     keys: list[BootstrapKey] = Field(default_factory=list)
+
+
+class AlertWebhook(_Strict):
+    """Budget warnings posted to one operator endpoint, signed, off the request path."""
+
+    url: SecretRef  # a webhook URL often carries a token, so it is referenced like a secret
+    signing_secret: SecretRef  # HMAC-SHA256 key for the signature header
+    timeout_seconds: PosInt = 5  # one delivery attempt, end to end
+    max_attempts: Annotated[int, Field(strict=True, ge=1, le=10)] = 5
+    queue_size: Annotated[int, Field(strict=True, ge=1, le=100_000)] = 1000
+
+
+class Alerts(_Strict):
+    webhook: AlertWebhook | None = None
 
 
 class Config(_Strict):
@@ -232,3 +321,5 @@ class Config(_Strict):
     bootstrap: Bootstrap = Field(default_factory=Bootstrap)
     anthropic: Anthropic = Field(default_factory=Anthropic)
     routing: Routing = Field(default_factory=Routing)
+    alerts: Alerts = Field(default_factory=Alerts)
+    observability: Observability = Field(default_factory=Observability)

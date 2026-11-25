@@ -4,6 +4,7 @@ import json
 from collections.abc import Mapping
 
 from spendgate.core.policy import KillTarget
+from spendgate.core.sessions import LIMIT_FIELDS as _SESSION_FIELDS
 from spendgate.gateway.admin_http import iso, iso_or_none, money_json
 from spendgate.ledger.admin_port import AuditRow, BudgetView, CallFields, KillSwitchRow
 from spendgate.ledger.admin_reads import audit_json
@@ -13,9 +14,6 @@ from spendgate.ledger.usage import UsageResult, UsageRow
 
 type Json = dict[str, object]
 _LIMIT_FIELDS = ("rpm", "tpm", "max_concurrent", "max_output_tokens", "per_call_ceiling_nano")
-_SESSION_FIELDS = (
-    "budget_nano", "max_steps", "max_seconds", "idle_seconds", "max_new_sessions_per_hour",
-)  # fmt: skip
 _CALL_TIMES = ("started_at", "finished_at", "review_required_at")
 
 
@@ -49,11 +47,17 @@ def key_json(rec: KeyRecord) -> Json:
         "expires_at": iso_or_none(rec.expires_at),
         "last_used_at": None,  # not tracked: a write per call would cost the hot path
         "revoked": rec.revoked_at is not None,
+        "session_required": policy.session_defaults is not None
+        and policy.session_defaults.required,
     }
     if policy.allowed_models is not None:
         out["allowed_models"] = list(policy.allowed_models)
     if policy.session_defaults is not None:
-        out["session_defaults"] = _present(policy.session_defaults, _SESSION_FIELDS)
+        sessions = _present(policy.session_defaults, _SESSION_FIELDS)
+        # Absent in a request means 60, so an unbounded key shows `null`: a GET-then-PATCH round
+        # trip must not turn an explicit opt-out into the default.
+        sessions.setdefault("max_new_sessions_per_hour", None)
+        out["session_defaults"] = sessions
     return out
 
 

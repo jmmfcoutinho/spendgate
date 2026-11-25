@@ -7,6 +7,7 @@ process and asserts on the report; sockets live here, outside the pytest socket 
 import asyncio
 import json
 import os
+import signal
 import statistics
 import subprocess
 import sys
@@ -235,19 +236,24 @@ async def kill_gateway_later(rig: Rig, seconds: float) -> dict[str, Any]:
     """kill -9 the first gateway mid-run: its in-flight holds can only be ended by the sweeper.
 
     It waits for pending holds of the victim itself: a count over all gateways can be reached
-    while the victim owns none, and then the run exercises no sweep at all. What the victim left
-    pending is read once it is dead, so nothing it did can change the list afterwards.
+    while the victim owns none, and then the run exercises no sweep at all. The count is taken
+    with the victim paused (SIGSTOP), so its holds cannot settle between the count and the kill:
+    a fast ledger settles a short call in milliseconds. A transaction it had open when paused is
+    rolled back when it dies, which leaves that hold pending. What the victim left pending is read
+    once it is dead, so nothing it did can change the list afterwards.
     """
     await asyncio.sleep(seconds)
     victim = rig.gateways[0]
     owner = None
     for _ in range(600):
+        victim.send_signal(signal.SIGSTOP)
         owners = pending_by_owner(rig.backend, location_of(rig))
         owner = owner_of(owners, victim.pid) or owner
         if owner and len(owners.get(owner, [])) >= VICTIM_HOLDS:
             break
+        victim.send_signal(signal.SIGCONT)
         await asyncio.sleep(0.05)
-    victim.kill()
+    victim.kill()  # SIGKILL ends a paused process too
     victim.wait()
     owners = pending_by_owner(rig.backend, location_of(rig))
     owner = owner_of(owners, victim.pid) or owner

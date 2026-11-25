@@ -34,6 +34,7 @@ import httpx
 from spendgate.core.catalog import Catalog
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.estimate import RequestKind
+from spendgate.core.failures import AttemptError, CallErrorCode, StopReason
 from spendgate.core.outcomes import Outcome
 from spendgate.pipeline import replies
 from spendgate.pipeline.faults import Fault, InternalEvent, fault_of
@@ -41,14 +42,16 @@ from spendgate.pipeline.leases import Leases
 from spendgate.pipeline.model import AttemptEvent, Clock, Endpoint, Observer, report_internal
 from spendgate.pipeline.settle import Book, Closed, Flight, attempt_record, read_usage
 from spendgate.pipeline.transport import classify
-from spendgate.providers.port import SseLimits, StreamBroken, StreamRelay
+from spendgate.providers.port import SseLimits, StreamBroken, StreamLimitExceeded, StreamRelay
 
 # Stream limits (threat-model C-22): the numbers the port left open, enforced by the relay while it
 # parses, so a hostile stream stops before it is buffered.
 STREAM_LIMITS = SseLimits(
-    max_line_bytes=64 * 1024, max_event_bytes=1024 * 1024, max_events=100_000,
+    max_line_bytes=64 * 1024,
+    max_event_bytes=1024 * 1024,
+    max_events=100_000,
     max_stream_bytes=64 * 1024 * 1024,
-)  # fmt: skip
+)
 PING_SECONDS = 15.0  # idle keep-alive comment interval (protocol 2.8)
 _PING = b": ping\n\n"
 _DONE = b"data: [DONE]\n\n"
@@ -56,10 +59,15 @@ _IDLE = object()
 _BAD_GATEWAY = 502
 _LOST_MESSAGE = "The stream was stopped because its budget hold could not be kept alive."
 _TOO_LONG_MESSAGE = "The stream was stopped because it ran longer than the gateway allows."
-_STOP_MESSAGES = {
-    "max_duration": _TOO_LONG_MESSAGE,
-    "kill_switch": "The stream was stopped because a kill switch was engaged.",
-    "session_time": "The stream was stopped because its session's time limit passed.",
+# Total over `StopReason` (a test checks it), so a new reason cannot reach the client unworded.
+_STOP_MESSAGES: Mapping[StopReason, str] = {
+    StopReason.LEASE_EXPIRING: _LOST_MESSAGE,
+    StopReason.LEASE_LOST: _LOST_MESSAGE,
+    StopReason.RENEWAL_FAILED: _LOST_MESSAGE,
+    StopReason.MAX_DURATION: _TOO_LONG_MESSAGE,
+    StopReason.KILL_SWITCH: "The stream was stopped because a kill switch was engaged.",
+    StopReason.SESSION_TIME: "The stream was stopped because its session's time limit passed.",
+    StopReason.CLIENT_GONE: "The stream was stopped because its client went away.",
 }
 _CUT_MESSAGE = "The provider stream ended abnormally."
 
@@ -108,15 +116,20 @@ class StreamBody:
     """The live stream the HTTP adapter iterates; `aclose()` MUST be called when it stops."""
 
     def __init__(  # noqa: PLR0913, PLR0917 - the stream's collaborators
-        self, env: StreamEnv, request_id: str, endpoint: Endpoint, book: Book, live: Live,
+        self,
+        env: StreamEnv,
+        request_id: str,
+        endpoint: Endpoint,
+        book: Book,
+        live: Live,
         held_at: int,
-    ) -> None:  # fmt: skip
+    ) -> None:
         self._env, self._id, self._endpoint = env, request_id, endpoint
         self._book, self._live, self._held_at = book, live, held_at
         self._source = live.response.aiter_bytes()
         self._out: list[bytes] = []
         self._wake = asyncio.Event()  # set by `abort`
-        self._reason: str | None = None  # why the gateway stops the stream
+        self._reason: StopReason | None = None  # why the gateway stops the stream
         self._pending: asyncio.Future[object] | None = None  # the read in progress
         self._waiter: asyncio.Future[object] | None = None  # resolves when `abort` is called
         self._closing: asyncio.Future[Closed] | None = None
@@ -144,7 +157,7 @@ class StreamBody:
                     raise StopAsyncIteration
                 await self._step()
         except asyncio.CancelledError:  # the client went away: abort upstream, settle, re-raise
-            await self._settle(Outcome.CANCELLED, "client_gone")
+            await self._settle(Outcome.CANCELLED, StopReason.CLIENT_GONE)
             raise
         finally:
             self._stepping = False
@@ -154,10 +167,10 @@ class StreamBody:
 
     async def aclose(self) -> None:
         """The stream stopped (done, client gone, error): idempotent, always settles."""
-        await self._settle(Outcome.CANCELLED, "client_gone")
+        await self._settle(Outcome.CANCELLED, StopReason.CLIENT_GONE)
         self._ended = True
 
-    def abort(self, reason: str) -> None:
+    def abort(self, reason: StopReason) -> None:
         """Ask the stream to stop (lease problems, kill switch, session clock, deadline).
 
         A consumer inside a step acts on it at once. Otherwise (the client stopped reading, or
@@ -174,19 +187,18 @@ class StreamBody:
     async def _step(self) -> None:
         reason = self._reason
         if reason is None and self._env.leases.near_expiry(self._id, self._env.now()):
-            reason = "lease_expiring"
-        if reason is not None:
-            await self._break(reason, _STOP_MESSAGES.get(reason, _LOST_MESSAGE))
-            return
+            reason = StopReason.LEASE_EXPIRING
         limit = self._env.max_ms
-        if limit is not None and self._env.now() - self._held_at >= limit:
-            await self._break("max_duration", _TOO_LONG_MESSAGE)
+        if reason is None and limit is not None and self._env.now() - self._held_at >= limit:
+            reason = StopReason.MAX_DURATION
+        if reason is not None:
+            await self._break(reason, _STOP_MESSAGES[reason])
             return
         try:
             data = await self._read()
         except Exception as exc:  # the provider side failed mid-body: sent, so charged
             self._cut = True
-            await self._break(classify(exc).kind, _CUT_MESSAGE)
+            await self._break(classify(exc).code, _CUT_MESSAGE)
             return
         if data is _IDLE:
             if self._reason is None:  # quiet interval; a wake is handled by the next step
@@ -217,17 +229,17 @@ class StreamBody:
             self._emit(self._live.relay.feed(data))
         except StreamBroken as exc:  # malformed framing or an SSE limit (C-22)
             self._cut = True
-            await self._break(type(exc).__name__, _CUT_MESSAGE)
+            await self._break(cut_code(exc), _CUT_MESSAGE)
         except Exception as exc:
             self._fault = fault_of("stream.relay", exc)
-            await self._break("relay_error", "The stream could not be relayed.")
+            await self._break(AttemptError.RELAY_ERROR, "The stream could not be relayed.")
 
     async def _end(self) -> None:
         try:
             self._emit(self._live.relay.close())
         except StreamBroken as exc:  # the body ended inside an event: a cut
             self._cut = True
-            await self._break(type(exc).__name__, _CUT_MESSAGE)
+            await self._break(cut_code(exc), _CUT_MESSAGE)
             return
         closed = await self._settle(None, None)
         if closed.booked:  # else the sweeper charges it and there is no number to show
@@ -255,7 +267,7 @@ class StreamBody:
 
     # --- a broken stream ------------------------------------------------------------------------
 
-    async def _break(self, code: str, message: str) -> None:
+    async def _break(self, code: CallErrorCode, message: str) -> None:
         """Settle as `stream_broken` and tell the client with one error event, then end."""
         await self._settle(Outcome.STREAM_BROKEN, code)
         self._out.append(self._error_event(message))
@@ -268,9 +280,12 @@ class StreamBody:
         shape = self._endpoint.shape
         if self._endpoint.kind is RequestKind.RESPONSES:
             payload: Mapping[str, object] = {
-                "type": "error", "code": ErrorCode.UPSTREAM_UNAVAILABLE.value, "message": message,
-                "param": None, "sequence_number": self._events,
-            }  # fmt: skip
+                "type": "error",
+                "code": ErrorCode.UPSTREAM_UNAVAILABLE.value,
+                "message": message,
+                "param": None,
+                "sequence_number": self._events,
+            }
             return b"event: error\ndata: " + _dump(payload) + b"\n\n"
         refusal = Refusal(ErrorCode.UPSTREAM_UNAVAILABLE, message)
         body = replies.error_body(refusal, shape, self._id, _BAD_GATEWAY)
@@ -279,7 +294,7 @@ class StreamBody:
 
     # --- settlement -----------------------------------------------------------------------------
 
-    async def _settle(self, outcome: Outcome | None, code: str | None) -> Closed:
+    async def _settle(self, outcome: Outcome | None, code: CallErrorCode | None) -> Closed:
         """Close upstream, book the attempt, make the one ledger transition. Exactly once.
 
         The work runs in a spawned task and callers wait on a shield: a second cancel of the
@@ -293,7 +308,7 @@ class StreamBody:
             self._closing = self._env.spawn(self._close(outcome, code))
         return await asyncio.shield(self._closing)
 
-    async def _close(self, outcome: Outcome | None, code: str | None) -> Closed:
+    async def _close(self, outcome: Outcome | None, code: CallErrorCode | None) -> Closed:
         pending = [t for t in (self._pending, self._waiter) if t is not None]
         await asyncio.gather(*pending, return_exceptions=True)
         with contextlib.suppress(Exception):
@@ -308,7 +323,7 @@ class StreamBody:
             )
         return closed
 
-    def _record(self, outcome: Outcome | None, code: str | None) -> None:
+    def _record(self, outcome: Outcome | None, code: CallErrorCode | None) -> None:
         """A stream's attempt row is written at its end, when usage is finally known.
 
         `relay.usage()` is the stream's FINAL usage or None (the `StreamRelay` contract): a cut,
@@ -329,20 +344,39 @@ class StreamBody:
         first = self._first_upstream
         number = book.flight.number if book.flight else book.next_number
         record = attempt_record(
-            book, Flight(number, live.provider, live.deployment, live.started), outcome, now,
-            request_id=self._id, status=live.response.status_code, error_code=code,
-            reading=reading, streamed=True,
+            book,
+            Flight(number, live.provider, live.deployment, live.started),
+            outcome,
+            now,
+            request_id=self._id,
+            status=live.response.status_code,
+            error_code=code,
+            reading=reading,
+            streamed=True,
             ttfb_ms=max(first - live.started, 0) if first is not None else None,
-        )  # fmt: skip
+        )
         book.attempts.append(record)
         book.flight = None
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._env.observer.on_attempt(
                 AttemptEvent(
-                    self._id, live.model, live.provider, live.deployment, outcome,
-                    record.http_status, False, record.latency_ms or 0,
+                    self._id,
+                    live.model,
+                    live.provider,
+                    live.deployment,
+                    outcome,
+                    record.http_status,
+                    False,
+                    record.latency_ms or 0,
                 )
-            )  # fmt: skip
+            )
+
+
+def cut_code(exc: StreamBroken) -> AttemptError:
+    """A crossed limit is told apart from bad framing (a too-large frame is both: the limit)."""
+    if isinstance(exc, StreamLimitExceeded):
+        return AttemptError.STREAM_LIMIT_EXCEEDED
+    return AttemptError.STREAM_MALFORMED
 
 
 def _dump(payload: Mapping[str, object]) -> bytes:

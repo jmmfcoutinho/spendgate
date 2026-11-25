@@ -159,6 +159,26 @@ def _id(budget: Budget) -> str:
     return budget.id
 
 
+def _session_header_refusal(key: KeyPolicy, labels: Labels) -> Refusal | None:
+    """A key without session defaults refuses the header; a `session_required` key needs it.
+
+    Without the header no session limit applies, so a required one is refused here: before the
+    rate and concurrency limits are counted and before any hold.
+    """
+    defaults = key.session_defaults
+    if labels.session is not None and defaults is None:
+        return Refusal(
+            ErrorCode.INVALID_REQUEST, "This key does not allow sessions.", SESSION_HEADER
+        )
+    if labels.session is None and defaults is not None and defaults.required:
+        return Refusal(
+            ErrorCode.INVALID_REQUEST,
+            f"This key requires the {SESSION_HEADER} header.",
+            SESSION_HEADER,
+        )
+    return None
+
+
 def _gate(
     key: KeyPolicy, labels: Labels, session: SessionState | None, now: int, new_last_hour: int
 ) -> SessionDecision | None:
@@ -182,15 +202,14 @@ def resolve(  # noqa: PLR0913 - one decision needs all of these inputs
 ) -> Plan | Refusal:
     """The budgets to hold, the limits to admit and the per-call ceiling, or the refusal.
 
-    Check order: label syntax, session header allowed, model allowed, kill switches, session
-    gate. The ledger still re-checks kill switches and sessions inside the admission transaction.
+    Check order: label syntax, session header allowed (or required), model allowed, kill
+    switches, session gate. The ledger still re-checks kill switches and sessions inside the
+    admission transaction.
     """
     if (bad := check_labels(labels)) is not None:
         return bad
-    if labels.session is not None and key.session_defaults is None:
-        return Refusal(
-            ErrorCode.INVALID_REQUEST, "This key does not allow sessions.", SESSION_HEADER
-        )
+    if (bad := _session_header_refusal(key, labels)) is not None:
+        return bad
     if not model_allowed(key, model):
         return Refusal(ErrorCode.MODEL_NOT_ALLOWED, f"Model {model} is not allowed for this key.")
     if switch := matching_kill_switch(kill_switches, key, chain_scope_ids, model, providers):

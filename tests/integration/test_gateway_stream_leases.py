@@ -4,9 +4,12 @@ whose lease cannot be kept is aborted and settled (scenario 3, M-04, M-05).
 The clock is the injected `FakeClock`; a heartbeat is one `Pipeline.renew_leases()` call.
 """
 
+from collections.abc import Callable, Collection
 from pathlib import Path
 
 from spendgate.core.outcomes import Outcome, ReservationState
+from spendgate.ledger.port import MoneyLedger
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import async_test
 from tests.integration.stream_rig import DONE, chat_chunk, chat_usage
 from tests.integration.test_gateway_streaming import SEEN, gated, open_call, priced, settled_once
@@ -15,29 +18,28 @@ LEASE_MS = 60_000  # default lease; the heartbeat is a third of it
 BEAT_S = 20
 
 
-class FlakyRenewals:
+class FlakyRenewals(MoneyLedgerProxy):
     """A ledger whose `renew_all` can fail or answer with a chosen set of ids."""
 
-    def __init__(self, inner: object) -> None:
-        self._inner = inner
+    def __init__(self, inner: MoneyLedger) -> None:
+        super().__init__(inner)
         self.fail = False
         self.answer: tuple[str, ...] | None = None  # None: ask the real ledger
 
-    async def renew_all(self, instance: str, now: int, lease_ms: int) -> tuple[str, ...]:
+    async def renew_all(
+        self, instance: str, ids: Collection[str], now: int, lease_ms: int
+    ) -> tuple[str, ...]:
         if self.fail:
             raise ConnectionError("ledger unreachable")
         if self.answer is not None:
             return self.answer
-        return await self._inner.renew_all(instance, now, lease_ms)  # type: ignore[attr-defined, no-any-return]
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
+        return await self.inner.renew_all(instance, ids, now, lease_ms)
 
 
-def flaky_ledger() -> tuple[list[FlakyRenewals], object]:
+def flaky_ledger() -> tuple[list[FlakyRenewals], Callable[[MoneyLedger], MoneyLedger]]:
     made: list[FlakyRenewals] = []
 
-    def wrap(ledger: object) -> object:
+    def wrap(ledger: MoneyLedger) -> MoneyLedger:
         made.append(FlakyRenewals(ledger))
         return made[0]
 

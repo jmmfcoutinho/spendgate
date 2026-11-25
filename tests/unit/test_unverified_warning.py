@@ -71,3 +71,37 @@ async def test_library_mode_logs_one_warning_at_start(
     await runtime.aclose()
     warnings = [r.getMessage() for r in caplog.records if "unverified" in r.getMessage()]
     assert len(warnings) == 1 and warnings[0].startswith("3 catalog entries have unverified")
+
+
+SHADOW = """\
+catalog_version: 1
+models:
+  - {{id: openai/gpt-6-luna, mode: responses, currency: USD, effective_from: "{day}",
+     source_url: "https://x.example/p", verified: false,
+     meters: {{input_per_mtok: "1", output_per_mtok: "2"}}, limits: {{max_output_tokens: 10}}}}
+"""
+
+
+@pytest.mark.parametrize("day", ["2026-11-13", "2026-12-01"])  # same date as bundled, and later
+def test_an_unverified_entry_superseding_a_verified_one_is_a_check_config_warning(
+    tmp_path: Path,
+    day: str,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for key, value in ENV.items():
+        monkeypatch.setenv(key, value)
+    (tmp_path / "o.yaml").write_text(SHADOW.format(day=day), encoding="utf-8")
+    path = write(tmp_path, BASE + "catalog: {paths: [o.yaml]}\n")
+    report = check_config(path, env=ENV)
+    assert report.ok and report.superseded == (
+        "1 unverified catalog entry supersedes a verified price of the same id: "
+        f"openai/gpt-6-luna@{day}"
+    )
+    assert serve.run_check_config(str(path)) == 0
+    assert "warning: 1 unverified catalog entry supersedes" in capsys.readouterr().err
+
+
+def test_new_unverified_ids_and_the_bundled_catalog_supersede_nothing(tmp_path: Path) -> None:
+    assert check_config(write(tmp_path), env=ENV).superseded is None
+    assert check_config(with_override(tmp_path, 7), env=ENV).superseded is None

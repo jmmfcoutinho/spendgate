@@ -19,12 +19,13 @@ from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.money import Money
 from spendgate.ledger.key_types import KeySpec, Principal
 from spendgate.ledger.keys import KeyService
-from spendgate.ledger.port import LedgerPort, ScopeRow
+from spendgate.ledger.port import MoneyLedger, ScopeRow
 from spendgate.ledger.sqlite import SqliteLedger
 from spendgate.local.runtime import Runtime
 from spendgate.pipeline.closing import CHAIN_TTL_MS
 from spendgate.pipeline.model import CHAT, KeyVerifier
 from tests.conftest import FakeClock
+from tests.fakes.ledger import MoneyLedgerProxy
 from tests.integration.harness import NOW_MS, PEPPER, Stack, async_test, open_stack
 from tests.integration.test_local_support import settings_in
 
@@ -155,32 +156,29 @@ async def test_still_active_reads_the_key_by_id_when_its_prefix_was_pushed_out(
         assert not await keys.still_active(who, NOW_MS)
 
 
-class MovableScopes:
+class MovableScopes(MoneyLedgerProxy):
     """A ledger whose `get_scope` reads are counted and whose parents a test can cut."""
 
-    def __init__(self, inner: LedgerPort) -> None:
-        self._inner = inner
+    def __init__(self, inner: MoneyLedger) -> None:
+        super().__init__(inner)
         self.reads = 0
         self.detached: set[str] = set()  # scopes reported with no parent, as if re-parented
 
     async def get_scope(self, scope_id: str) -> ScopeRow | None:
         self.reads += 1
-        row = await self._inner.get_scope(scope_id)
+        row = await self.inner.get_scope(scope_id)
         if row is not None and row.id in self.detached:
             return dataclasses.replace(row, parent_id=None)
         return row
-
-    def __getattr__(self, name: str) -> object:
-        return getattr(self._inner, name)
 
 
 @async_test
 async def test_a_cached_scope_chain_is_read_again_after_the_ttl(tmp_path: Path) -> None:
     holder: list[MovableScopes] = []
 
-    def wrap(inner: SqliteLedger) -> LedgerPort:
+    def wrap(inner: SqliteLedger) -> MoneyLedger:
         holder.append(MovableScopes(inner))
-        return holder[0]  # type: ignore[return-value]
+        return holder[0]
 
     async with open_stack(tmp_path, wrap_ledger=wrap) as s:
         ledger, closer = holder[0], s.pipeline._closer

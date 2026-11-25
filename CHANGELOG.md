@@ -11,6 +11,182 @@ All notable changes to this project are documented here. The format follows
 - `docs/releasing.md`: how a release and a security release ship (tagging, the environment
   approvals, the advisory's private fork and its bypass merge), and how to merge a stack of pull
   requests.
+- `spendgate catalog import --from-litellm <commit-sha> --out extra.yaml [--providers ...]`
+  drafts a catalog override file from LiteLLM's `model_prices_and_context_window.json` at one
+  pinned commit (https to raw.githubusercontent.com only, no redirects), or from a local copy
+  with `--from-file`. Every entry is `verified: false`; models the installed bundled catalog
+  carries are left out when the file is drafted. Entries with a non-finite or non-numeric
+  value, a zero price, a long-context multiplier below 1, or no whole output ceiling are skipped
+  one by one with a reason. An existing file is kept unless `--force`, which replaces it
+  atomically. Nothing is fetched at serve time (ADR-0014). The mapping now lives in
+  `spendgate.core.litellm` and `scripts/litellm_prices.py` uses it.
+- `spendgate check-config` warns when a `verified: false` catalog entry supersedes a verified
+  entry of the same id, for example a drafted entry for a model a later release bundles. Re-run
+  the import or delete such entries after upgrading.
+- `serve --migrate` and the config key `ledger.auto_migrate`, and expand/contract migrations: a
+  migration marked `-- compatible_with_previous: true` is recorded as such
+  (`schema_migrations.compatible`), and code starts on a schema exactly one such step ahead, so
+  the previous release can run after an upgrade's migration. Postgres commits each migration on
+  its own. A lint test checks new migrations (a Postgres `CHECK` needs `NOT VALID` and a later
+  `VALIDATE`; a compatible migration may not be destructive or add a constraint). Upgrade and rollback runbook in
+  [operations](docs/operations.md#upgrades-and-rollbacks); see
+  [ADR-0018](docs/adr/0018-migration-policy.md).
+- Cloud identity (#33). `credential: adc` for Vertex AI (`google` with `auth: bearer_token`)
+  uses Google application default credentials (workload identity, the metadata server) instead
+  of a service-account key. `ledger.backend.auth: {kind: rds_iam | entra | cloudsql_iam}` logs
+  every new Postgres connection in with a short-lived RDS IAM, Entra ID or Cloud SQL IAM token
+  instead of a password; the DSN then names the user and carries no password. Each kind uses the
+  extra of its cloud (`bedrock`, `azure`, `google`): no new dependency or extra. See
+  [cloud identity](docs/operations.md#cloud-identity) and
+  [ADR-0017](docs/adr/0017-cloud-identity.md).
+- `SIGHUP` re-reads `file:` secrets in a running `serve`, in a thread of its own (signals during a
+  reload coalesce, and shutdown does not wait for a read stuck on a mount): provider credentials
+  take effect for the next call, and a new database password for the next pooled connection (a DSN
+  that changes anything but its password is refused and the old one kept). One `secrets_reloaded`
+  log event names the config paths read and changed, never a value. See [rotating
+  secrets](docs/operations.md#rotating-secrets).
+- `ledger.pool_min`, `ledger.pool_max` and `ledger.pool_timeout_seconds` size the Postgres pool
+  (defaults 1, 10 and 10 s, as before).
+- `server.keep_alive_seconds` (default 75) and `server.graceful_shutdown_seconds` (default 30),
+  passed to uvicorn on the data and admin listeners. Keep-alive was uvicorn's 5 s, below common
+  load balancer idle timeouts. The drain after `SIGTERM` now ends at the deadline: calls still
+  running are stopped and settled as cancelled (the full hold once sent, unless usage was seen)
+  instead of waiting for the orchestrator's kill and the sweeper; their clients get uvicorn's
+  plain 500 or a cut stream. A separate admin listener drains in parallel under the same deadline
+  ([ADR-0015](docs/adr/0015-readiness-and-shutdown.md)).
+- `deploy/compose/compose.yaml` sets `stop_grace_period: 50s` on the `spendgate` service, so
+  Docker's 10 s default no longer kills the process in the middle of the 30 s drain.
+- The operations guide states what a ledger outage or failover looks like per backend (calls are
+  refused with `ledger_unavailable` until the ledger is back, no restart needed) and sizes the
+  drain with the new settings.
+- Key option `session_required` (`bootstrap.keys[].session_required` in the config,
+  `session_required` on `POST` and `PATCH /admin/v1/keys`, shown on every key): a call on such a
+  key without `X-Spendgate-Session` is refused with `invalid_request`
+  (`param: X-Spendgate-Session`) before the rate limits are counted and before any hold, so an
+  agent cannot leave its session limits behind by dropping the header. It needs
+  `session_defaults` ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)).
+- `spendgate.local.guard(concurrency=...)`: the most calls each client admits at once (16 by
+  default, `None` for no bound). With `config=`, the file's `defaults.limits.concurrency` sets it.
+- `spendgate migrate --bootstrap` warns when a configured key already exists with other
+  `session_required` or `session_defaults` than the config. Bootstrap stays create-only; change
+  an existing key with `PATCH /admin/v1/keys/{key_id}`. After upgrading it warns for each existing
+  key whose config has `session_defaults` without `max_new_sessions_per_hour`, since the config
+  now means 60 there: PATCH the key to adopt the bound, or set `max_new_sessions_per_hour: null`
+  in the config to keep it unbounded and silence the warning.
+- Optional budget-warning webhook (`alerts.webhook`): `spendgate serve` posts each
+  `soft_threshold`, `cap_breached` and `blocked` warning as JSON to one HTTPS endpoint (the log
+  line's allowlisted fields plus `event_id` and `ts`), signed with HMAC-SHA256 in
+  `X-Spendgate-Signature`. The URL and signing secret are secret references; the URL must be
+  `https` (`http` only for localhost) and redirects are not followed. Warnings are queued off the
+  request path in a bounded queue and posted by a background task with bounded retries and
+  backoff, so a slow or failing receiver never delays or fails a call; deliveries, failures and
+  drops are counted in `spendgate_alert_webhooks_total{result}`. See
+  [operations](docs/operations.md#budget-warning-webhook) and
+  [ADR-0016](docs/adr/0016-alert-webhook.md).
+- Ledger health metrics at `/metrics`: `spendgate_ledger_latency_ms{op}` (hold, settle, release,
+  lease renewal), `spendgate_ledger_errors_total{op}` (a hold past its deadline counts),
+  `spendgate_ledger_unavailable_total`, the Postgres pool (`spendgate_ledger_pool_wait_ms`,
+  `spendgate_ledger_pool_size`, `_in_use`, `_max`), `spendgate_sweeper_expired_total` (holds
+  charged in full), `spendgate_unsettled_closes`, `spendgate_heartbeat_failures_total{step}` and
+  `spendgate_gateway_overhead_ms` (time outside the upstream call). Labels are fixed sets in the
+  code. Example Prometheus alert rules are in [operations](docs/operations.md#metrics-and-logs).
+  See [ADR-0019](docs/adr/0019-otel-extra.md).
+- Optional OpenTelemetry tracing: the `otel` extra and `observability.otel: {enabled,
+  service_name}` (off by default). One span per hold, forward and settle, exported over OTLP/HTTP
+  as the standard `OTEL_EXPORTER_OTLP_*` variables say; the request's `traceparent` is their
+  parent and is passed on to the provider with the forward span. Span attributes are an allowlist
+  (request id, catalog model, deployment label, endpoint, outcome, counts, `error.type`); no
+  prompt, key, user, tag or session value, and no exception message. Enabled without the extra,
+  `serve` warns at start and serves untraced. The base install keeps five runtime dependencies.
+
+### Changed
+
+- Safer defaults for agents ([ADR-0013](docs/adr/0013-safer-agent-defaults.md)):
+  `defaults.limits.concurrency` is 16 when the config leaves it out (it was unlimited), also in
+  library mode, where each `guard()` client now admits 16 calls at once unless `concurrency=`
+  says otherwise (`concurrency=None` for no bound), and
+  `session_defaults.max_new_sessions_per_hour` is 60 when a key's session defaults leave it out,
+  in the config and the admin API (it was unlimited). An explicit `null` keeps either unlimited,
+  and a key in an admin API response shows `max_new_sessions_per_hour: null` when unbounded, so
+  sending back what a GET returned keeps it.
+  Keys already stored keep the session limits they were created with. The example config has
+  an agent key with `session_required` and these limits, and `how-money-is-protected.md` states
+  the overrun bound at a cap crossing that the concurrency limit gives.
+- `serve` no longer migrates a Postgres ledger at start: on a schema that is behind it refuses
+  with exit code 5 and says to run `spendgate migrate` (or start with `serve --migrate`, or set
+  `ledger.auto_migrate: true`). SQLite still migrates at start by default. The `--local` admin
+  commands follow the same setting, and a ledger error at start is printed as one `error:` line
+  instead of a traceback. The Compose and local guides run `migrate` before `up`.
+- The `postgres` extra requires `psycopg-pool>=3.3.0` (already installed through
+  `psycopg[pool]`): it reads the DSN and the login password per connection.
+- Postgres ledger: a call makes 5 round trips to the database instead of about 46 (60 for a
+  stream), so a hot budget row stays locked for less time. Statements that do not depend on each
+  other go out together (psycopg pipeline mode), `BEGIN` and `COMMIT` ride on the first and last
+  of them, `X-Spendgate-Budget-Remaining` comes back with the hold or the settlement instead of
+  two or four `FOR UPDATE` reads per call, budget reports read without row locks, lease renewal
+  is one statement for all holds, and pooled connections are no longer pinged before each
+  transaction (a connection found dead before its `COMMIT` was sent is replaced and the
+  transaction re-run). Money rules and the header's meaning are unchanged. See
+  [operations](docs/operations.md#postgres-connections) and
+  [the load review](docs/reviews/load-v0.1.md).
+- `calls.error_code` holds stable, documented codes
+  ([ADR-0022](docs/adr/0022-stable-error-codes.md)). Transport and stream failures
+  are stored as `connect_error`, `read_timeout`, `write_error`, `remote_protocol_error`,
+  `response_too_large`, `stream_malformed`, `stream_limit_exceeded` and so on instead of the
+  exception class name (`ConnectError`, `ReadTimeout`, `StreamLimitExceeded`), which could change
+  with an HTTP client upgrade. Stop reasons and gateway faults are `StopReason` and
+  `AttemptError` enums in `core.failures`, so mypy rejects an unknown one. Every value is listed
+  in [data-model](docs/data-model.md#callserror_code-values); existing rows keep their values,
+  listed there as legacy. Charges are unchanged.
+- Roadmap: adds per-instance budget slices, library mode on Python 3.12, per-end-user budgets
+  keyed on `X-Spendgate-User`, weekly and rolling budget windows, a generic OpenAI-compatible
+  provider, a read-only usage page and a public hold and settle API, each with why. Soft-threshold webhook alerts and OpenTelemetry tracing move to Done.
+- Internal structure, no change in behaviour, config, error codes, headers, endpoints, logs or
+  metrics: the ledger port is split into `MoneyLedger` (the eight calls the pipeline and the
+  sweeper make) and `AdminLedger` (admin writes, keys and reads on top of it);
+  `gateway.compose.build_gateway` is the one composition root, used by `serve` and by the
+  integration test harness; OpenAI and Azure OpenAI share one wire module (`openai_wire`);
+  `transport()` and `transport2()` share their runtime builder and stream wrappers; SQLite and
+  Postgres decide pending migrations with one pure `pending_migrations`; the data app's POST
+  routes come from `ENDPOINTS`.
+- The size report (`scripts/lightweight_report.py`, `make size`) counts lines on the
+  ruff-formatted text, formatted in memory, so packing arguments onto fewer lines no longer meets
+  a size limit, and the module (400 lines) and function (50 lines) limits now fail it, as
+  ADR-0007 states, instead of warning. `# fmt: skip` is allowed only on a table (a multi-line
+  assignment of a list, tuple, set or dict display, or `frozenset` of one, holding only
+  constants and names) at module or class level that shares no line with another statement; any
+  other, and any `# fmt: off` region, fails the report. The 133 directives outside tables are
+  gone. To keep every module within 400 formatted lines and every function within 50, code moved
+  with no change in behaviour: the failover loop's results and refusals to
+  `pipeline.forward_results`, the building of a `Pipeline`'s parts to `pipeline.assembly`, the
+  settings types to `config.settings`, and two steps of `ledger.settle_flow` into helpers of
+  their own.
+
+### Fixed
+
+- `/readyz` no longer answers 503 while a global kill switch is engaged. The switch is shared, so
+  every replica turned unready at once and load balancers dropped them all. Calls are still
+  refused with `kill_switch` (503); the admin readiness detail lists the switch as a warning
+  instead of a reason, and a failed read of it as the warning `kill_switch_probe_failed`
+  (ADR-0015).
+- The `http://`-only-for-localhost rule for a provider `base_url` reads the host the way the HTTP
+  client does: a `?` or `#` ends the host part, so text after one is never taken for it, and a
+  URL with whitespace or a non-printable character is refused.
+- Provider throttling no longer turns into an outage (issue #36). A 429 without `Retry-After`
+  cooled its deployment for the full `routing.cooldown_seconds` and then let one probe through,
+  so in the load test's clean scenario (3% injected 429s) a fifth to a third of all calls were
+  refused with `503 upstream_unavailable`; now none are. A busy 429 cools for its `Retry-After` as given
+  (capped by `max_cooldown_seconds`; an HTTP-date or a `retry-after-ms` is now read too) or,
+  without one, for a random 250 to 500 ms that doubles for each 429 in a row (up to
+  `cooldown_seconds`) until a call sent after the throttle succeeds, and the deployment is open
+  to every caller once that ends. A quota 429 or an unreadable
+  `Retry-After` cools for `cooldown_seconds`. A call that finds every deployment cooling on a
+  first busy 429 waits up to 1 s (plus its own jitter, inside its one hold, and only with a full
+  1 s left before its deadline) for the soonest to come back; an escalated cooldown or a breaker
+  opened on failures is never waited for. A busy cooldown keeps the breaker's failure window. A result
+  that arrives while its deployment cools no longer turns an `upstream_throttled` refusal into
+  `upstream_unavailable`, nor closes a failure-opened breaker without its probe.
+  See [ADR-0021](docs/adr/0021-short-throttle-cooldown.md).
 
 ## [0.1.3] - 2026-11-24
 

@@ -9,45 +9,31 @@ Jupyter and in plain scripts. The async transport runs on the caller's loop and 
 Anthropic SDK 2.x needs `httpx2` objects instead; see `transport_httpx2.py`.
 """
 
-from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Literal, overload
 
 import httpx
 
-from spendgate.config import Settings, load
-from spendgate.core.money import Money, parse_amount
+from spendgate.config import Settings
 from spendgate.local.bridge import (
     AsyncBridge,
+    AsyncChunks,
     SyncBridge,
+    SyncChunks,
     response_headers,
 )
-from spendgate.local.runtime import Runtime, local_env
-from spendgate.pipeline.model import ByteStream, Clock
-from spendgate.pipeline.pipeline import system_ms
+from spendgate.local.factory import make_runtime
+from spendgate.local.runtime import Runtime
+from spendgate.pipeline.assembly import system_ms
+from spendgate.pipeline.model import Clock
 
 
-class _SyncStream(httpx.SyncByteStream):
-    def __init__(self, bridge: SyncBridge, chunks: ByteStream) -> None:
-        self._bridge, self._chunks = bridge, chunks
-
-    def __iter__(self) -> Iterator[bytes]:
-        return self._bridge.chunks(self._chunks)
-
-    def close(self) -> None:
-        self._bridge.close_stream(self._chunks)
+class _SyncStream(SyncChunks, httpx.SyncByteStream):
+    pass
 
 
-class _AsyncStream(httpx.AsyncByteStream):
-    def __init__(self, chunks: ByteStream) -> None:
-        self._chunks = chunks
-
-    async def __aiter__(self) -> AsyncIterator[bytes]:
-        async for chunk in self._chunks:
-            yield chunk
-
-    async def aclose(self) -> None:
-        await self._chunks.aclose()
+class _AsyncStream(AsyncChunks, httpx.AsyncByteStream):
+    pass
 
 
 class LocalTransport(httpx.BaseTransport):
@@ -85,36 +71,35 @@ class AsyncLocalTransport(httpx.AsyncBaseTransport):
         await self._bridge.close()
 
 
-def make_runtime(
-    settings_or_path: Settings | str | Path, ledger_path: str | Path | None, cap: str | None,
-    client: httpx.AsyncClient | None, now_ms: Clock,
-) -> Runtime:  # fmt: skip
-    settings = (
-        settings_or_path if isinstance(settings_or_path, Settings)
-        else load(settings_or_path, env=local_env())
-    )  # fmt: skip
-    amount: Money | None = parse_amount(cap) if cap is not None else None
-    path = Path(ledger_path) if ledger_path is not None else None
-    return Runtime(settings, path, amount, client=client, now_ms=now_ms)
-
-
 @overload
 def transport(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[False] = ..., cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[False] = ...,
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> LocalTransport: ...  # fmt: skip
+) -> LocalTransport: ...
 @overload
 def transport(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[True], cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[True],
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> AsyncLocalTransport: ...  # fmt: skip
+) -> AsyncLocalTransport: ...
 def transport(  # noqa: PLR0913 - the public entry point with named options
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = None,
-    async_: bool = False, cap: str | None = None, client: httpx.AsyncClient | None = None,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = None,
+    async_: bool = False,
+    cap: str | None = None,
+    client: httpx.AsyncClient | None = None,
     now_ms: Clock = system_ms,
-) -> LocalTransport | AsyncLocalTransport:  # fmt: skip
+) -> LocalTransport | AsyncLocalTransport:
     """An httpx transport that applies the gateway's rules in this process.
 
     `settings_or_path` is a loaded `Settings` or a path to a `spendgate.yaml` (its `bootstrap`

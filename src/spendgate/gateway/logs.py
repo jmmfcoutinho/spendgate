@@ -23,8 +23,11 @@ ALLOWED_FIELDS: frozenset[str] = frozenset(
         "input_tokens", "output_tokens", "cached_tokens", "cost", "currency", "latency_ms",
         "ttft_ms", "status", "http_status", "reason", "level", "ts", "logger",
         "where", "error_class", "frames", "charged",
+        "job",  # which background job failed (`background_job_failed`)
         # Budget warnings (pipeline.alerts): budget facts only, never request or key data.
         "budget_id", "period", "period_start", "spent", "cap", "scope_kind",
+        # Secret reloads (SIGHUP): comma-separated config paths, never a value.
+        "reloaded", "changed",
     }
 )  # fmt: skip
 
@@ -37,6 +40,11 @@ LOGGER_NAME = "spendgate.call"
 INTERNAL_EVENT = "spendgate.internal"
 
 
+def secret_shaped(value: str) -> bool:
+    """Whether `value` looks like a key secret or a bearer token (also used for span attributes)."""
+    return _SECRET_SHAPE.search(value) is not None
+
+
 def redact(fields: Mapping[str, object]) -> dict[str, object]:
     """Keep allowlisted, scalar, secret-free fields; drop everything else."""
     kept: dict[str, object] = {}
@@ -45,7 +53,7 @@ def redact(fields: Mapping[str, object]) -> dict[str, object]:
             continue
         if not isinstance(value, str | int | float | bool | None):
             continue
-        if isinstance(value, str) and _SECRET_SHAPE.search(value):
+        if isinstance(value, str) and secret_shaped(value):
             continue
         kept[name] = value
     return kept
@@ -71,29 +79,57 @@ def log_event(
 
 
 def log_call(  # noqa: PLR0913 - the documented call-log fields, all keyword-only
-    logger: logging.Logger, *, request_id: str, key_prefix_: str, scope_path: str, model: str,
-    deployment: str, outcome: Outcome, input_tokens: int, output_tokens: int, cost: Money,
-    latency_ms: float, ttft_ms: float | None = None, cached_tokens: int = 0,
+    logger: logging.Logger,
+    *,
+    request_id: str,
+    key_prefix_: str,
+    scope_path: str,
+    model: str,
+    deployment: str,
+    outcome: Outcome,
+    input_tokens: int,
+    output_tokens: int,
+    cost: Money,
+    latency_ms: float,
+    ttft_ms: float | None = None,
+    cached_tokens: int = 0,
     http_status: int | None = None,
-) -> None:  # fmt: skip
+) -> None:
     """The one-line record of a finished call (cost as a decimal string plus currency)."""
     amount = cost.format().rsplit(" ", 1)[0]
     log_event(
-        logger, "call", request_id=request_id, key_prefix=key_prefix_[:KEY_PREFIX_LEN],
-        scope_path=scope_path, model=model, deployment=deployment, outcome=outcome.value,
-        input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens,
-        cost=amount, currency=cost.currency, latency_ms=latency_ms, ttft_ms=ttft_ms,
+        logger,
+        "call",
+        request_id=request_id,
+        key_prefix=key_prefix_[:KEY_PREFIX_LEN],
+        scope_path=scope_path,
+        model=model,
+        deployment=deployment,
+        outcome=outcome.value,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cached_tokens=cached_tokens,
+        cost=amount,
+        currency=cost.currency,
+        latency_ms=latency_ms,
+        ttft_ms=ttft_ms,
         http_status=http_status,
-    )  # fmt: skip
+    )
 
 
 def log_internal(logger: logging.Logger, event: InternalEvent) -> None:
     """A catch-all's redacted trace: class and frames only, never the exception's message."""
     fault = event.fault
     log_event(
-        logger, INTERNAL_EVENT, logging.ERROR, request_id=event.request_id, where=fault.where,
-        error_class=fault.error_class, frames=fault.frames_text, charged=event.charged,
-    )  # fmt: skip
+        logger,
+        INTERNAL_EVENT,
+        logging.ERROR,
+        request_id=event.request_id,
+        where=fault.where,
+        error_class=fault.error_class,
+        frames=fault.frames_text,
+        charged=event.charged,
+    )
 
 
 def configure_json_logging(stream: logging.Handler | None = None) -> logging.Logger:

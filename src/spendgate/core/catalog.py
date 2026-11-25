@@ -129,10 +129,17 @@ class PriceEntry(_Strict):
     note: Annotated[str, Field(strict=True, max_length=300)] | None = None
     deployment_type: (
         Literal[
-            "global", "data_zone", "regional", "standard", "batch", "flex", "priority",
+            "global",
+            "data_zone",
+            "regional",
+            "standard",
+            "batch",
+            "flex",
+            "priority",
             "provisioned",
-        ] | None
-    ) = None  # fmt: skip
+        ]
+        | None
+    ) = None
     region: Annotated[str, Field(strict=True, pattern=f"^{_REGION.pattern}$")] | None = None
     price_multiplier: Multiplier = Decimal(1)
     meters: Meters
@@ -229,6 +236,7 @@ class Catalog:
     fx: tuple[FxSnapshot, ...]
     _by_model: Mapping[tuple[str, str], tuple[PriceEntry, ...]]  # newest effective_from first
     _free: Mapping[str, frozenset[int]]
+    _replaced_verified: frozenset[str] = frozenset()  # unverified price_ids that replaced one
 
     def lookup(self, provider: str, model: str, now: int) -> PriceEntry:
         """Entry in force at `now` (epoch ms, UTC date), or `ModelNotPriced`."""
@@ -254,6 +262,20 @@ class Catalog:
     def entries(self) -> tuple[PriceEntry, ...]:
         return tuple(e for group in self._by_model.values() for e in group)
 
+    def unverified_over_verified(self) -> tuple[str, ...]:
+        """Unverified entries that supersede a verified entry of the same id, as price_ids.
+
+        Either a later `effective_from` or the same one in a later document. Not an error,
+        but worth a warning: from that date a reviewed price gives way to an unchecked one.
+        """
+        found = set(self._replaced_verified)
+        for group in self._by_model.values():
+            for entry in group:
+                older = (e for e in group if e.effective_from < entry.effective_from)
+                if not entry.verified and any(e.verified for e in older):
+                    found.add(entry.price_id)
+        return tuple(sorted(found))
+
 
 def parse(
     documents: Sequence[Mapping[str, object]],
@@ -271,9 +293,14 @@ def parse(
         raise CatalogError("sha256 must be 64 lower-case hex characters")
     merged: dict[tuple[str, date], PriceEntry] = {}
     free: dict[str, frozenset[int]] = {}
+    replaced: set[str] = set()
     for index, raw in enumerate(documents):
         doc = _validate(raw, index)
-        merged.update({(e.id, e.effective_from): e for e in doc.models})
+        for e in doc.models:
+            before = merged.get((e.id, e.effective_from))
+            if before is not None and before.verified and not e.verified:
+                replaced.add(e.price_id)
+            merged[(e.id, e.effective_from)] = e
         for slug, rule in doc.providers.items():
             rules: dict[str, object] = {}
             if rule.free_statuses is not None:
@@ -291,6 +318,10 @@ def parse(
         for key, group in grouped.items()
     }
     return Catalog(
-        sha256, ledger_currency, tuple(fx), MappingProxyType(index_by_model),
+        sha256,
+        ledger_currency,
+        tuple(fx),
+        MappingProxyType(index_by_model),
         MappingProxyType(free),
-    )  # fmt: skip
+        frozenset(replaced),
+    )

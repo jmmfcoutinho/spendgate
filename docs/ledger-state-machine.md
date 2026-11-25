@@ -37,7 +37,7 @@ One reservation exists per **client request** and stays `pending` across every a
 | Transition | Guard (the whole idempotency mechanism) | Money effect per item (budget in the chain, in the hold's own `period_start`) | Other effects |
 |---|---|---|---|
 | `hold` | `reservations.id` must **not** exist, in any state; if it does, raise `conflict` (never return the old reservation as admitted). On the data plane `conflict` maps to `internal_error` (request ids are gateway-generated) | `H += worst` | insert reservation + items + `meta`; session `step_count += 1`, `last_activity_at = now`; the first hold of a period to reach `soft_pct` sets `soft_alerted_at` and returns a `soft_threshold` alert |
-| `renew_all(instance_id, ids)` | per named id: `UPDATE reservations SET lease_expires_at = :now + :lease WHERE id = :id AND owner_instance = :me AND state = 'pending' RETURNING id` | none | one transaction per instance, every `heartbeat_seconds` (default `lease/3`), naming only the holds the pipeline still owns (calls in flight, open streams): a hold whose settle failed is not named, so it expires and the sweeper charges it. An in-flight id missing from the result was expired by a sweeper: the owner aborts that upstream call |
+| `renew_all(instance_id, ids)` | one statement for all named ids: `UPDATE reservations SET lease_expires_at = :now + :lease WHERE id IN (:ids) AND owner_instance = :me AND state = 'pending' RETURNING id` (on Postgres a row another transaction has locked is skipped) | none | one transaction per instance, every `heartbeat_seconds` (default `lease/3`), naming only the holds the pipeline still owns (calls in flight, open streams): a hold whose settle failed is not named, so it expires and the sweeper charges it. An in-flight id missing from the result was expired by a sweeper: the owner aborts that upstream call |
 | `settle(charge)` | `UPDATE reservations SET state='settled' WHERE id=:id AND state='pending'` must affect 1 row; else go to *late settle* | `H -= held; S += charge`; if `charge > held`: `ovr += charge - held` | insert `calls` rows (one per attempt; `charged_nano` sums to `charge`); if the overrun left `S + H > eff` and `strict_overrun`: `budgets.review_required_at = now`. Returns a `cap_breached` alert when this settlement took `S + H` above `eff`, and `blocked` when it set `review_required_at` ([budget warnings](operations.md#metrics-and-logs)) |
 | `release` | same guard, `state='released'`. **Final**, and only allowed when `not_processed` holds for every attempt (never sent, or a `free_statuses` answer) | `H -= held`; `S` unchanged | session `step_count -= 1`; one `calls` row per attempt, `charged_nano` 0 |
 | `expire` (sweeper) | same guard, `state='expired'`, `WHERE lease_expires_at < :now` | `H -= held; S += held` (charged in full) | `calls` row from `reservations.meta`: attempt 1, outcome `expired`, `settled_by='sweeper'`, `charged_nano = held`, `usage_cost_nano` NULL |
@@ -74,12 +74,16 @@ BEGIN                                  -- SQLite: BEGIN IMMEDIATE
     started_at = now) after checking max_new_sessions_per_hour. A new session also creates
     its session budget (budget_nano) if set. Session scopes are per key: the path includes the key id.
  3. chain = budgets of the leaf scope and all ancestors, active, model_filter matches (a case-sensitive glob over the catalog id, such as `openai/gpt-6-*`, never the alias; [ADR-0011](adr/0011-model-filter-validation-and-late-settle-reservation.md)), sorted by id ascending
- 4. for each budget: lock row; INSERT budget_periods(period_start(now)) ON CONFLICT DO NOTHING;
+ 4. one batch (one round trip on Postgres) locks every budget row in ascending id order and, for each,
+    reads its grants, INSERTs budget_periods(period_start(now)) ON CONFLICT DO NOTHING and reads that
+    period (its start comes from the budget's period, which never changes; a locked row whose period
+    row does not match fails closed); then, per budget in id order:
     eff = cap + active grants; normalise (may record excess);
     refuse if review_required_at IS NOT NULL            -> budget_exhausted (details.reason overrun_review)
     refuse if S + H + worst > eff                       -> budget_exhausted (period budgets: budget_period_exhausted);
                                                            a session's OWN budget -> session_limit_reached, details.limit = "budget"
  5. INSERT reservation(pending, owner, lease, meta), items; H += worst on every period row; step_count += 1
+    (one batch, sent with the COMMIT)
 COMMIT
 ```
 

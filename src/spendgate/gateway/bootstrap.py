@@ -16,7 +16,7 @@ from spendgate.config.schema import BootstrapBudget, BootstrapKey
 from spendgate.core.budgets import Period, ScopeKind
 from spendgate.core.sessions import SessionDefaults
 from spendgate.ledger.admin_port import AdminLedger
-from spendgate.ledger.key_types import AdminScope, KeyKind, KeySpec
+from spendgate.ledger.key_types import AdminScope, KeyKind, KeyRecord, KeySpec
 from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import ScopeRow
 
@@ -37,6 +37,7 @@ class BootstrapReport:
     scopes: list[str] = field(default_factory=list)
     budgets: list[str] = field(default_factory=list)
     keys: list[CreatedKey] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 async def _ensure_scope(
@@ -71,10 +72,17 @@ async def _budget(
     if strict is None:
         strict = settings.config.defaults.strict_overrun
     await ledger.create_budget(
-        scope.id, Period(b.period), b.cap.nano, now=now, soft_pct=b.soft_pct,
-        model_filter=b.model_filter, strict_overrun=strict, note=f"bootstrap:{b.id}",
-        actor=ACTOR, budget_id=budget_id,
-    )  # fmt: skip
+        scope.id,
+        Period(b.period),
+        b.cap.nano,
+        now=now,
+        soft_pct=b.soft_pct,
+        model_filter=b.model_filter,
+        strict_overrun=strict,
+        note=f"bootstrap:{b.id}",
+        actor=ACTOR,
+        budget_id=budget_id,
+    )
     report.budgets.append(b.id)
 
 
@@ -84,7 +92,12 @@ def _session_defaults(k: BootstrapKey) -> SessionDefaults | None:
         return None
     budget = None if s.budget is None else s.budget.nano
     return SessionDefaults(
-        budget, s.max_steps, s.max_seconds, s.idle_seconds, s.max_new_sessions_per_hour
+        budget,
+        s.max_steps,
+        s.max_seconds,
+        s.idle_seconds,
+        s.max_new_sessions_per_hour,
+        required=k.session_required,
     )
 
 
@@ -102,9 +115,17 @@ def _spec(k: BootstrapKey, scope: ScopeRow) -> KeySpec:
         )
     models = None if k.models is None else tuple(k.models)
     return KeySpec(
-        scope.id, k.name, KeyKind.API, models, k.max_output_tokens,
-        None, k.limits.rpm, k.limits.tpm, k.limits.concurrency, _session_defaults(k),
-    )  # fmt: skip
+        scope.id,
+        k.name,
+        KeyKind.API,
+        models,
+        k.max_output_tokens,
+        None,
+        k.limits.rpm,
+        k.limits.tpm,
+        k.limits.concurrency,
+        _session_defaults(k),
+    )
 
 
 async def _key(
@@ -113,10 +134,31 @@ async def _key(
     path = k.scope if k.scope is not None else ADMIN_SCOPE_PATH
     scope = await _ensure_scope(ledger, path, now, report)
     kind = KeyKind.ADMIN if k.admin_scopes is not None else KeyKind.API
-    if any(r.name == k.name for r in await ledger.list_keys(scope.id, kind=kind)):
-        return  # a revoked key is not recreated either
+    existing = [r for r in await ledger.list_keys(scope.id, kind=kind) if r.name == k.name]
+    if existing:  # a revoked key is not recreated either
+        _warn_session_drift(k, path, existing, now, report)
+        return
     made = await keys.create_key(_spec(k, scope), actor=ACTOR, now=now)
     report.keys.append(CreatedKey(k.name, kind.value, path, made.secret))
+
+
+def _warn_session_drift(
+    k: BootstrapKey, path: str, existing: list[KeyRecord], now: int, report: BootstrapReport
+) -> None:
+    """Create-only would keep an old key's session settings silently; `session_required` is a
+    security setting, so a difference from the config is reported, never applied. Revoked and
+    expired keys (the old key after a rotation) take no calls, so they are not reported."""
+    if k.admin_scopes is not None:
+        return
+    wanted = _session_defaults(k)
+    for rec in existing:
+        live = rec.revoked_at is None and (rec.expires_at is None or now < rec.expires_at)
+        if live and rec.policy.session_defaults != wanted:
+            report.warnings.append(
+                f"key {k.name} ({path}) exists with other session_required or session_defaults "
+                f"than the config; bootstrap applies them only when it creates a key: change the "
+                f"existing key with PATCH /admin/v1/keys/{rec.id}"
+            )
 
 
 async def apply_bootstrap(
