@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- Container image: `libzstd1` is upgraded to Debian's fix for CVE-2026-124851 (zstd information
+  disclosure), which the pinned `python:3.13-slim` digest predates. The 0.2.0 images carry the
+  vulnerable package; rebuild or wait for the next release.
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
