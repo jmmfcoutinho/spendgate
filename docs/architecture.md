@@ -198,3 +198,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0019](adr/0019-otel-extra.md): ledger health metrics and the optional OpenTelemetry extra (`otel`).
 - [ADR-0021](adr/0021-short-throttle-cooldown.md): short jittered throttle cooldown and a bounded wait for a cooling deployment.
 - [ADR-0022](adr/0022-stable-error-codes.md): `calls.error_code` holds stable, documented codes.
+- [ADR-0026](adr/0026-elevenlabs-language-code.md): ElevenLabs speech accepts a validated ISO 639-1 `language_code`.
