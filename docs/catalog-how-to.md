@@ -56,6 +56,9 @@ error the ledger cannot detect; the overrun record is the safety net, not a subs
 Unverified prices are never silent. When the effective catalog (bundled plus your overrides)
 holds entries with `verified: false`, `spendgate serve` and library mode log one warning at start
 naming the count and the first few ids, and `spendgate check-config` prints the same line.
+`check-config` also warns when an unverified entry supersedes a verified one of the same id (a
+later `effective_from`, or the same one in a later file): from that date the reviewed price no
+longer applies.
 
 ## 3. Load it
 
@@ -107,9 +110,51 @@ spendgate never reads it at runtime. The proxy makes no remote fetches by design
 ([catalog-schema.md](catalog-schema.md)): a price file pulled over the network would let whoever
 controls that file, or the path to it, set any price to 0 and switch the guard off. LiteLLM is a
 third party and has had a supply-chain compromise, so the bundled catalog stays a reviewed,
-dated, sourced file, and the tooling below is for maintainers and operators at their desk.
+dated, sourced file, and the tooling below is for operators and maintainers at their desk.
 
-[`scripts/litellm_prices.py`](../scripts/litellm_prices.py) reads LiteLLM's
+**An override file for an operator: `spendgate catalog import`.** It drafts a catalog override
+file of every mappable LiteLLM model that the bundled catalog does not carry
+([ADR-0014](adr/0014-catalog-import-command.md)):
+
+```bash
+# Download LiteLLM's model_prices_and_context_window.json at one commit (full 40-hex SHA).
+spendgate catalog import --from-litellm <commit-sha> --out extra.yaml
+
+# Offline: read a copy you already have (add --from-litellm <sha> to record which commit it is).
+spendgate catalog import --from-file model_prices_and_context_window.json --out extra.yaml
+
+# Only some providers; overwrite an earlier draft.
+spendgate catalog import --from-litellm <commit-sha> --out extra.yaml --providers openai,google --force
+```
+
+- **Pinned, never live.** `--from-litellm` takes a full commit SHA, never a branch, and fetches
+  only `https://raw.githubusercontent.com/BerriAI/litellm/<sha>/model_prices_and_context_window.json`
+  (no redirects, at most 32 MiB). Nothing is fetched at serve time; the command is the only code
+  in spendgate that downloads anything, and it runs only when you run it.
+- **Every entry is `verified: false`**, with `effective_from` and `checked_on` set to today and
+  `source_url` set to the pinned file. The file header records the SHA-256 of the bytes read.
+- **Bundled ids are left alone, at draft time.** A model the installed bundled catalog prices is
+  not drafted. A later spendgate release may bundle a model you drafted; your drafted entry is
+  then dated later and wins. `check-config` warns about it (section 2). After upgrading, re-run
+  the import into a fresh file, or delete the drafted entries the release now carries.
+- **Bad entries are skipped, one by one.** Each skip is a `skipped '<key>': <reason>` line on
+  stderr, naming no value. Skipped: a value that is not a finite number (NaN, a string, a
+  boolean, an absurd exponent), a price of 0 on any meter, a long-context multiplier below 1, a
+  chat, responses or messages model without a whole `max_output_tokens` (never a guessed or
+  rounded ceiling), and anything that would not load. The finished file is checked against the
+  bundled catalog before it is written.
+- **Never overwrites** an existing `--out` unless you pass `--force`, which replaces it in one
+  rename, so a failure leaves the old file whole.
+- Exit codes: 0 written; 2 bad command line or the file exists; 3 the input is not LiteLLM's
+  JSON or nothing could be drafted; 5 the download failed.
+
+Then load it like any override (`catalog.paths`, section 3) and run `spendgate check-config`: the
+start-up warning in section 2 lists the unverified entries. The risk is yours: a stale or tampered
+number there is a wrong charge in your ledger. Read it first, prefer a handful of checked entries,
+and do section 2 for each model you rely on.
+
+**Maintainer tooling.** [`scripts/litellm_prices.py`](../scripts/litellm_prices.py) shares the
+command's mapping and reads LiteLLM's
 `model_prices_and_context_window_backup.json` from one pinned commit of `BerriAI/litellm` (the
 default is hard-coded in the script; `--commit <sha>` picks another, `--file <path>` reads a local
 copy). It records the SHA-256 of the bytes it read and never writes into `prices.yaml`.
@@ -122,7 +167,7 @@ uv run python scripts/litellm_prices.py diff --commit <sha> --threshold 0.5 --ou
 # Draft entries for models we do not carry yet (prints YAML; --out writes a file).
 uv run python scripts/litellm_prices.py import gpt-6-luna gemini/gemini-4-carbon --out draft.yaml
 
-# Breadth for an operator: a full override file of every mappable LiteLLM model we do not carry.
+# The same kind of override file as `spendgate catalog import`, from the script's pinned commit.
 uv run python scripts/litellm_prices.py override --out litellm-extra.yaml
 ```
 
@@ -147,7 +192,5 @@ stores. Entries that deliberately hold an upper bound (the highest regional mete
 against LiteLLM's latest `main` commit every Monday, fails when prices disagree and uploads the
 report as an artifact.
 
-**The `override` file** is for operators who prefer breadth over audit: every entry is
-`verified: false`, so the start-up warning in section 2 lists them. The risk is yours: a stale or
-tampered number there is a wrong charge in your ledger. Load it like any override
-(`catalog.paths`, section 3) only after reading the diff, and prefer a handful of checked entries.
+**The script's `override` command** writes the same kind of file from the script's pinned commit;
+operators use `spendgate catalog import` instead, which needs no checkout of this repository.

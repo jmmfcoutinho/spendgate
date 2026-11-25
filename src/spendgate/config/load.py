@@ -115,6 +115,18 @@ class Settings:
         """One warning line naming the catalog entries with `verified: false`, or None."""
         return unverified_summary(self.catalog)
 
+    def superseded_summary(self) -> str | None:
+        """One warning line when an unverified entry supersedes a verified one, or None."""
+        ids = self.catalog.unverified_over_verified()
+        if not ids:
+            return None
+        more = f" and {len(ids) - _IDS_SHOWN} more" if len(ids) > _IDS_SHOWN else ""
+        verb = "entry supersedes" if len(ids) == 1 else "entries supersede"
+        return (
+            f"{len(ids)} unverified catalog {verb} a verified price of the same id: "
+            f"{', '.join(ids[:_IDS_SHOWN])}{more}"
+        )
+
     def unmatched_filters(self) -> list[str]:
         """A warning per bootstrap budget whose `model_filter` matches no routed catalog id.
 
@@ -158,6 +170,7 @@ class CheckReport:
     unpriced: tuple[str, ...]  # routed catalog ids without a price
     unverified: str | None = None  # warning line when the catalog has unverified prices
     unmatched_filters: tuple[str, ...] = ()  # bootstrap budgets whose filter matches no route
+    superseded: str | None = None  # warning line when unverified entries replace verified ones
 
     @property
     def ok(self) -> bool:
@@ -435,4 +448,7 @@ def check_config(
     except ConfigError as exc:
         errors = tuple(f"{p}: {m}" if p else m for p, m in exc.issues)
         return CheckReport(errors, tuple(sorted(set(unpriced))))
-    return CheckReport((), (), settings.unverified_summary(), tuple(settings.unmatched_filters()))
+    return CheckReport(
+        (), (), settings.unverified_summary(), tuple(settings.unmatched_filters()),
+        settings.superseded_summary(),
+    )  # fmt: skip

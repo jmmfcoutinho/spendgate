@@ -18,6 +18,8 @@ import pytest
 import yaml
 from jsonschema import Draft202012Validator
 
+from spendgate.core import litellm as mapping
+
 REPO = Path(__file__).resolve().parents[2]
 DATA = REPO / "tests" / "data" / "litellm"
 TODAY = date(2026, 11, 18)
@@ -73,7 +75,7 @@ def findings(rep: Any, entry_id: str) -> dict[str, Any]:
 )
 def test_conversion_is_exact_decimal_arithmetic(literal: str, factor: int, expected: str) -> None:
     value = json.loads(literal, parse_float=Decimal)
-    assert lp.dec_str(lp.scale(value, Decimal(factor))) == expected
+    assert lp.dec_str(mapping.scale(value, Decimal(factor))) == expected
 
 
 def test_dec_str_never_uses_an_exponent_and_matches_the_schema_pattern() -> None:
@@ -89,9 +91,9 @@ def test_dec_str_never_uses_an_exponent_and_matches_the_schema_pattern() -> None
 
 def test_floats_and_booleans_are_not_numbers() -> None:
     with pytest.raises(lp.InputError):
-        lp.to_decimal(0.1)
+        mapping.to_decimal(0.1)
     with pytest.raises(lp.InputError):
-        lp.to_decimal(True)
+        mapping.to_decimal(True)
 
 
 def test_a_non_json_file_is_an_input_error() -> None:
