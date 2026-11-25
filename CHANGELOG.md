@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Google: a provider 401, 402, 403 or 404 is `upstream_unavailable` (502, our key, billing or model
+  config), as protocol.md 4.2 rule 1 says. A Gemini API account out of prepaid credit (402
+  `RESOURCE_EXHAUSTED`) was reported to the client as `invalid_request` (400). The charge (0, nothing
+  processed) is unchanged.
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**

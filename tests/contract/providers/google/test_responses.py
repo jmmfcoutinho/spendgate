@@ -293,6 +293,19 @@ def test_a_bad_api_key_or_missing_permission_is_our_fault_not_the_callers() -> N
     )
 
 
+def test_an_account_out_of_prepaid_credit_is_upstream_unavailable_not_invalid_request() -> None:
+    # The Gemini API's answer to an account with no prepaid credit left (seen live 2026-11-25).
+    message = "Your prepayment credits are depleted."
+    credit = {"error": {"code": 402, "status": "RESOURCE_EXHAUSTED", "message": message}}
+    err = provider().error(UpstreamResponse(402, {}, json.dumps(credit).encode()))
+    free = catalog().free_statuses("google")
+    assert err.code is ErrorCode.UPSTREAM_UNAVAILABLE and err.status == 402
+    assert not err.not_processed(free)  # only 429 fails over for free; the charge rule is unchanged
+    for status in (401, 403, 404):  # our key or model config, even without a status name
+        bare = provider().error(UpstreamResponse(status, {}, b"{}"))
+        assert bare.code is ErrorCode.UPSTREAM_UNAVAILABLE
+
+
 def test_catalog_free_statuses_for_google_is_429_only() -> None:
     assert catalog().free_statuses("google") == frozenset({429})
 
