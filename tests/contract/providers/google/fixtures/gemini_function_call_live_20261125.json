@@ -1,0 +1,38 @@
+{"_note": "Captured from the live API on 2026-11-25 (spendgate 0.2.0 smoke test, issue #9), gemini-3.5-flash-lite, Gemini API (generativelanguage.googleapis.com); ids and signatures replaced with fakes.", 
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "functionCall": {
+              "name": "get_weather",
+              "args": {
+                "city": "Lisbon"
+              },
+              "id": "call_00000000000000000001"
+            },
+            "thoughtSignature": "Zml4dHVyZS10aG91Z2h0LXNpZ25hdHVyZS0y"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0,
+      "finishMessage": "Model generated function call(s)."
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 53,
+    "candidatesTokenCount": 17,
+    "totalTokenCount": 70,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 53
+      }
+    ],
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.5-flash-lite",
+  "responseId": "Fixture000000000000003"
+}

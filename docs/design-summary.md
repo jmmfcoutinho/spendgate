@@ -38,7 +38,7 @@
 | [catalog-schema.md](./catalog-schema.md) (+ `.json`, example) | Price file format; every price of a private tool that predates spendgate, expressed as data |
 | [threat-model.md](./threat-model.md) | 20 threats, controls, test ids, 6 accepted risks |
 | [CONTRIBUTING.md](../CONTRIBUTING.md) + `lightweight_report.py` | Code style, tests, quality gates, size report, release process |
-| [reviews/](reviews/) | Code, security, load, verification and live-smoke reviews of v0.1, with findings and severities |
+| [reviews/](reviews/) | Code, security, load, verification and live-smoke reviews of v0.1 and the v0.2 live smoke test, with findings and severities |
 
 ## Accepted risks in v0.1
 

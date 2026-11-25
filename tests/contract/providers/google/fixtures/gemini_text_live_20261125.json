@@ -1,0 +1,31 @@
+{"_note": "Captured from the live API on 2026-11-25 (spendgate 0.2.0 smoke test, issue #9), gemini-3.5-flash-lite, Gemini API (generativelanguage.googleapis.com); ids and signatures replaced with fakes.", 
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "OK",
+            "thoughtSignature": "Zml4dHVyZS10aG91Z2h0LXNpZ25hdHVyZS0x"
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "index": 0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 8,
+    "candidatesTokenCount": 1,
+    "totalTokenCount": 9,
+    "promptTokensDetails": [
+      {
+        "modality": "TEXT",
+        "tokenCount": 8
+      }
+    ],
+    "serviceTier": "standard"
+  },
+  "modelVersion": "gemini-3.5-flash-lite",
+  "responseId": "Fixture0000000000000002"
+}
