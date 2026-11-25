@@ -692,7 +692,7 @@ components:
       properties:
         period: {$ref: '#/components/schemas/Period'}
         cap: {$ref: '#/components/schemas/Money'}
-        soft_pct: {type: integer, minimum: 1, maximum: 99, default: 80, description: Warning threshold in percent, never blocks}
+        soft_pct: {type: integer, minimum: 1, maximum: 99, default: 80, description: 'Warning threshold in percent, never blocks'}
         model_filter: {type: [string, 'null'], description: 'Case-sensitive glob over the catalog id (provider/model, such as openai/gpt-6-*), never over aliases; null means all models. A filter that matches no routed catalog id is refused with invalid_request (param model_filter).'}
         strict_overrun:
           type: boolean
@@ -821,9 +821,9 @@ components:
         usage_cost_nano: {type: [integer, 'null'], minimum: 0, description: Cost computed from reported usage; null when no usage was seen}
         hold_nano: {type: integer, minimum: 0}
         overrun_nano: {type: integer, minimum: 0}
-        http_status: {type: [integer, 'null'], minimum: 100, maximum: 599, description: The HTTP status the provider answered this attempt with (for a stream, the opened response); null when the request was never sent or no response arrived (connect failure, timeout before headers, cancel before the answer, sweeper expiry)}
+        http_status: {type: [integer, 'null'], minimum: 100, maximum: 599, description: 'The HTTP status the provider answered this attempt with (for a stream, the opened response); null when the request was never sent or no response arrived (connect failure, timeout before headers, cancel before the answer, sweeper expiry)'}
         outcome: {$ref: '#/components/schemas/Outcome'}
-        error_code: {type: [string, 'null']}
+        error_code: {type: [string, 'null'], description: 'Why the attempt failed: a stable code listed in data-model.md (calls.error_code values); older rows may hold a legacy exception class name; null when none applies'}
         streamed: {type: boolean}
         settled_by: {type: string, enum: [owner, sweeper]}
         review_required_at: {type: [string, 'null'], format: date-time}

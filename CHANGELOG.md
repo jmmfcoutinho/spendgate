@@ -93,6 +93,15 @@ All notable changes to this project are documented here. The format follows
   transaction re-run). Money rules and the header's meaning are unchanged. See
   [operations](docs/operations.md#postgres-connections) and
   [the load review](docs/reviews/load-v0.1.md).
+- `calls.error_code` holds stable, documented codes
+  ([ADR-0022](docs/adr/0022-stable-error-codes.md)). Transport and stream failures
+  are stored as `connect_error`, `read_timeout`, `write_error`, `remote_protocol_error`,
+  `response_too_large`, `stream_malformed`, `stream_limit_exceeded` and so on instead of the
+  exception class name (`ConnectError`, `ReadTimeout`, `StreamLimitExceeded`), which could change
+  with an HTTP client upgrade. Stop reasons and gateway faults are `StopReason` and
+  `AttemptError` enums in `core.failures`, so mypy rejects an unknown one. Every value is listed
+  in [data-model](docs/data-model.md#callserror_code-values); existing rows keep their values,
+  listed there as legacy. Charges are unchanged.
 
 ### Fixed
 

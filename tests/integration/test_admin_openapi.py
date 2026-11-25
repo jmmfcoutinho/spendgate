@@ -33,6 +33,28 @@ def _date(value: object) -> bool:
     return not isinstance(value, str) or bool(datetime.strptime(value, "%Y-%m-%d"))
 
 
+def _nodes(node: object, path: str = "") -> list[tuple[str, dict[str, Any]]]:
+    """Every mapping in the spec with its path, depth first."""
+    if isinstance(node, list):
+        return [n for i, item in enumerate(node) for n in _nodes(item, f"{path}[{i}]")]
+    if not isinstance(node, dict):
+        return []
+    found = [(path, node)]
+    for key, value in node.items():
+        found += _nodes(value, f"{path}/{key}")
+    return found
+
+
+def test_the_spec_parses_without_empty_keys_and_every_description_is_text() -> None:
+    """An unquoted comma inside a `{...}` flow mapping splits a description into stray keys
+    with no value; quote such descriptions."""
+    stray = [f"{path}/{key}" for path, node in _nodes(SPEC) for key, v in node.items() if v is None]
+    assert stray == []
+    texts = [(p, n) for p, n in _nodes(SPEC) if not p.endswith("/properties")]  # not a field name
+    bad = [path for path, node in texts if not isinstance(node.get("description", ""), str)]
+    assert bad == []
+
+
 def documented() -> dict[tuple[str, str], dict[str, Any]]:
     return {
         (m.upper(), path): op

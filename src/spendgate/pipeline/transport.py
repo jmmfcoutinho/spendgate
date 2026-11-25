@@ -12,12 +12,16 @@ cannot have done work; anything later may have reached it and counts as sent (ch
 | WriteError, WriteTimeout (a partial write may have arrived)       | yes           |
 | ReadError, ReadTimeout, RemoteProtocolError, LocalProtocolError   | yes           |
 | any other transport or decoding error, response over the cap      | yes           |
+
+Each failure is recorded under a stable `AttemptError` code, never the class name: those move
+between httpx releases, and `calls.error_code` is a documented list (data-model.md).
 """
 
 from dataclasses import dataclass
 
 import httpx
 
+from spendgate.core.failures import AttemptError
 from spendgate.pipeline.model import Sender
 from spendgate.providers.port import UpstreamRequest, UpstreamResponse
 
@@ -30,20 +34,38 @@ _NEVER_SENT = (
     httpx.ProxyError,
     httpx.UnsupportedProtocol,
 )
+# Most specific first: the first class the exception is an instance of names it.
+_CODES: tuple[tuple[type[Exception], AttemptError], ...] = (
+    (httpx.ConnectError, AttemptError.CONNECT_ERROR),
+    (httpx.ConnectTimeout, AttemptError.CONNECT_TIMEOUT),
+    (httpx.PoolTimeout, AttemptError.POOL_TIMEOUT),
+    (httpx.ProxyError, AttemptError.PROXY_ERROR),
+    (httpx.UnsupportedProtocol, AttemptError.UNSUPPORTED_PROTOCOL),
+    (httpx.WriteError, AttemptError.WRITE_ERROR),
+    (httpx.WriteTimeout, AttemptError.WRITE_TIMEOUT),
+    (httpx.ReadError, AttemptError.READ_ERROR),
+    (httpx.ReadTimeout, AttemptError.READ_TIMEOUT),
+    (httpx.CloseError, AttemptError.CLOSE_ERROR),
+    (httpx.RemoteProtocolError, AttemptError.REMOTE_PROTOCOL_ERROR),
+    (httpx.LocalProtocolError, AttemptError.LOCAL_PROTOCOL_ERROR),
+    (httpx.DecodingError, AttemptError.DECODING_ERROR),
+    (httpx.TooManyRedirects, AttemptError.TOO_MANY_REDIRECTS),
+    (httpx.HTTPError, AttemptError.TRANSPORT_ERROR),
+)
 
 
 @dataclass(frozen=True, slots=True)
 class SendFailure:
     sent: bool
     timeout: bool  # a timeout after send is reported as 504
-    kind: str  # exception class name, for logs; never the message (it may hold a URL)
+    code: AttemptError  # never the exception message (it may hold a URL)
 
 
 class SendError(Exception):
     """The upstream exchange failed; `failure` says whether the request left."""
 
     def __init__(self, failure: SendFailure) -> None:
-        super().__init__(failure.kind)
+        super().__init__(failure.code.value)
         self.failure = failure
 
 
@@ -54,7 +76,15 @@ class ResponseTooLarge(Exception):
 def classify(exc: Exception) -> SendFailure:
     """Map any exception raised while sending to the table above (unknown means sent)."""
     sent = not isinstance(exc, _NEVER_SENT)
-    return SendFailure(sent, isinstance(exc, httpx.TimeoutException), type(exc).__name__)
+    return SendFailure(sent, isinstance(exc, httpx.TimeoutException), error_code(exc))
+
+
+def error_code(exc: Exception) -> AttemptError:
+    """The stable code of a send failure; anything unlisted is `unexpected_error`."""
+    for cls, code in _CODES:
+        if isinstance(exc, cls):
+            return code
+    return AttemptError.UNEXPECTED_ERROR
 
 
 def build(up: UpstreamRequest) -> httpx.Request:
@@ -78,7 +108,9 @@ async def read_body(response: httpx.Response, max_bytes: int) -> UpstreamRespons
             if len(body) > max_bytes:
                 raise ResponseTooLarge
     except ResponseTooLarge as exc:
-        raise SendError(SendFailure(sent=True, timeout=False, kind="ResponseTooLarge")) from exc
+        raise SendError(
+            SendFailure(sent=True, timeout=False, code=AttemptError.RESPONSE_TOO_LARGE)
+        ) from exc
     except Exception as exc:
         raise SendError(classify(exc)) from exc
     finally:

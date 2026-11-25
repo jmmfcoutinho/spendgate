@@ -1,5 +1,6 @@
 """`Leases`: which streams a heartbeat aborts, without a ledger."""
 
+from spendgate.core.failures import StopReason
 from spendgate.pipeline.leases import Leases
 
 LEASE, BEAT = 60_000, 20_000
@@ -7,9 +8,9 @@ LEASE, BEAT = 60_000, 20_000
 
 class FakeStream:
     def __init__(self) -> None:
-        self.reasons: list[str] = []
+        self.reasons: list[StopReason] = []
 
-    def abort(self, reason: str) -> None:
+    def abort(self, reason: StopReason) -> None:
         self.reasons.append(reason)
 
     async def aclose(self) -> None:

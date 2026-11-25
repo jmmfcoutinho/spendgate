@@ -12,6 +12,7 @@ from typing import Protocol
 
 from spendgate.core.budgets import Budget, BudgetAlert, Period, ScopeKind, SoftWarning
 from spendgate.core.errors import Refusal
+from spendgate.core.failures import CallErrorCode
 from spendgate.core.outcomes import Outcome, ReservationState
 from spendgate.core.policy import KeyPolicy, KillSwitch, Plan
 from spendgate.ledger.key_types import (
@@ -199,7 +200,7 @@ class AttemptRecord:
     usage_cost_nano: int | None = None  # None when no usage was seen
     usage: Usage = field(default_factory=Usage)
     http_status: int | None = None
-    error_code: str | None = None
+    error_code: CallErrorCode | None = None  # a documented code (data-model.md), never free text
     streamed: bool = False
     review_required: bool = False  # the C-22 sanity flag; the usage is still booked in full
     latency_ms: int | None = None
