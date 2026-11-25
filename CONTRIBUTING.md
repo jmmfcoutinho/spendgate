@@ -83,7 +83,7 @@ Raising a limit needs an ADR.
 - **Commit as yourself.** Commit messages, pull request titles and descriptions carry no assistant trailers, session links or generated-content markers, and a commit's author and committer are people, never a coding assistant's own git identity. `scripts/check-commit-message.sh` and `scripts/check-commit-identity.sh` enforce this in CI and as commit-msg hooks.
 - **Pull requests** use `.github/pull_request_template.md`: what and why; the rule or target affected; tests added (named for the rule); gate output (including the lightweight report delta); ADR link if public behaviour changed; checklist (docs, CHANGELOG, no new runtime dependency without justification).
 - **ADR** (`docs/adr/NNNN-title.md`) for any public behaviour change: config format, error codes, endpoints, ledger schema, default policy, a new runtime dependency, a raised size limit.
-- **SemVer**: 0.x while the API settles (minor = may break, patch = fixes); 1.0 freezes the SDK, config, error codes and migrations. Migrations are append-only.
+- **SemVer**: 0.x while the API settles (minor = may break, patch = fixes); 1.0 freezes the SDK, config, error codes and migrations. Migrations are append-only and follow expand/contract ([operations](docs/operations.md#upgrades-and-rollbacks), ADR-0018).
 - **CHANGELOG.md** in Keep a Changelog format (`Added / Changed / Deprecated / Removed / Fixed / Security`), updated in the PR, not at release time.
 - Review: one approval, plus a security-focused review for anything touching `core/`, `ledger/`, auth, key handling or the perimeter.
 

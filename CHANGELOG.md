@@ -20,6 +20,14 @@ All notable changes to this project are documented here. The format follows
 - `spendgate check-config` warns when a `verified: false` catalog entry supersedes a verified
   entry of the same id, for example a drafted entry for a model a later release bundles. Re-run
   the import or delete such entries after upgrading.
+- `serve --migrate` and the config key `ledger.auto_migrate`, and expand/contract migrations: a
+  migration marked `-- compatible_with_previous: true` is recorded as such
+  (`schema_migrations.compatible`), and code starts on a schema exactly one such step ahead, so
+  the previous release can run after an upgrade's migration. Postgres commits each migration on
+  its own. A lint test checks new migrations (a Postgres `CHECK` needs `NOT VALID` and a later
+  `VALIDATE`; a compatible migration may not be destructive or add a constraint). Upgrade and rollback runbook in
+  [operations](docs/operations.md#upgrades-and-rollbacks); see
+  [ADR-0018](docs/adr/0018-migration-policy.md).
 - `server.keep_alive_seconds` (default 75) and `server.graceful_shutdown_seconds` (default 30),
   passed to uvicorn on the data and admin listeners. Keep-alive was uvicorn's 5 s, below common
   load balancer idle timeouts. The drain after `SIGTERM` now ends at the deadline: calls still
@@ -70,6 +78,11 @@ All notable changes to this project are documented here. The format follows
   Keys already stored keep the session limits they were created with. The example config has
   an agent key with `session_required` and these limits, and `how-money-is-protected.md` states
   the overrun bound at a cap crossing that the concurrency limit gives.
+- `serve` no longer migrates a Postgres ledger at start: on a schema that is behind it refuses
+  with exit code 5 and says to run `spendgate migrate` (or start with `serve --migrate`, or set
+  `ledger.auto_migrate: true`). SQLite still migrates at start by default. The `--local` admin
+  commands follow the same setting, and a ledger error at start is printed as one `error:` line
+  instead of a traceback. The Compose and local guides run `migrate` before `up`.
 
 ### Fixed
 

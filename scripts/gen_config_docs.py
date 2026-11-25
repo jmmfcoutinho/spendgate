@@ -118,6 +118,12 @@ D: dict[str, str] = {
         "Calls older than this many whole UTC days are deleted once a day. Usage reports cover "
         "only this window."
     ),
+    "Ledger.auto_migrate": (
+        "Whether `serve` applies pending migrations at start. Unset means `true` for SQLite "
+        "(one file on one host) and `false` for Postgres. When false, `serve` refuses a schema "
+        "that is behind and says to run `spendgate migrate` (or `serve --migrate`): see "
+        "[upgrades](operations.md#upgrades-and-rollbacks)."
+    ),
     "SqliteLedger.kind": "Always `sqlite`.",
     "SqliteLedger.path": (
         "Database file. A relative path is relative to the config file. The file must be mode "

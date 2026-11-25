@@ -88,6 +88,18 @@ class Ledger(_Strict):
     heartbeat_seconds: PosInt | None = None  # default lease/3 (ledger-state-machine.md)
     sweep_seconds: PosInt = 30  # how often the server charges and releases expired holds
     retention_days: PosInt = 90
+    auto_migrate: bool | None = None  # None: SQLite yes, Postgres no (ADR-0018)
+
+    @property
+    def migrates_on_start(self) -> bool:
+        """Whether `serve` (and `--local`) may apply pending migrations without `--migrate`.
+
+        SQLite is one file on one host, so nothing older can be running on it while this
+        process starts. Postgres is shared: a schema change there is an operator's step.
+        """
+        if self.auto_migrate is not None:
+            return self.auto_migrate
+        return self.backend.kind == "sqlite"
 
     @model_validator(mode="after")
     def _heartbeat_inside_lease(self) -> Self:

@@ -1,7 +1,7 @@
 # Operations
 
-Day-two tasks for a running proxy: backups, keys, the kill switch, usage, retention, Postgres
-connections, the sweeper, draining on restart, a ledger outage or failover, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
+Day-two tasks for a running proxy: backups, upgrades and rollbacks, keys, the kill switch, usage,
+retention, Postgres connections, the sweeper, draining on restart, a ledger outage or failover, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
 the [configuration reference](configuration.md).
 
 Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
@@ -13,7 +13,7 @@ any other host exits with code 3: pass `--url` or set `SPENDGATE_URL` for a remo
 proxy, add `--local` instead: it opens the ledger from `--config` directly and needs no key (in
 Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output. These
 three flags belong to the admin commands; `serve`, `migrate` and `check-config` take only
-`--config`, and `catalog import` (drafting an override file from LiteLLM's price file,
+`--config` (plus `serve --migrate`, `serve --no-bootstrap` and `migrate --bootstrap`), and `catalog import` (drafting an override file from LiteLLM's price file,
 [catalog how-to section 6](catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)) takes neither. `spendgate --version` prints the installed version.
 Exit codes: 0 ok, 1 refused by the server, 2 bad command line, 3 bad configuration, 4 no or wrong
 admin key, 5 cannot reach the API or the ledger.
@@ -43,6 +43,68 @@ version.
 
 **Also keep** the key pepper (`server.key_pepper`) with the backup, stored separately from it.
 Stored key hashes depend on it: lose or change the pepper and every key stops working.
+
+## Upgrades and rollbacks
+
+Migrations are numbered SQL files shipped in the package. Each ledger records the ones applied to
+it in `schema_migrations`, with a checksum (an applied file that changed is refused) and whether the
+step is compatible with the previous release. There are no down migrations: a rollback is either
+the previous release on a compatible schema, or a restore. The reasoning is in
+[ADR-0018](adr/0018-migration-policy.md).
+
+**When migrations run.** `spendgate migrate --config spendgate.yaml` applies every pending
+migration and exits. `serve` applies them only with `serve --migrate` or `ledger.auto_migrate:
+true`; otherwise it checks the schema and, if it is behind, refuses to start with exit code 5 and
+`error: the ledger schema is at version N and this spendgate needs M: run spendgate migrate ...`.
+Unset, `auto_migrate` is `true` for SQLite (one file on one host, so nothing older can be running on
+it) and `false` for Postgres. The `--local` admin commands follow the same setting; library mode
+(SQLite) always migrates.
+
+**What a release accepts.** A release starts on a schema that is current, or exactly one version
+ahead when that newer migration is marked compatible (an expand step: it only adds a nullable column
+or one with a default, a table without foreign keys or a non-unique index). A new constraint,
+`NOT VALID` or not, a unique index or a foreign key is a contract step: the previous release could
+write a row it rejects and fail mid-call. Anything newer is refused with `the ledger was migrated by
+a newer spendgate`. The changelog of each release says whether it has migrations and whether they
+are compatible.
+
+**Upgrade (Postgres, any number of instances):**
+
+1. Read the release's changelog entry for migrations.
+2. Back up: `pg_dump --format=custom` (see [Backups](#backups)).
+3. Run the new release's `spendgate migrate --config spendgate.yaml` once, as a one-off job (in
+   Compose: `docker compose --profile postgres run --rm spendgate migrate`). Migrators on several
+   hosts are serialised by an advisory lock, and each migration commits on its own: if one fails,
+   the schema stays at the last one that committed; fix the cause and run `migrate` again.
+   Instances that start meanwhile wait for the lock, which a migrator holds until its last step,
+   then check the result.
+4. If every new migration is compatible, the old instances keep working: replace them one at a
+   time (see [Draining on restart](#draining-on-restart)). If one is not (a contract step), stop the
+   old instances before step 3 and start the new release after it.
+
+**Upgrade (SQLite):** stop the proxy, take an online backup, install the new release, run
+`spendgate migrate` (or let `serve` do it: `auto_migrate` is on for SQLite), start.
+
+**Rollback:**
+
+- **Schema one compatible step ahead:** start the previous release; it accepts the schema. Nothing
+  to undo. Run `migrate` with the newer release again when you roll forward (it has nothing left
+  to apply).
+- **Anything else** (a contract step, or two releases back): the previous release refuses the
+  schema. Restore the backup taken in step 2 with `pg_restore` (spend booked after the backup is
+  lost from the books, as with any restore), or roll forward to a fixed release.
+
+**Writing a migration** (contributors): add `NNNN_name.sql` for both dialects with the same number
+and name. Mark an expand step with the line `-- compatible_with_previous: true` in both files; a
+marked migration must not drop anything but a constraint, an index or `NOT NULL`, rename, retype,
+delete rows, add a `NOT NULL` column without a default, or tighten (add a constraint, a unique index
+or a foreign key). On
+Postgres a `CHECK` is added by name and `NOT VALID`, then validated with `VALIDATE CONSTRAINT` in a
+later migration, so the table is not scanned under the lock that adding the constraint takes; a
+`CHECK` on a new column goes in its own `ADD CONSTRAINT`, since a column constraint cannot be
+`NOT VALID`.
+`tests/unit/test_migration_lint.py` enforces these rules. A release that should stay
+rollback-safe ships at most one migration, and marks it compatible.
 
 ## Keys
 
@@ -165,8 +227,8 @@ A lock timeout (SQLSTATE 55P03) or a cancelled statement (57014) is refused as
 `ledger_unavailable` and not retried: a row held for 2 s is most likely still held a moment
 later. Deadlocks (40P01) and serialization failures (40001) are still retried, up to 3 times;
 keep `lock_timeout` above the server's `deadlock_timeout` (1 s by default) so a deadlock is
-reported as one. Migrations at start (`serve`, `spendgate migrate`) run without these timeouts,
-because they may wait for another instance's migration. The reasoning is in
+reported as one. Migrations (`spendgate migrate`, `serve --migrate`) and the schema check at
+start run without these timeouts, because they may wait for another instance's migration. The reasoning is in
 [ADR-0012](adr/0012-bounded-ledger-waits.md).
 
 **Overriding.** A value you set wins. The timeouts are applied only where the server still

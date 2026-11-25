@@ -91,7 +91,10 @@ def test_a_migration_edited_after_it_was_applied_is_refused(rig: Rig) -> None:
 def test_a_database_from_a_newer_spendgate_is_refused(rig: Rig) -> None:
     rig.ledger.close()  # type: ignore[attr-defined]
     conn = raw(rig)
-    conn.execute("INSERT INTO schema_migrations VALUES (99, 'future', 'x', 0)")
+    conn.execute(
+        "INSERT INTO schema_migrations (version, name, checksum, applied_at) "
+        "VALUES (99, 'future', 'x', 0)"
+    )
     conn.commit()
     conn.close()
     with pytest.raises(LedgerUnavailable, match="newer"):

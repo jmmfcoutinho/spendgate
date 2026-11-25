@@ -7,8 +7,13 @@
 # Provider keys, the key pepper and the database URL are Docker secrets files: they reach only the
 # spendgate container, never an app container's environment or filesystem.
 #
-#   SQLite (default):  docker compose up -d --build
-#   Postgres:          SPENDGATE_LEDGER=postgres docker compose --profile postgres up -d --build
+# Migrating is its own step, before `up` (docs/operations.md, Upgrades and rollbacks):
+#   SQLite (default):  docker compose build && docker compose run --rm spendgate migrate
+#                      docker compose up -d
+#   Postgres:          export SPENDGATE_VARIANT=full SPENDGATE_LEDGER=postgres
+#                      docker compose --profile postgres build
+#                      docker compose --profile postgres run --rm spendgate migrate
+#                      docker compose --profile postgres up -d
 name: spendgate
 
 x-hardening: &hardening

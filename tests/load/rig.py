@@ -230,4 +230,5 @@ async def build_world(  # noqa: PLR0913
 
 
 def open_runtime_for(rig: Rig) -> AbstractAsyncContextManager[Runtime]:
-    return open_runtime(rig.settings())
+    """Migrates, as `spendgate migrate` would, so the gateways start on a current schema."""
+    return open_runtime(rig.settings(), migrate=True)

@@ -180,3 +180,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0009](adr/0009-review-hardening.md): behaviour changes from the v0.1 code and security reviews.
 - [ADR-0010](adr/0010-calls-http-status.md): `calls.http_status` is the provider's status, range-checked (migration 0004).
 - [ADR-0015](adr/0015-readiness-and-shutdown.md): a kill switch leaves readiness alone; keep-alive and drain deadline settings.
+- [ADR-0018](adr/0018-migration-policy.md): migrations are a separate step (`serve` migrates Postgres only when asked); code accepts one compatible step ahead.

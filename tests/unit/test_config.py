@@ -248,6 +248,26 @@ def test_heartbeat_must_be_shorter_than_lease(tmp_path: Path) -> None:
     assert "heartbeat_seconds must be shorter" in failure(write(tmp_path, text))
 
 
+SQLITE_BACKEND = "backend: {kind: sqlite, path: ./l.db}"
+POSTGRES_BACKEND = 'backend: {kind: postgres, dsn: "env:SPENDGATE_DATABASE_URL"}'
+
+
+@pytest.mark.parametrize(
+    ("ledger", "migrates"),
+    [
+        (SQLITE_BACKEND, True),  # one file on one host: nothing older can run on it
+        (POSTGRES_BACKEND, False),  # shared: migrating is the operator's step (ADR-0018)
+        ("auto_migrate: false, " + SQLITE_BACKEND, False),
+        ("auto_migrate: true, " + POSTGRES_BACKEND, True),
+    ],
+)
+def test_auto_migrate_defaults_by_backend_and_an_explicit_value_wins(
+    tmp_path: Path, ledger: str, migrates: bool
+) -> None:
+    text = BASE.replace(SQLITE_BACKEND, ledger)
+    assert load(write(tmp_path, text), env=ENV).config.ledger.migrates_on_start is migrates
+
+
 def test_plain_http_only_for_loopback(tmp_path: Path) -> None:
     bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", "http://api.openai.com/v1"))
     assert "models.m.deployments.0.base_url" in failure(bad)
