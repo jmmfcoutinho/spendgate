@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from spendgate.core.errors import ErrorCode, Refusal
+from spendgate.core.pepper import MIN_PEPPER_BYTES
 from spendgate.core.policy import KeyPolicy
 from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.key_types import (
@@ -48,7 +49,6 @@ from spendgate.ledger.key_types import (
 
 PREFIX_HEX: Final = 12
 SECRET_HEX: Final = 48
-MIN_PEPPER_BYTES: Final = 16
 _KIND_TAG: Final = {KeyKind.API: "sg", KeyKind.ADMIN: "sga"}
 _KEY = re.compile(rf"(sga?)-([0-9a-f]{{{PREFIX_HEX}}})-([0-9a-f]{{{SECRET_HEX}}})")
 _MAX_KEY_LEN: Final = 4 + PREFIX_HEX + 1 + SECRET_HEX
@@ -90,6 +90,7 @@ def parse_key(raw: str) -> ParsedKey | None:
 
 
 def hash_secret(secret: str, pepper: bytes) -> str:
+    # The config already refuses a short pepper (exit 3); this guards every other caller.
     if len(pepper) < MIN_PEPPER_BYTES:
         raise ValueError(f"the key pepper must be at least {MIN_PEPPER_BYTES} bytes")
     return hmac.new(pepper, secret.encode(), hashlib.sha256).hexdigest()

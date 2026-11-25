@@ -21,6 +21,14 @@ All notable changes to this project are documented here. The format follows
   value is `invalid_request` with `param: language_code`; OpenAI and Azure OpenAI speech still
   refuse the field ([ADR-0026](docs/adr/0026-elevenlabs-language-code.md)).
 
+### Fixed
+
+- A `server.key_pepper` shorter than 16 bytes is a configuration error naming the setting
+  ("server.key_pepper: must be at least 16 bytes", exit code 3) for `check-config`, `serve`,
+  `migrate` and every `--local` command. `check-config` used to report "configuration ok" and the
+  others ended in a `ValueError` traceback (exit 1); nothing started either way. The pepper's
+  value is never shown, and the key store still refuses a short pepper on its own.
+
 ### Security
 
 - Every test id the threat model cites now has a test (review finding SR-10): new tests for
