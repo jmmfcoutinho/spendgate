@@ -255,6 +255,22 @@ def test_plain_http_only_for_loopback(tmp_path: Path) -> None:
     assert load(ok, env=ENV).routes["m"].deployments[0].base_url == "http://127.0.0.1:9000/v1"
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://x.test?x=@127.0.0.1/v1",
+        "http://x.test#@localhost/v1",
+        "http://local\thost/v1",
+        "http://x.test\r\n@localhost/v1",
+    ],
+)
+def test_plain_http_is_judged_by_the_host_the_client_parses(tmp_path: Path, url: str) -> None:
+    # Written as YAML escapes inside the double-quoted scalar, so the loader sees the raw bytes.
+    escaped = url.encode("unicode_escape").decode()
+    bad = write(tmp_path, BASE.replace("https://api.openai.com/v1", escaped))
+    assert "models.m.deployments.0.base_url: must be an https:// URL" in failure(bad)
+
+
 def test_missing_credential_for_api_key_auth(tmp_path: Path) -> None:
     text = BASE.replace(', credential: "env:OPENAI_API_KEY"', "")
     assert "models.m.deployments.0" in failure(write(tmp_path, text))
@@ -311,3 +327,74 @@ def test_strict_loader_accepts_anchors_and_merge_keys() -> None:
 def test_catalog_override_invalid_refuses_start(tmp_path: Path) -> None:
     (tmp_path / "o.yaml").write_text("catalog_version: 1\nmodels: [{id: nope}]\n", encoding="utf-8")
     assert "catalog" in failure(write(tmp_path, BASE + "catalog: {paths: [o.yaml]}\n"))
+
+
+HOOK_ENV = ENV | {
+    "HOOK_URL": "https://hooks.example.test/budget?token=fake-hook-token",
+    "HOOK_SECRET": "fake-signing-secret",  # pragma: allowlist secret
+}
+HOOK = (
+    'alerts: {webhook: {url: "env:HOOK_URL", '
+    'signing_secret: "env:HOOK_SECRET"}}\n'  # pragma: allowlist secret
+)
+
+
+def test_no_alert_webhook_by_default(tmp_path: Path) -> None:
+    assert load(write(tmp_path), env=ENV).alert_webhook is None
+
+
+def test_the_alert_webhook_resolves_its_url_and_secret_as_secrets(tmp_path: Path) -> None:
+    hook = load(write(tmp_path, BASE + HOOK), env=HOOK_ENV).alert_webhook
+    assert hook is not None
+    assert hook.url.reveal() == HOOK_ENV["HOOK_URL"]
+    assert hook.signing_secret.reveal() == "fake-signing-secret"  # pragma: allowlist secret
+    assert (hook.timeout_seconds, hook.max_attempts, hook.queue_size) == (5, 5, 1000)
+    assert "fake-hook-token" not in repr(hook) and "fake-signing-secret" not in repr(hook)
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://hooks.example.test/budget?token=fake-hook-token",
+        "ftp://x.test/a",
+        "https://",
+        # An `@` after `?` or `#` is not userinfo: the host is x.test, not the loopback name.
+        "http://x.test?x=@127.0.0.1/hook",
+        "http://x.test#@localhost/",
+        "http://local\thost/hook",  # a tab or a newline is refused, not stripped
+        "http://x.test\r\n@localhost/hook",
+    ],
+)
+def test_the_alert_webhook_url_must_be_https_and_is_never_echoed(tmp_path: Path, url: str) -> None:
+    message = failure(write(tmp_path, BASE + HOOK), HOOK_ENV | {"HOOK_URL": url})
+    assert "alerts.webhook.url: must be an https:// URL" in message
+    assert "fake-hook-token" not in message and "x.test" not in message
+
+
+def test_the_alert_webhook_may_use_plain_http_to_localhost(tmp_path: Path) -> None:
+    env = HOOK_ENV | {"HOOK_URL": "http://127.0.0.1:9000/hook"}
+    hook = load(write(tmp_path, BASE + HOOK), env=env).alert_webhook
+    assert hook is not None and hook.url.reveal() == "http://127.0.0.1:9000/hook"
+
+
+def test_the_alert_webhook_needs_references_not_values(tmp_path: Path) -> None:
+    pasted = HOOK.replace('"env:HOOK_SECRET"', '"pasted-signing-value"')
+    message = failure(write(tmp_path, BASE + pasted), HOOK_ENV)
+    assert "alerts.webhook.signing_secret" in message and "pasted-signing-value" not in message
+    unset = failure(write(tmp_path, BASE + HOOK), ENV)
+    assert "alerts.webhook.url: environment variable HOOK_URL is not set" in unset
+    assert "alerts.webhook.signing_secret: environment variable HOOK_SECRET" in unset
+
+
+def test_the_alert_webhook_signing_secret_must_be_utf8_text(tmp_path: Path) -> None:
+    # An undecodable environment byte, as Python escapes it.
+    env = HOOK_ENV | {"HOOK_SECRET": "fake\udcff"}  # pragma: allowlist secret
+    message = failure(write(tmp_path, BASE + HOOK), env)
+    assert "alerts.webhook.signing_secret: must be UTF-8 text" in message
+    assert "fake" not in message
+
+
+@pytest.mark.parametrize("knob", ["max_attempts: 0", "max_attempts: 11", "queue_size: 0"])
+def test_alert_webhook_bounds(tmp_path: Path, knob: str) -> None:
+    text = BASE + HOOK.replace("signing_secret:", f"{knob}, signing_secret:")
+    assert f"alerts.webhook.{knob.partition(':')[0]}" in failure(write(tmp_path, text), HOOK_ENV)

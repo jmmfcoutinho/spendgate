@@ -61,6 +61,7 @@ flowchart LR
 | B3 gateway to ledger | SQL | Parameterised only; ledger down means refuse |
 | B4 gateway to provider | Provider key, prompt | Hosts from config; responses are untrusted input |
 | B5 build to runtime | Code, image | Pinned digests and SHAs; scanned; SBOM |
+| B6 gateway to alert webhook (optional) | Budget facts, HMAC signature | URL from config only (a secret reference), `https` or loopback `http`, no redirects; allowlisted budget fields only; queued off the request path, so the receiver cannot delay or fail a call |
 
 ## 4. Threats (STRIDE-lite)
 

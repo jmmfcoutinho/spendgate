@@ -46,6 +46,16 @@ All notable changes to this project are documented here. The format follows
   key whose config has `session_defaults` without `max_new_sessions_per_hour`, since the config
   now means 60 there: PATCH the key to adopt the bound, or set `max_new_sessions_per_hour: null`
   in the config to keep it unbounded and silence the warning.
+- Optional budget-warning webhook (`alerts.webhook`): `spendgate serve` posts each
+  `soft_threshold`, `cap_breached` and `blocked` warning as JSON to one HTTPS endpoint (the log
+  line's allowlisted fields plus `event_id` and `ts`), signed with HMAC-SHA256 in
+  `X-Spendgate-Signature`. The URL and signing secret are secret references; the URL must be
+  `https` (`http` only for localhost) and redirects are not followed. Warnings are queued off the
+  request path in a bounded queue and posted by a background task with bounded retries and
+  backoff, so a slow or failing receiver never delays or fails a call; deliveries, failures and
+  drops are counted in `spendgate_alert_webhooks_total{result}`. See
+  [operations](docs/operations.md#budget-warning-webhook) and
+  [ADR-0016](docs/adr/0016-alert-webhook.md).
 
 ### Changed
 
@@ -68,6 +78,9 @@ All notable changes to this project are documented here. The format follows
   refused with `kill_switch` (503); the admin readiness detail lists the switch as a warning
   instead of a reason, and a failed read of it as the warning `kill_switch_probe_failed`
   (ADR-0015).
+- The `http://`-only-for-localhost rule for a provider `base_url` reads the host the way the HTTP
+  client does: a `?` or `#` ends the host part, so text after one is never taken for it, and a
+  URL with whitespace or a non-printable character is refused.
 
 ## [0.1.3] - 2026-11-24
 

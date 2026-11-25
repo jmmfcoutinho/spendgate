@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from importlib import resources
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
 from pydantic import ValidationError
@@ -25,7 +26,7 @@ from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
 from spendgate.core.policy import model_filter_matches
 
 _MS = 1000
-_LOOPBACK = ("localhost", "127.0.0.1", "[::1]")
+_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
 
 
 class ConfigError(Exception):
@@ -61,6 +62,17 @@ class Route:
 
 
 @dataclass(frozen=True, slots=True)
+class WebhookTarget:
+    """`alerts.webhook` with its URL and signing secret resolved (both hidden from reprs)."""
+
+    url: Secret  # a webhook URL often carries a token: it is never logged
+    signing_secret: Secret
+    timeout_seconds: int
+    max_attempts: int
+    queue_size: int
+
+
+@dataclass(frozen=True, slots=True)
 class Settings:
     """Everything the gateway needs, validated. Secrets are `Secret` holders."""
 
@@ -74,6 +86,7 @@ class Settings:
     ledger_dsn: Secret | None  # postgres only
     ledger_path: Path | None  # sqlite only, resolved against the config file's directory
     routes: Mapping[str, Route]
+    alert_webhook: WebhookTarget | None = None  # `spendgate serve` posts budget warnings here
 
     @property
     def ledger_currency(self) -> str:
@@ -279,13 +292,37 @@ def _secret(ref: str | None, path: str, ctx: _Ctx) -> Secret | None:
 
 
 def _base_url_issue(url: str) -> str | None:
-    scheme, _, rest = url.partition("://")
-    host = rest.split("/", 1)[0].rsplit("@", 1)[-1].rsplit(":", 1)[0] if rest else ""
+    scheme = url.partition("://")[0]
+    plain = url.isprintable() and not any(c.isspace() for c in url)  # urlsplit drops tabs, CR, LF
+    try:  # the host as the HTTP client parses it: an `@` after a `?` or `#` is not userinfo
+        host = (urlsplit(url).hostname or "") if plain else ""
+    except ValueError:  # e.g. an unclosed `[` in an IPv6 literal
+        host = ""
     if scheme == "https" and host:
         return None
-    if scheme == "http" and host in {h.rsplit(":", 1)[0] for h in _LOOPBACK} | set(_LOOPBACK):
+    if scheme == "http" and host in _LOOPBACK:
         return None  # plain HTTP only to this machine (tests, sidecars)
     return "must be an https:// URL (http:// only for localhost)"
+
+
+def _webhook(cfg: Config, ctx: _Ctx) -> WebhookTarget | None:
+    hook = cfg.alerts.webhook
+    if hook is None:
+        return None
+    url = _secret(hook.url, "alerts.webhook.url", ctx)
+    key = _secret(hook.signing_secret, "alerts.webhook.signing_secret", ctx)
+    # The same rule as a provider base_url; the message never quotes the URL.
+    if url is not None and (problem := _base_url_issue(url.reveal())) is not None:
+        ctx.issues.append(("alerts.webhook.url", problem))
+        return None
+    # The HMAC key is the secret's UTF-8 bytes. A non-UTF-8 environment value arrives as
+    # surrogate escapes (the only text UTF-8 cannot encode) and would fail only when signing.
+    if key is not None and any("\ud800" <= c <= "\udfff" for c in key.reveal()):
+        ctx.issues.append(("alerts.webhook.signing_secret", "must be UTF-8 text"))
+        return None
+    if url is None or key is None:
+        return None
+    return WebhookTarget(url, key, hook.timeout_seconds, hook.max_attempts, hook.queue_size)
 
 
 def _deployment(
@@ -423,10 +460,11 @@ def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: lis
         if (problem := _ledger_file_issue(ledger_path)) is not None:
             issues.append(("ledger.backend.path", problem))
     routes = _routes(cfg, catalog, now_ms, ctx)
+    webhook = _webhook(cfg, ctx)
     _bootstrap_issues(cfg, catalog, issues)
     if issues or pepper is None:
         raise ConfigError(name, issues)
-    return Settings(path, cfg, catalog, docs, sha, fx, pepper, dsn, ledger_path, routes)
+    return Settings(path, cfg, catalog, docs, sha, fx, pepper, dsn, ledger_path, routes, webhook)
 
 
 def load(path: str | Path, *, env: Mapping[str, str], now_ms: int | None = None) -> Settings:

@@ -21,6 +21,7 @@ Durations carry their unit in the key name (`*_seconds`). The top-level sections
 | `bootstrap` | [Bootstrap](#bootstrap) | see below | Scopes, budgets and keys created at start. Create-only and idempotent: an existing row is never changed by a restart. `serve` creates scopes and budgets only; keys are created by `spendgate migrate --bootstrap`, which prints each new secret once. |
 | `anthropic` | [Anthropic](#anthropic) | see below | Request header allowlists for the Anthropic endpoint. |
 | `routing` | [Routing](#routing) | see below | Failover and cooldown behaviour across deployments of one model. |
+| `alerts` | [Alerts](#alerts) | all unset | Where budget warnings are sent besides the log. Unset: the `spendgate.budget` log lines only. |
 
 ## Server
 
@@ -143,6 +144,14 @@ Used at `routing`.
 | `max_cooldown_seconds` | positive integer | `300` | Upper bound on any cooldown. |
 | `connect_timeout_seconds` | positive integer | `10` | How long to wait for the TCP/TLS connection to the provider (DNS included) before the attempt counts as unreachable. Read and total timeouts are not affected. |
 
+## Alerts
+
+Used at `alerts`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `webhook` | [AlertWebhook](#alertwebhook) (optional) | unset | Post each budget warning (`soft_threshold`, `cap_breached`, `blocked`) to one HTTPS endpoint, signed. Used by `spendgate serve` only; library mode logs them. See [budget warnings](operations.md#budget-warning-webhook). |
+
 ## AdminServer
 
 Used at `server.admin`.
@@ -221,6 +230,18 @@ Used at `bootstrap.keys[]`.
 | `max_output_tokens` | positive integer (optional) | unset | Output ceiling of this key. |
 | `session_defaults` | [SessionDefaultsSpec](#sessiondefaultsspec) (optional) | unset | Limits for sessions on this key. A request that names a session needs them. |
 | `session_required` | boolean | `false` | Refuse every call on this key that does not send `X-Spendgate-Session` (`invalid_request`), so an agent cannot leave its session limits behind. Needs `session_defaults`. Like every key setting it applies when the key is created; use `PATCH /admin/v1/keys/{key_id}` for existing keys (`migrate --bootstrap` warns when an existing key differs). |
+
+## AlertWebhook
+
+Used at `alerts.webhook`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `url` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the receiver URL (it often carries a token). `https` only, or `http` for loopback; redirects are not followed. |
+| `signing_secret` | secret reference (`env:NAME` or `file:/path`) | required | Secret reference to the HMAC-SHA256 key (UTF-8 text; its UTF-8 bytes are the key). Each post carries `X-Spendgate-Signature: sha256=<hex>` over the exact body bytes. |
+| `timeout_seconds` | positive integer | `5` | Longest one delivery attempt may take, end to end. |
+| `max_attempts` | integer 1 to 10 | `5` | Tries per warning. A network error, a timeout, a 429 or a 5xx is retried after 1, 2, 4, ... seconds (at most 30); any other answer outside 2xx is final. |
+| `queue_size` | integer 1 to 100000 | `1000` | Warnings waiting to be posted. When full, a new warning is dropped and counted in `spendgate_alert_webhooks_total{result="dropped"}`; calls are never delayed. |
 
 ## Limits
 
