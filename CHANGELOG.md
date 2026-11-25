@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- ElevenLabs speech accepts `language_code` (ISO 639-1, two lowercase letters such as `pt`) on
+  `POST /v1/audio/speech` and forwards it, so non-English read-aloud is spoken in the right
+  language (#10). An invalid value is `invalid_request` with `param: language_code`; OpenAI and
+  Azure OpenAI speech still refuse the field
+  ([ADR-0026](docs/adr/0026-elevenlabs-language-code.md)).
+
 ## [0.2.0] - 2026-11-25
 
 **Upgrading from 0.1.x:**
