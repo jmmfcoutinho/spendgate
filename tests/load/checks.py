@@ -126,14 +126,25 @@ def verify(report: dict[str, Any], *, strict_clean: bool, crashed: bool = False)
         verify_victim(report)
 
 
+_ENDED = frozenset({"expired", "settled", "released"})
+
+
 def verify_victim(report: dict[str, Any]) -> None:
-    """Every hold the killed gateway left pending was ended by a sweeper (per owner: holds of the
-    live gateways prove nothing about it)."""
+    """Every hold the killed gateway left pending was ended, and a sweeper ended at least one (per
+    owner: holds of the live gateways prove nothing about it).
+
+    On Postgres a COMMIT the gateway had already sent can still land after it is dead, so a hold it
+    left pending may end `settled` or `released` by its own hand; that is booked correctly. What may
+    never happen is a hold still `pending` at the end.
+    """
     victim = report["victim"]
     assert victim["pending"], f"the gateway was killed owning no pending hold: {victim['owner']}"
     states = {rid: state for rid, state, *_ in report["facts"]["reservations"]}
-    left = [rid for rid in victim["pending"] if states.get(rid) != "expired"]
-    assert not left, f"{len(left)} holds of the killed gateway not swept: {left[:5]}"
+    mine = {rid: states.get(rid) for rid in victim["pending"]}
+    left = {rid: state for rid, state in mine.items() if state not in _ENDED}
+    sample = dict(list(left.items())[:5])
+    assert not left, f"{len(left)} holds of the killed gateway not ended: {sample}"
+    assert "expired" in mine.values(), f"no hold of the killed gateway was swept: {mine}"
 
 
 def loaded_overhead(records: list[list[Any]]) -> dict[str, float]:
