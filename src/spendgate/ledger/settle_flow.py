@@ -49,10 +49,15 @@ def settle_flow(
     """
     _check_attempts(charge, attempts)
     settled, *reads = yield from sql.batch(
-        q(sql.RES_SETTLE, id=request_id, outcome=attempts[-1].outcome.value, charged=charge,
-          now=now),
+        q(
+            sql.RES_SETTLE,
+            id=request_id,
+            outcome=attempts[-1].outcome.value,
+            charged=charge,
+            now=now,
+        ),
         *_item_reads(request_id),
-    )  # fmt: skip
+    )
     if not settled:
         state = yield from _state_of(request_id)
         if state is ReservationState.EXPIRED:
@@ -61,25 +66,19 @@ def settle_flow(
     locked = _locked_items(reads)
     held = max((lk.held for lk in locked), default=0)
     over = max(0, charge - held)
-    alerts: list[BudgetAlert] = []
-    writes: list[Stmt] = []
-    for lk in locked:  # ascending budget id
-        b, start = lk.budget, lk.start
-        writes.append(
-            q(sql.PERIOD_BOOK, budget_id=b.id, period_start=start, held=lk.held, charge=charge,
-              over=over)
-        )  # fmt: skip
-        if over:
-            writes.append(q(sql.ITEM_OVERRUN, id=request_id, budget_id=b.id, over=over))
-            used = lk.period.spent_nano + lk.period.held_nano - lk.held + charge  # after booking
-            alerts += yield from _breach(b, start, used, charge - lk.held, now)
+    writes, alerts = yield from _bookings(locked, request_id, charge, over, now)
     writes += _call_stmts(settled[0], request_id, attempts, held, over)
     yield from sql.finish(*writes)
     rooms = _rooms(locked, now, spent=charge)
     return Settlement(
-        True, ReservationState.SETTLED, charge, over, review_flagged=_blocked(alerts),
-        alerts=tuple(alerts), rooms=rooms,
-    )  # fmt: skip
+        True,
+        ReservationState.SETTLED,
+        charge,
+        over,
+        review_flagged=_blocked(alerts),
+        alerts=tuple(alerts),
+        rooms=rooms,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +90,31 @@ class _Item:
     held: int
     period: PeriodState  # before this transition
     enabled: bool
+
+
+def _bookings(
+    locked: list[_Item], request_id: str, charge: int, over: int, now: int
+) -> Flow[tuple[list[Stmt], list[BudgetAlert]]]:
+    """Book `charge` in each locked period; an overrun is also recorded per item and alerted."""
+    alerts: list[BudgetAlert] = []
+    writes: list[Stmt] = []
+    for lk in locked:  # ascending budget id
+        b, start = lk.budget, lk.start
+        writes.append(
+            q(
+                sql.PERIOD_BOOK,
+                budget_id=b.id,
+                period_start=start,
+                held=lk.held,
+                charge=charge,
+                over=over,
+            )
+        )
+        if over:
+            writes.append(q(sql.ITEM_OVERRUN, id=request_id, budget_id=b.id, over=over))
+            used = lk.period.spent_nano + lk.period.held_nano - lk.held + charge  # after booking
+            alerts += yield from _breach(b, start, used, charge - lk.held, now)
+    return writes, alerts
 
 
 def _item_reads(request_id: str) -> tuple[Stmt, ...]:
@@ -130,12 +154,14 @@ def _rooms(locked: list[_Item], now: int, *, spent: int) -> tuple[BudgetRoom, ..
         BudgetRoom(
             lk.budget.id,
             lk.budget.scope_id,
-            effective_cap(lk.budget, now) - lk.period.spent_nano - spent
+            effective_cap(lk.budget, now)
+            - lk.period.spent_nano
+            - spent
             - (lk.period.held_nano - lk.held),
         )
         for lk in locked
         if lk.enabled and lk.start == period_start(lk.budget.period, now)
-    )  # fmt: skip
+    )
 
 
 def _call_stmts(
@@ -237,10 +263,26 @@ def _late_settle(
         return Settlement(False, ReservationState.EXPIRED)
     yield q(sql.RES_LATE, id=request_id, charged=max(held, charge))
     alerts = yield from _book_late(request_id, items if over else [], over, now)
+    yield from _other_calls(request_id, attempts, used, held)
+    return Settlement(
+        True,
+        ReservationState.EXPIRED,
+        over,
+        over,
+        late=True,
+        review_flagged=_blocked(alerts),
+        alerts=tuple(alerts),
+    )
+
+
+def _other_calls(
+    request_id: str, attempts: tuple[AttemptRecord, ...], used: AttemptRecord, held: int
+) -> Flow[None]:
+    """The attempts besides `used` get their own rows, charged 0 (the money is on `used`)."""
     res = (yield q(sql.RES_GET, id=request_id))[0]
     meta = HoldMeta.from_json(s(res, "meta"))
     for a in attempts:
-        if a is not used:  # the other attempts get their own rows, charged 0 (money is on `used`)
+        if a is not used:
             yield q(
                 sql.CALL_INSERT,
                 **call_params(
@@ -254,10 +296,6 @@ def _late_settle(
                     request_id=request_id,
                 ),
             )
-    return Settlement(
-        True, ReservationState.EXPIRED, over, over, late=True, review_flagged=_blocked(alerts),
-        alerts=tuple(alerts),
-    )  # fmt: skip
 
 
 def _book_late(request_id: str, items: list[Row], over: int, now: int) -> Flow[list[BudgetAlert]]:

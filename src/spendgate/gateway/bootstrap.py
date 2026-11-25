@@ -72,10 +72,17 @@ async def _budget(
     if strict is None:
         strict = settings.config.defaults.strict_overrun
     await ledger.create_budget(
-        scope.id, Period(b.period), b.cap.nano, now=now, soft_pct=b.soft_pct,
-        model_filter=b.model_filter, strict_overrun=strict, note=f"bootstrap:{b.id}",
-        actor=ACTOR, budget_id=budget_id,
-    )  # fmt: skip
+        scope.id,
+        Period(b.period),
+        b.cap.nano,
+        now=now,
+        soft_pct=b.soft_pct,
+        model_filter=b.model_filter,
+        strict_overrun=strict,
+        note=f"bootstrap:{b.id}",
+        actor=ACTOR,
+        budget_id=budget_id,
+    )
     report.budgets.append(b.id)
 
 
@@ -85,9 +92,13 @@ def _session_defaults(k: BootstrapKey) -> SessionDefaults | None:
         return None
     budget = None if s.budget is None else s.budget.nano
     return SessionDefaults(
-        budget, s.max_steps, s.max_seconds, s.idle_seconds, s.max_new_sessions_per_hour,
+        budget,
+        s.max_steps,
+        s.max_seconds,
+        s.idle_seconds,
+        s.max_new_sessions_per_hour,
         required=k.session_required,
-    )  # fmt: skip
+    )
 
 
 def _spec(k: BootstrapKey, scope: ScopeRow) -> KeySpec:
@@ -104,9 +115,17 @@ def _spec(k: BootstrapKey, scope: ScopeRow) -> KeySpec:
         )
     models = None if k.models is None else tuple(k.models)
     return KeySpec(
-        scope.id, k.name, KeyKind.API, models, k.max_output_tokens,
-        None, k.limits.rpm, k.limits.tpm, k.limits.concurrency, _session_defaults(k),
-    )  # fmt: skip
+        scope.id,
+        k.name,
+        KeyKind.API,
+        models,
+        k.max_output_tokens,
+        None,
+        k.limits.rpm,
+        k.limits.tpm,
+        k.limits.concurrency,
+        _session_defaults(k),
+    )
 
 
 async def _key(

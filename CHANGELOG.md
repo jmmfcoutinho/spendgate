@@ -146,6 +146,18 @@ All notable changes to this project are documented here. The format follows
   `transport()` and `transport2()` share their runtime builder and stream wrappers; SQLite and
   Postgres decide pending migrations with one pure `pending_migrations`; the data app's POST
   routes come from `ENDPOINTS`.
+- The size report (`scripts/lightweight_report.py`, `make size`) counts lines on the
+  ruff-formatted text, formatted in memory, so packing arguments onto fewer lines no longer meets
+  a size limit, and the module (400 lines) and function (50 lines) limits now fail it, as
+  ADR-0007 states, instead of warning. `# fmt: skip` is allowed only on a table (a multi-line
+  assignment of a list, tuple, set or dict display, or `frozenset` of one, holding only
+  constants and names) at module or class level that shares no line with another statement; any
+  other, and any `# fmt: off` region, fails the report. The 133 directives outside tables are
+  gone. To keep every module within 400 formatted lines and every function within 50, code moved
+  with no change in behaviour: the failover loop's results and refusals to
+  `pipeline.forward_results`, the building of a `Pipeline`'s parts to `pipeline.assembly`, the
+  settings types to `config.settings`, and two steps of `ledger.settle_flow` into helpers of
+  their own.
 
 ### Fixed
 

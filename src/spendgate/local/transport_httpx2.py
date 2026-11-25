@@ -19,8 +19,8 @@ from spendgate.local.bridge import (
     response_headers,
 )
 from spendgate.local.factory import make_runtime
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.model import Clock
-from spendgate.pipeline.pipeline import system_ms
 
 
 class _SyncStream(SyncChunks, httpx2.SyncByteStream):
@@ -64,21 +64,33 @@ class AsyncLocalTransport2(httpx2.AsyncBaseTransport):
 
 @overload
 def transport2(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[False] = ..., cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[False] = ...,
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> LocalTransport2: ...  # fmt: skip
+) -> LocalTransport2: ...
 @overload
 def transport2(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[True], cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[True],
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> AsyncLocalTransport2: ...  # fmt: skip
+) -> AsyncLocalTransport2: ...
 def transport2(  # noqa: PLR0913 - mirrors `transport`
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = None,
-    async_: bool = False, cap: str | None = None, client: httpx.AsyncClient | None = None,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = None,
+    async_: bool = False,
+    cap: str | None = None,
+    client: httpx.AsyncClient | None = None,
     now_ms: Clock = system_ms,
-) -> LocalTransport2 | AsyncLocalTransport2:  # fmt: skip
+) -> LocalTransport2 | AsyncLocalTransport2:
     """`transport()` for `httpx2` clients; provider calls still use an `httpx.AsyncClient`."""
     runtime = make_runtime(settings_or_path, ledger_path, cap, client, now_ms)
     if async_:

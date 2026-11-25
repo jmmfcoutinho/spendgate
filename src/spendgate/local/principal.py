@@ -64,10 +64,16 @@ class LocalPrincipal:
     async def verify_api(self, raw: str, now: int) -> Principal | Refusal:
         """Accept any credential (the transport sends a fixed placeholder); never a refusal."""
         policy = KeyPolicy(
-            self.key_id, self.scope_id, self.allowed_models, self.max_output_tokens,
-            self.per_call_ceiling_nano, self.rpm, self.tpm, self.max_concurrent,
+            self.key_id,
+            self.scope_id,
+            self.allowed_models,
+            self.max_output_tokens,
+            self.per_call_ceiling_nano,
+            self.rpm,
+            self.tpm,
+            self.max_concurrent,
             session_defaults(current_session(), self.currency),
-        )  # fmt: skip
+        )
         return Principal(self.key_id, KeyKind.API, self.scope_id, policy)
 
     async def still_active(self, principal: Principal, now: int) -> bool:

@@ -5,8 +5,8 @@ from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.policy import KeyPolicy, model_allowed
 from spendgate.pipeline import replies
 from spendgate.pipeline.closing import Call
+from spendgate.pipeline.forward_results import Answered, Failed
 from spendgate.pipeline.model import Reply
-from spendgate.pipeline.routing import Answered, Failed
 from spendgate.pipeline.settle import Closed
 
 INTERNAL = Refusal(ErrorCode.INTERNAL_ERROR, "The gateway failed; the request was not completed.")
@@ -20,9 +20,13 @@ def finished_reply(call: Call, result: Answered | Failed | None, closed: Closed)
     charged = closed.decision.charge if closed.booked else None
     if isinstance(result, Failed):
         return replies.error_reply(
-            result.refusal, call.inbound.endpoint.shape, call.id, status=result.status,
-            charged=charged, should_retry=result.should_retry,
-        )  # fmt: skip
+            result.refusal,
+            call.inbound.endpoint.shape,
+            call.id,
+            status=result.status,
+            charged=charged,
+            should_retry=result.should_retry,
+        )
     left = closed.remaining
     return replies.success_reply(
         result.response, call.id, charged, left[0] if left else None, left[1] if left else None

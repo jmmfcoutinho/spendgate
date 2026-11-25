@@ -167,8 +167,10 @@ def flag_review(request_id: str, actual: Money | None, hold: Money) -> bool:
         return False
     _log.warning(
         "absurd provider usage flagged for review request_id=%s actual=%s hold=%s",
-        request_id, actual.format(), hold.format(),
-    )  # fmt: skip
+        request_id,
+        actual.format(),
+        hold.format(),
+    )
     return True
 
 
@@ -179,22 +181,43 @@ def fx_rate_nano(catalog: Catalog, currency: str) -> int:
 
 
 def attempt_record(  # noqa: PLR0913 - one attempt's facts, built in exactly one place
-    book: Book, flight: Flight, outcome: Outcome, now: int, *, request_id: str = "",
-    status: int | None = None, not_processed: bool = False, error_code: CallErrorCode | None = None,
-    reading: Reading | None = None, streamed: bool = False, ttfb_ms: int | None = None,
-) -> AttemptRecord:  # fmt: skip
+    book: Book,
+    flight: Flight,
+    outcome: Outcome,
+    now: int,
+    *,
+    request_id: str = "",
+    status: int | None = None,
+    not_processed: bool = False,
+    error_code: CallErrorCode | None = None,
+    reading: Reading | None = None,
+    streamed: bool = False,
+    ttfb_ms: int | None = None,
+) -> AttemptRecord:
     """The `calls` row of one attempt (buffered, streamed or interrupted)."""
     entry, read = book.pricing.entry, reading or Reading()
     return AttemptRecord(
-        flight.number, flight.provider, flight.deployment, entry.price_id, outcome, 0,
-        flight.started_at, now, not_processed, entry.currency, book.pricing.fx_rate_nano,
+        flight.number,
+        flight.provider,
+        flight.deployment,
+        entry.price_id,
+        outcome,
+        0,
+        flight.started_at,
+        now,
+        not_processed,
+        entry.currency,
+        book.pricing.fx_rate_nano,
         native_cost_nano=read.native.nano if read.native else 0,
         usage_cost_nano=read.cost.nano if read.cost else None,
         usage=ledger_usage(read.usage) if read.usage is not None else LedgerUsage(),
-        http_status=status, error_code=error_code, streamed=streamed,
+        http_status=status,
+        error_code=error_code,
+        streamed=streamed,
         review_required=needs_review(request_id, read, book.pricing.worst) if reading else False,
-        latency_ms=max(now - flight.started_at, 0), ttfb_ms=ttfb_ms,
-    )  # fmt: skip
+        latency_ms=max(now - flight.started_at, 0),
+        ttfb_ms=ttfb_ms,
+    )
 
 
 def decide(book: Book, interrupted: Outcome | None, now: int) -> Decision:
@@ -207,8 +230,9 @@ def decide(book: Book, interrupted: Outcome | None, now: int) -> Decision:
         outcome = interrupted or Outcome.INTERNAL_ERROR
         attempts.append(attempt_record(book, book.flight, outcome, now, error_code=outcome))
     if not attempts:  # nothing was ever sent: release with no `calls` row at all
-        return Decision(True, Money.zero(hold.currency), (), interrupted or book.idle_outcome,
-                        book.label)  # fmt: skip
+        return Decision(
+            True, Money.zero(hold.currency), (), interrupted or book.idle_outcome, book.label
+        )
     if all(a.not_processed for a in attempts):
         released = tuple(replace(a, charged_nano=0) for a in attempts)
         last = attempts[-1]

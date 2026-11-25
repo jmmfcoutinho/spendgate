@@ -117,9 +117,10 @@ def _sessions(body: SessionDefaultsIn | None, required: bool) -> SessionDefaults
     if body is None:
         if required:
             raise ApiError(
-                ErrorCode.INVALID_REQUEST, "session_required needs session_defaults.",
+                ErrorCode.INVALID_REQUEST,
+                "session_required needs session_defaults.",
                 "session_required",
-            )  # fmt: skip
+            )
         return None
     return SessionDefaults(**body.model_dump(), required=required)
 
@@ -211,9 +212,11 @@ async def update_key(call: Call) -> Response:
     record = current
     if given & {"name", "allowed_models", "limits", "session_defaults", "session_required"}:
         record = await call.ctx.keys.set_key_policy(
-            _patched_policy(current.policy, body), name=body.name,
-            actor=call.actor, now=call.now,
-        )  # fmt: skip
+            _patched_policy(current.policy, body),
+            name=body.name,
+            actor=call.actor,
+            now=call.now,
+        )
     if "expires_at" in given:
         record = await call.ctx.ledger.set_key_expiry(
             current.id, body.expires_at, actor=call.actor, now=call.now

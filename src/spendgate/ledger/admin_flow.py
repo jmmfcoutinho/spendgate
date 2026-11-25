@@ -70,9 +70,14 @@ def create_scope_flow(  # noqa: PLR0913 - mirrors the admin ScopeCreate body
         display_name=display_name,
     )
     yield from audit(
-        ctx, now, actor, "scope.create", ("scope", scope_id), None,
+        ctx,
+        now,
+        actor,
+        "scope.create",
+        ("scope", scope_id),
+        None,
         {"path": path, "display_name": display_name},
-    )  # fmt: skip
+    )
     return ScopeRow(
         scope_id, kind, parent_id, name, path, created_at=now, display_name=display_name
     )
@@ -87,9 +92,14 @@ def update_scope_flow(
     yield q(sql.SCOPE_SET_NAME, id=scope_id, display_name=display_name)
     before = scope_row(rows[0])
     yield from audit(
-        ctx, now, actor, "scope.update", ("scope", scope_id),
-        {"display_name": before.display_name}, {"display_name": display_name},
-    )  # fmt: skip
+        ctx,
+        now,
+        actor,
+        "scope.update",
+        ("scope", scope_id),
+        {"display_name": before.display_name},
+        {"display_name": display_name},
+    )
     return replace(before, display_name=display_name)
 
 

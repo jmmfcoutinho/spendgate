@@ -26,8 +26,8 @@ from spendgate.local import sdk as sdk_clients
 from spendgate.local.runtime import PEPPER_VAR, local_env
 from spendgate.local.setup import default_ledger_path
 from spendgate.local.transport import AsyncLocalTransport, LocalTransport, transport
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.model import Clock
-from spendgate.pipeline.pipeline import system_ms
 
 if TYPE_CHECKING:
     import anthropic as _anthropic
@@ -81,9 +81,12 @@ def _fx_section(fx: FxSnapshot | Sequence[FxSnapshot] | None, currency: str) -> 
 
 
 def _config(
-    cap: Money, ledger_path: Path, catalog: Path | None,
-    fx: FxSnapshot | Sequence[FxSnapshot] | None, present: Mapping[str, str],
-) -> dict[str, object]:  # fmt: skip
+    cap: Money,
+    ledger_path: Path,
+    catalog: Path | None,
+    fx: FxSnapshot | Sequence[FxSnapshot] | None,
+    present: Mapping[str, str],
+) -> dict[str, object]:
     models: dict[str, object] = {}
     for catalog_id in _catalog_ids(catalog):
         slug, _, name = catalog_id.partition("/")
@@ -96,12 +99,14 @@ def _config(
     return {
         "server": {"listen": "127.0.0.1:0", "key_pepper": f"env:{PEPPER_VAR}"},
         "ledger": {
-            "currency": cap.currency, "backend": {"kind": "sqlite", "path": str(ledger_path)},
+            "currency": cap.currency,
+            "backend": {"kind": "sqlite", "path": str(ledger_path)},
         },
-        "providers": providers, "models": models,
+        "providers": providers,
+        "models": models,
         "catalog": {"paths": [str(catalog)] if catalog else []},
         **_fx_section(fx, cap.currency),
-    }  # fmt: skip
+    }
 
 
 def _load_synthesized(
@@ -124,10 +129,14 @@ def _load_synthesized(
 
 
 def _synthesize(  # noqa: PLR0913 - guard()'s options, passed through
-    cap: Money, catalog: str | Path | None, ledger_path: Path,
-    fx: FxSnapshot | Sequence[FxSnapshot] | None, provider_keys: Mapping[str, str] | None, *,
+    cap: Money,
+    catalog: str | Path | None,
+    ledger_path: Path,
+    fx: FxSnapshot | Sequence[FxSnapshot] | None,
+    provider_keys: Mapping[str, str] | None,
+    *,
     concurrency: int | None,
-) -> Settings:  # fmt: skip
+) -> Settings:
     keys = dict(provider_keys or {})
     unknown = set(keys) - set(PROVIDERS)
     if unknown:
@@ -161,9 +170,14 @@ class Guard:
     """A guarded ledger plus factories for clients that spend from it."""
 
     def __init__(
-        self, settings: Settings, ledger_path: Path, cap: str, *,
-        client: httpx.AsyncClient | None = None, now_ms: Clock = system_ms,
-    ) -> None:  # fmt: skip
+        self,
+        settings: Settings,
+        ledger_path: Path,
+        cap: str,
+        *,
+        client: httpx.AsyncClient | None = None,
+        now_ms: Clock = system_ms,
+    ) -> None:
         self.settings, self.ledger_path, self.cap = settings, ledger_path, cap
         self._client, self._now = client, now_ms
         self._sync: list[_Closer] = []
@@ -181,15 +195,22 @@ class Guard:
         """
         if async_:
             made = transport(
-                self.settings, ledger_path=self.ledger_path, cap=self.cap, client=self._client,
-                now_ms=self._now, async_=True,
-            )  # fmt: skip
+                self.settings,
+                ledger_path=self.ledger_path,
+                cap=self.cap,
+                client=self._client,
+                now_ms=self._now,
+                async_=True,
+            )
             self._async.append(made)
             return made
         sync = transport(
-            self.settings, ledger_path=self.ledger_path, cap=self.cap, client=self._client,
+            self.settings,
+            ledger_path=self.ledger_path,
+            cap=self.cap,
+            client=self._client,
             now_ms=self._now,
-        )  # fmt: skip
+        )
         self._sync.append(sync)
         return sync
 
@@ -197,9 +218,12 @@ class Guard:
         from spendgate.local.transport_httpx2 import transport2  # noqa: PLC0415 - needs httpx2
 
         made = transport2(
-            self.settings, ledger_path=self.ledger_path, cap=self.cap, client=self._client,
+            self.settings,
+            ledger_path=self.ledger_path,
+            cap=self.cap,
+            client=self._client,
             now_ms=self._now,
-        )  # fmt: skip
+        )
         self._sync.append(made)
         return made
 
@@ -207,9 +231,13 @@ class Guard:
         from spendgate.local.transport_httpx2 import transport2  # noqa: PLC0415 - needs httpx2
 
         made = transport2(
-            self.settings, ledger_path=self.ledger_path, cap=self.cap, client=self._client,
-            now_ms=self._now, async_=True,
-        )  # fmt: skip
+            self.settings,
+            ledger_path=self.ledger_path,
+            cap=self.cap,
+            client=self._client,
+            now_ms=self._now,
+            async_=True,
+        )
         self._async.append(made)
         return made
 
@@ -257,12 +285,17 @@ class Guard:
 
 
 def guard(  # noqa: PLR0913 - the quick start's documented options
-    cap: str = "5 USD", catalog: str | Path | None = None, *, ledger_path: str | Path | None = None,
+    cap: str = "5 USD",
+    catalog: str | Path | None = None,
+    *,
+    ledger_path: str | Path | None = None,
     fx: FxSnapshot | Sequence[FxSnapshot] | None = None,
-    provider_keys: Mapping[str, str] | None = None, config: str | Path | None = None,
-    client: httpx.AsyncClient | None = None, now_ms: Clock = system_ms,
+    provider_keys: Mapping[str, str] | None = None,
+    config: str | Path | None = None,
+    client: httpx.AsyncClient | None = None,
+    now_ms: Clock = system_ms,
     concurrency: int | _Unset | None = _Unset.TOKEN,
-) -> Guard:  # fmt: skip
+) -> Guard:
     """Open (or create) the local ledger with a lifetime budget of `cap` and return a `Guard`.
 
     The ledger is a SQLite file shared by every script that names the same path; the default is

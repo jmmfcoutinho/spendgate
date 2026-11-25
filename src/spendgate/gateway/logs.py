@@ -79,29 +79,57 @@ def log_event(
 
 
 def log_call(  # noqa: PLR0913 - the documented call-log fields, all keyword-only
-    logger: logging.Logger, *, request_id: str, key_prefix_: str, scope_path: str, model: str,
-    deployment: str, outcome: Outcome, input_tokens: int, output_tokens: int, cost: Money,
-    latency_ms: float, ttft_ms: float | None = None, cached_tokens: int = 0,
+    logger: logging.Logger,
+    *,
+    request_id: str,
+    key_prefix_: str,
+    scope_path: str,
+    model: str,
+    deployment: str,
+    outcome: Outcome,
+    input_tokens: int,
+    output_tokens: int,
+    cost: Money,
+    latency_ms: float,
+    ttft_ms: float | None = None,
+    cached_tokens: int = 0,
     http_status: int | None = None,
-) -> None:  # fmt: skip
+) -> None:
     """The one-line record of a finished call (cost as a decimal string plus currency)."""
     amount = cost.format().rsplit(" ", 1)[0]
     log_event(
-        logger, "call", request_id=request_id, key_prefix=key_prefix_[:KEY_PREFIX_LEN],
-        scope_path=scope_path, model=model, deployment=deployment, outcome=outcome.value,
-        input_tokens=input_tokens, output_tokens=output_tokens, cached_tokens=cached_tokens,
-        cost=amount, currency=cost.currency, latency_ms=latency_ms, ttft_ms=ttft_ms,
+        logger,
+        "call",
+        request_id=request_id,
+        key_prefix=key_prefix_[:KEY_PREFIX_LEN],
+        scope_path=scope_path,
+        model=model,
+        deployment=deployment,
+        outcome=outcome.value,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cached_tokens=cached_tokens,
+        cost=amount,
+        currency=cost.currency,
+        latency_ms=latency_ms,
+        ttft_ms=ttft_ms,
         http_status=http_status,
-    )  # fmt: skip
+    )
 
 
 def log_internal(logger: logging.Logger, event: InternalEvent) -> None:
     """A catch-all's redacted trace: class and frames only, never the exception's message."""
     fault = event.fault
     log_event(
-        logger, INTERNAL_EVENT, logging.ERROR, request_id=event.request_id, where=fault.where,
-        error_class=fault.error_class, frames=fault.frames_text, charged=event.charged,
-    )  # fmt: skip
+        logger,
+        INTERNAL_EVENT,
+        logging.ERROR,
+        request_id=event.request_id,
+        where=fault.where,
+        error_class=fault.error_class,
+        frames=fault.frames_text,
+        charged=event.charged,
+    )
 
 
 def configure_json_logging(stream: logging.Handler | None = None) -> logging.Logger:

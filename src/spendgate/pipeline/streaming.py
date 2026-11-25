@@ -47,9 +47,11 @@ from spendgate.providers.port import SseLimits, StreamBroken, StreamLimitExceede
 # Stream limits (threat-model C-22): the numbers the port left open, enforced by the relay while it
 # parses, so a hostile stream stops before it is buffered.
 STREAM_LIMITS = SseLimits(
-    max_line_bytes=64 * 1024, max_event_bytes=1024 * 1024, max_events=100_000,
+    max_line_bytes=64 * 1024,
+    max_event_bytes=1024 * 1024,
+    max_events=100_000,
     max_stream_bytes=64 * 1024 * 1024,
-)  # fmt: skip
+)
 PING_SECONDS = 15.0  # idle keep-alive comment interval (protocol 2.8)
 _PING = b": ping\n\n"
 _DONE = b"data: [DONE]\n\n"
@@ -114,9 +116,14 @@ class StreamBody:
     """The live stream the HTTP adapter iterates; `aclose()` MUST be called when it stops."""
 
     def __init__(  # noqa: PLR0913, PLR0917 - the stream's collaborators
-        self, env: StreamEnv, request_id: str, endpoint: Endpoint, book: Book, live: Live,
+        self,
+        env: StreamEnv,
+        request_id: str,
+        endpoint: Endpoint,
+        book: Book,
+        live: Live,
         held_at: int,
-    ) -> None:  # fmt: skip
+    ) -> None:
         self._env, self._id, self._endpoint = env, request_id, endpoint
         self._book, self._live, self._held_at = book, live, held_at
         self._source = live.response.aiter_bytes()
@@ -273,9 +280,12 @@ class StreamBody:
         shape = self._endpoint.shape
         if self._endpoint.kind is RequestKind.RESPONSES:
             payload: Mapping[str, object] = {
-                "type": "error", "code": ErrorCode.UPSTREAM_UNAVAILABLE.value, "message": message,
-                "param": None, "sequence_number": self._events,
-            }  # fmt: skip
+                "type": "error",
+                "code": ErrorCode.UPSTREAM_UNAVAILABLE.value,
+                "message": message,
+                "param": None,
+                "sequence_number": self._events,
+            }
             return b"event: error\ndata: " + _dump(payload) + b"\n\n"
         refusal = Refusal(ErrorCode.UPSTREAM_UNAVAILABLE, message)
         body = replies.error_body(refusal, shape, self._id, _BAD_GATEWAY)
@@ -334,20 +344,32 @@ class StreamBody:
         first = self._first_upstream
         number = book.flight.number if book.flight else book.next_number
         record = attempt_record(
-            book, Flight(number, live.provider, live.deployment, live.started), outcome, now,
-            request_id=self._id, status=live.response.status_code, error_code=code,
-            reading=reading, streamed=True,
+            book,
+            Flight(number, live.provider, live.deployment, live.started),
+            outcome,
+            now,
+            request_id=self._id,
+            status=live.response.status_code,
+            error_code=code,
+            reading=reading,
+            streamed=True,
             ttfb_ms=max(first - live.started, 0) if first is not None else None,
-        )  # fmt: skip
+        )
         book.attempts.append(record)
         book.flight = None
         with contextlib.suppress(Exception):  # observers never affect money handling
             self._env.observer.on_attempt(
                 AttemptEvent(
-                    self._id, live.model, live.provider, live.deployment, outcome,
-                    record.http_status, False, record.latency_ms or 0,
+                    self._id,
+                    live.model,
+                    live.provider,
+                    live.deployment,
+                    outcome,
+                    record.http_status,
+                    False,
+                    record.latency_ms or 0,
                 )
-            )  # fmt: skip
+            )
 
 
 def cut_code(exc: StreamBroken) -> AttemptError:

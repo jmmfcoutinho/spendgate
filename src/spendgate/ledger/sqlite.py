@@ -130,9 +130,14 @@ def _migrate(conn: sqlite3.Connection, clock: Callable[[], int], *, apply: bool)
             conn.execute(
                 "INSERT INTO schema_migrations (version, name, checksum, applied_at, compatible) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (migration.version, migration.name, migration.checksum, clock(),
-                 int(migration.compatible)),
-            )  # fmt: skip
+                (
+                    migration.version,
+                    migration.name,
+                    migration.checksum,
+                    clock(),
+                    int(migration.compatible),
+                ),
+            )
         conn.execute("COMMIT")
     except BaseException:
         if conn.in_transaction:

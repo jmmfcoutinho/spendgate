@@ -34,9 +34,13 @@ class MaintainedLedger(Protocol):
 
 class Maintenance:
     def __init__(
-        self, ledger: MaintainedLedger, settings: Settings, now: Clock, logger: logging.Logger,
+        self,
+        ledger: MaintainedLedger,
+        settings: Settings,
+        now: Clock,
+        logger: logging.Logger,
         metrics: Metrics | None = None,
-    ) -> None:  # fmt: skip
+    ) -> None:
         self._ledger, self._settings, self._now, self._logger = ledger, settings, now, logger
         self._metrics = metrics
         self._retention_due = 0  # epoch ms; the first pass runs it, then once a day

@@ -7,36 +7,31 @@
 import logging
 from collections.abc import Callable, Collection, Mapping
 from datetime import UTC, date, datetime
-from typing import Protocol, TypedDict, Unpack, runtime_checkable
+from typing import Protocol, Unpack, runtime_checkable
 
 from spendgate.config import Settings
 from spendgate.core.errors import ErrorCode
-from spendgate.core.limits import LimitStore
 from spendgate.core.outcomes import Outcome
 from spendgate.gateway.logs import log_call, log_event, log_internal
 from spendgate.gateway.metrics import Metrics
 from spendgate.gateway.observability import ReadinessChecks
 from spendgate.ledger.admin_port import AdminLedger
 from spendgate.ledger.port import MoneyLedger, PoolStats
-from spendgate.pipeline import intake
 from spendgate.pipeline.adapters import build_providers
-from spendgate.pipeline.closing import Sleeper
+from spendgate.pipeline.assembly import Knobs
 from spendgate.pipeline.faults import InternalEvent
 from spendgate.pipeline.model import (
     AttemptEvent,
     Clock,
     HeldEvent,
-    IdGenerator,
     KeyVerifier,
     LedgerEvent,
-    Observer,
     RefusedEvent,
     Sender,
     SettledEvent,
 )
 from spendgate.pipeline.pipeline import Pipeline
-from spendgate.pipeline.tracing import Tracer
-from spendgate.providers.port import Provider, SseLimits
+from spendgate.providers.port import Provider
 
 _UNKNOWN = "unknown"
 _OTHER = "other"
@@ -93,16 +88,27 @@ class GatewayObserver:
         if event.review_required:
             m.review_required.inc(model=event.model)
             log_event(
-                self._logger, "usage_review_required", logging.WARNING,
-                request_id=event.request_id, model=event.model, scope_path=scope,
-            )  # fmt: skip
+                self._logger,
+                "usage_review_required",
+                logging.WARNING,
+                request_id=event.request_id,
+                model=event.model,
+                scope_path=scope,
+            )
         log_call(
-            self._logger, request_id=event.request_id, key_prefix_=event.key_id[:8],
-            scope_path=scope, model=event.model, deployment=event.deployment,
-            outcome=event.outcome, input_tokens=usage.input_tokens if usage else 0,
-            output_tokens=usage.output_tokens if usage else 0, cost=event.charged,
-            latency_ms=event.latency_ms, http_status=event.http_status,
-        )  # fmt: skip
+            self._logger,
+            request_id=event.request_id,
+            key_prefix_=event.key_id[:8],
+            scope_path=scope,
+            model=event.model,
+            deployment=event.deployment,
+            outcome=event.outcome,
+            input_tokens=usage.input_tokens if usage else 0,
+            output_tokens=usage.output_tokens if usage else 0,
+            cost=event.charged,
+            latency_ms=event.latency_ms,
+            http_status=event.http_status,
+        )
 
     def on_internal(self, event: InternalEvent) -> None:
         log_internal(self._logger, event)
@@ -212,34 +218,27 @@ def default_readiness(ledger: AdminLedger, settings: Settings, now: Clock) -> Re
     )
 
 
-class PipelineKnobs(TypedDict, total=False):
+class PipelineKnobs(Knobs, total=False):
     """The optional `Pipeline` arguments `build_pipeline` passes through unchanged.
 
     `serve` sets `tracer`; tests tune the rest. Left out, each takes the `Pipeline` default, except
     `providers` (built from the settings) and `observer` (metrics and logs, when both are given).
+    The knobs themselves are `pipeline.assembly.Knobs`, so the two lists cannot drift apart.
     """
 
     providers: Mapping[str, Provider]
-    observer: Observer | None
-    tracer: Tracer | None
-    now_ms: Clock
-    limits: LimitStore | None
-    new_request_id: IdGenerator
-    instance: str | None
-    gate: intake.Gate | None
-    stream_limits: SseLimits
-    ping_seconds: float
-    sleep: Sleeper
-    max_request_seconds: float | None
-    body_timeout_seconds: float | None
-    hold_seconds: float
 
 
 def build_pipeline(  # noqa: PLR0913 - the ports plus metrics and logs
-    settings: Settings, ledger: MoneyLedger, keys: KeyVerifier, sender: Sender, *,
-    metrics: Metrics | None = None, logger: logging.Logger | None = None,
+    settings: Settings,
+    ledger: MoneyLedger,
+    keys: KeyVerifier,
+    sender: Sender,
+    *,
+    metrics: Metrics | None = None,
+    logger: logging.Logger | None = None,
     **knobs: Unpack[PipelineKnobs],
-) -> Pipeline:  # fmt: skip
+) -> Pipeline:
     """A `Pipeline` with the default adapters, and metrics and logs when both are given."""
     if not knobs.get("providers"):
         knobs["providers"] = build_providers(settings)

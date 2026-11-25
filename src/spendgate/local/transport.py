@@ -24,8 +24,8 @@ from spendgate.local.bridge import (
 )
 from spendgate.local.factory import make_runtime
 from spendgate.local.runtime import Runtime
+from spendgate.pipeline.assembly import system_ms
 from spendgate.pipeline.model import Clock
-from spendgate.pipeline.pipeline import system_ms
 
 
 class _SyncStream(SyncChunks, httpx.SyncByteStream):
@@ -73,21 +73,33 @@ class AsyncLocalTransport(httpx.AsyncBaseTransport):
 
 @overload
 def transport(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[False] = ..., cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[False] = ...,
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> LocalTransport: ...  # fmt: skip
+) -> LocalTransport: ...
 @overload
 def transport(
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = ...,
-    async_: Literal[True], cap: str | None = ..., client: httpx.AsyncClient | None = ...,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = ...,
+    async_: Literal[True],
+    cap: str | None = ...,
+    client: httpx.AsyncClient | None = ...,
     now_ms: Clock = ...,
-) -> AsyncLocalTransport: ...  # fmt: skip
+) -> AsyncLocalTransport: ...
 def transport(  # noqa: PLR0913 - the public entry point with named options
-    settings_or_path: Settings | str | Path, *, ledger_path: str | Path | None = None,
-    async_: bool = False, cap: str | None = None, client: httpx.AsyncClient | None = None,
+    settings_or_path: Settings | str | Path,
+    *,
+    ledger_path: str | Path | None = None,
+    async_: bool = False,
+    cap: str | None = None,
+    client: httpx.AsyncClient | None = None,
     now_ms: Clock = system_ms,
-) -> LocalTransport | AsyncLocalTransport:  # fmt: skip
+) -> LocalTransport | AsyncLocalTransport:
     """An httpx transport that applies the gateway's rules in this process.
 
     `settings_or_path` is a loaded `Settings` or a path to a `spendgate.yaml` (its `bootstrap`

@@ -85,9 +85,12 @@ async def keys_create(c: Client, a: Namespace) -> Output:
         rpm=a.rpm, tpm=a.tpm, max_concurrent=a.max_concurrent, max_output_tokens=a.max_output_tokens
     )
     body = _compact(
-        scope_id=a.scope, name=a.name, expires_at=a.expires,
-        allowed_models=a.models.split(",") if a.models else None, limits=limits or None,
-    )  # fmt: skip
+        scope_id=a.scope,
+        name=a.name,
+        expires_at=a.expires,
+        allowed_models=a.models.split(",") if a.models else None,
+        limits=limits or None,
+    )
     made = await c.call("POST", f"{BASE}/keys", body=body)
     secret = f"secret (shown once, store it now): {made['secret']}"
     try:
@@ -104,8 +107,11 @@ async def keys_update(c: Client, a: Namespace) -> Output:
     )
     models = a.models.split(",") if a.models else None
     if not changes and models is None:
-        raise CliError(EXIT_REFUSED, "nothing to change: give --rpm, --tpm, --max-concurrent, "
-                       "--max-output-tokens or --models")  # fmt: skip
+        raise CliError(
+            EXIT_REFUSED,
+            "nothing to change: give --rpm, --tpm, --max-concurrent, "
+            "--max-output-tokens or --models",
+        )
     body: Json = {}
     if changes:
         current = await c.call("GET", f"{BASE}/keys/{a.key_id}")
@@ -141,10 +147,18 @@ async def keys_rotate(c: Client, a: Namespace) -> Output:
 
 def _budget_rows(budgets: list[Json]) -> str:
     rows = [
-        (b["id"], b["period"], money(b["cap"]), money(b["effective_cap"]), money(b["spent"]),
-         money(b["held"]), money(b["remaining"]), "REVIEW" if b["review_required_at"] else "")
+        (
+            b["id"],
+            b["period"],
+            money(b["cap"]),
+            money(b["effective_cap"]),
+            money(b["spent"]),
+            money(b["held"]),
+            money(b["remaining"]),
+            "REVIEW" if b["review_required_at"] else "",
+        )
         for b in budgets
-    ]  # fmt: skip
+    ]
     return table(("ID", "PERIOD", "CAP", "EFFECTIVE", "SPENT", "HELD", "REMAINING", "FLAG"), rows)
 
 
@@ -158,9 +172,10 @@ async def budgets_set(c: Client, a: Namespace) -> Output:
     base = f"{BASE}/scopes/{a.scope}/budgets"
     cap = amount(a.cap)
     existing = [
-        b for b in items(await c.call("GET", base))
+        b
+        for b in items(await c.call("GET", base))
         if b["period"] == a.period and b["model_filter"] == a.model_filter
-    ]  # fmt: skip
+    ]
     if existing:
         body = _compact(cap=cap, soft_pct=a.soft_pct, note=a.note)
         done = await c.call("PATCH", f"{BASE}/budgets/{existing[0]['id']}", body=body)
@@ -205,18 +220,27 @@ async def kill_off(c: Client, a: Namespace) -> Output:
 
 async def usage(c: Client, a: Namespace) -> Output:
     query = _strs(
-        by=a.by, since=a.since, until=a.until, scope_id=a.scope, model=a.model, tag=a.tag,
-        basis=a.basis, limit=str(a.limit) if a.limit else None,
-    )  # fmt: skip
+        by=a.by,
+        since=a.since,
+        until=a.until,
+        scope_id=a.scope,
+        model=a.model,
+        tag=a.tag,
+        basis=a.basis,
+        limit=str(a.limit) if a.limit else None,
+    )
     data = await c.call("GET", f"{BASE}/usage", query=query)
     dims = list(dict.fromkeys(k for r in items(data, "rows") for k in _group(r)))
     rows = [
         [
             *(_group(r).get(d, "") for d in dims),
-            r["calls"], r["tokens_in"], r["tokens_out"], money(r["cost"]),
+            r["calls"],
+            r["tokens_in"],
+            r["tokens_out"],
+            money(r["cost"]),
         ]
         for r in items(data, "rows")
-    ]  # fmt: skip
+    ]
     text = table([d.upper() for d in dims] + ["CALLS", "TOKENS_IN", "TOKENS_OUT", "COST"], rows)
     return data, f"{text}\n\ntotal {money(data['total'])} ({data['basis']})"
 
@@ -235,14 +259,18 @@ async def status(c: Client, a: Namespace) -> Output:
         f"pending_holds={ledger.get('pending_holds', '?')}",
     ]
     switches = items(data, "kill_switches")
-    lines.append(f"kill switches: {len(switches)}" + "".join(
-        f"\n  {k['id']}  {k['target_kind']} {k.get('target_ref', '')}  {k['reason']}"
-        for k in switches
-    ))  # fmt: skip
+    lines.append(
+        f"kill switches: {len(switches)}"
+        + "".join(
+            f"\n  {k['id']}  {k['target_kind']} {k.get('target_ref', '')}  {k['reason']}"
+            for k in switches
+        )
+    )
     alerts = items(data, "budget_alerts")
-    lines.append(f"budget alerts: {len(alerts)}" + "".join(
-        f"\n  {x['kind']}  scope {x['scope_id']}" for x in alerts
-    ))  # fmt: skip
+    lines.append(
+        f"budget alerts: {len(alerts)}"
+        + "".join(f"\n  {x['kind']}  scope {x['scope_id']}" for x in alerts)
+    )
     return data, "\n".join(lines)
 
 

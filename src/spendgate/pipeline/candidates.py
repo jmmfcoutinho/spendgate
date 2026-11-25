@@ -103,9 +103,14 @@ class Router:
         return None
 
     def cool(
-        self, target: Target, now: int, retry_after_s: int | None, cause: Cause,
-        *, unknown: bool = False,
-    ) -> int:  # fmt: skip
+        self,
+        target: Target,
+        now: int,
+        retry_after_s: int | None,
+        cause: Cause,
+        *,
+        unknown: bool = False,
+    ) -> int:
         """Put the deployment into cooldown (honouring Retry-After, capped); returns ms.
 
         A quota or billing fault will not clear in a moment, and a Retry-After nobody can read
@@ -189,6 +194,12 @@ def retry_hint(err: UpstreamError, headers: Mapping[str, str], now: int) -> tupl
 
 def _deployment(d: ResolvedDeployment) -> Deployment:
     return Deployment(
-        d.provider, d.base_url, d.model, AuthMode(d.auth), d.region, d.api_version,
-        d.credential.reveal() if d.credential is not None else "", d.ambient,
-    )  # fmt: skip
+        d.provider,
+        d.base_url,
+        d.model,
+        AuthMode(d.auth),
+        d.region,
+        d.api_version,
+        d.credential.reveal() if d.credential is not None else "",
+        d.ambient,
+    )

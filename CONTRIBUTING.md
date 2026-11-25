@@ -10,7 +10,7 @@ command: a rule without a command is a wish. The targets are defined in this fil
 - Type hints everywhere (`mypy --strict`). No `Any` in `core/` and `ledger/`.
 - Docstrings for the public API only (one summary line, plus a paragraph when behaviour is non-obvious). Internal code gets a short comment where the reason is not obvious.
 - Comments explain why, never what.
-- Size guidelines: module <= ~400 lines, function <= ~50 lines, provider adapter <= ~400 lines, no limit on total product lines (ADR-0007; the total is reported). The lightweight report (section 3) flags outliers. Exceeding a guideline needs a one-line justification in the PR.
+- Size limits (hard, CI, ADR-0007): module <= 400 lines, function <= 50 lines, provider adapter <= 400 lines, counted on the ruff-formatted text; no limit on total product lines (the total is reported). The lightweight report (section 3) fails on any module, function or adapter over its limit; raising a limit needs an ADR. `# fmt: skip` is for tables only (section 3): packing a call or a signature onto fewer lines does not make it smaller to read.
 - No module-level mutable state. Dependencies are passed by constructor; time, randomness and I/O are injected (`Clock`, `Ledger`, `Provider` ports). Globals are constants only.
 - Money is an integer in **nano**-units (fields end in `_nano`; `Decimal` only at the edge); never `float`.
 - Fail closed: an unknown, unpriced or unreachable condition refuses the call. Any fail-open option is explicit, named and logged at start.
@@ -67,14 +67,29 @@ hooks (ruff, ruff-format, mypy, detect-secrets) live in `.pre-commit-config.yaml
 
 ### Lightweight report
 
-`scripts/lightweight_report.py` (standard library only) prints and checks:
+`scripts/lightweight_report.py` (standard library only, plus the `ruff` executable) prints and
+checks the following. Every line count is taken on the ruff-formatted text: each file is
+formatted in memory, never on disk (even one the ruff configuration excludes), at the root
+`pyproject.toml`'s `[tool.ruff] line-length`, after removing any `# fmt: skip` that does not mark
+a table. A `ruff.toml` or `.ruff.toml` under the sources stops the report (exit 2): it would
+format them by other rules.
 
 - product lines under `src/spendgate` excluding `providers/` (reported only, ADR-0007);
 - lines per provider adapter (hard: <= 400 each);
-- modules over 400 lines and functions over 50 lines (warnings; listed in the PR);
+- lines per module (hard: <= 400) and per function or method (hard: <= 50);
+- formatter directives (hard: none outside tables). `# fmt: skip` may only end a *table*: an
+  assignment (`=` or annotated) spanning more than one line, to names or dotted names, under an
+  annotation made of names, dotted names and subscripts of them, whose value is a list, tuple,
+  set or dict display, or `frozenset(<display>)`, holding only constants, signed numbers, names,
+  dotted names, `*name`, `**name` and nested displays of the same. The table must stand at
+  module or class level (a class defined inside a function does not count), start a logical
+  line (not after `;` or a backslash continuation) and share none of its lines with another
+  statement: ruff leaves every line of a skipped statement as it is. `# fmt: off`/`# fmt: on` is never allowed;
 - runtime dependency count of the base install, from `[project].dependencies` (hard: <= 6).
 
-Exit code 1 if a hard target is exceeded. Run it: `uv run python scripts/lightweight_report.py`.
+Exit code 1 if any of these targets is exceeded, 2 if ruff cannot be run or a nested ruff
+configuration is found. Run it:
+`uv run python scripts/lightweight_report.py`.
 Raising a limit needs an ADR.
 
 ## 4. Change management
