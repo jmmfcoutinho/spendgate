@@ -96,7 +96,8 @@ no secrets or personal data anywhere, security problems through a private adviso
 
 See [SECURITY.md](SECURITY.md): supported versions, private reporting, response targets and scope.
 Security is a gate on every change: perimeter and block tests run in CI; `pip-audit`, detect-secrets
-and the image scan run on every PR and weekly on `main`.
+and the image scan run on every PR and weekly on `main`. Releases, security releases included, follow
+[docs/releasing.md](docs/releasing.md).
 
 ## 6. Supply chain
 
