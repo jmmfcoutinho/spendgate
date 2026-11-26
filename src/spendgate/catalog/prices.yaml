@@ -552,7 +552,7 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Data Zone meter 1.122 USD/h (global 1.02)."
+    note: "Data Zone meter 1.122 USD/h (global 1.02). Microsoft documents it as a Realtime API model only (Foundry models page, read 2026-11-26), so the transcription endpoint may not serve it."
     meters: { audio_input_per_minute: "0.0187" }
   - id: azure_openai/gpt-4o-transcribe
     mode: transcription
@@ -561,13 +561,13 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Highest regional token meters (audio in 0.00792/1K, text 0.0033/1K, out 0.0132/1K); minute rate is a guard basis, not published. Retired 2026-10-15 per learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-18."
+    note: "Highest regional token meters (audio in 0.00792/1K, text 0.0033/1K, out 0.0132/1K); minute rate is a guard basis, not published. Version 2025-03-20 retires 2027-02-26 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26."
     meters:
       audio_input_per_minute: "0.00792"
       audio_input_per_mtok: "7.92"
       input_per_mtok: "3.3"
       output_per_mtok: "13.2"
-    deprecation_date: "2026-10-15"
+    deprecation_date: "2027-02-26"
   - id: azure_openai/gpt-4o-mini-transcribe
     mode: transcription
     currency: USD
@@ -575,7 +575,7 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Highest regional token meters (audio 3.96, text 1.65, out 6.60 per 1M); minute rate is a guard basis. Version 2025-12-15 retires 2027-06-15, 2025-03-20 retired 2026-10-15 (learn.microsoft.com/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-18)."
+    note: "Highest regional token meters (audio 3.96, text 1.65, out 6.60 per 1M); minute rate is a guard basis. Version 2025-12-15 retires 2027-06-15, 2025-03-20 2027-01-20 (https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26)."
     meters:
       audio_input_per_minute: "0.00396"
       audio_input_per_mtok: "3.96"

@@ -34,7 +34,7 @@ differences:
   - id: azure_openai/gpt-4o-transcribe
     meters: [input_per_mtok, output_per_mtok, audio_input_per_mtok]
     relation: ours_higher
-    reason: "Catalog stores the highest regional token meters as an upper bound; LiteLLM has the global ones. Azure Retail Prices API, verified 2026-11-13. The model is retired 2026-10-15 and refused by the catalog."
+    reason: "Catalog stores the highest regional token meters as an upper bound; LiteLLM has the global ones. Azure Retail Prices API, verified 2026-11-13."
     accepted_by: jmmfcoutinho
     accepted_on: "2026-11-18"
     expires: "2027-02-16"
@@ -61,16 +61,6 @@ differences:
     accepted_on: "2026-11-26"
     expires: "2027-02-24"
 deprecations:
-  # Our date comes from Microsoft's retirement schedule and is earlier than LiteLLM's, so the
-  # catalog refuses the model sooner (fail closed). LiteLLM's date matches OpenAI's own, non-Azure
-  # shutdown date for the same model.
-  - id: azure_openai/gpt-4o-transcribe
-    litellm_date: "2027-02-26"
-    status: ours_earlier
-    reason: "Retired 2026-10-15 per Microsoft's Azure OpenAI retirement schedule (read 2026-11-13; Microsoft: retirement dates are not extendable). 2027-02-26 is OpenAI's shutdown date for its own API."
-    accepted_by: jmmfcoutinho
-    accepted_on: "2026-11-26"
-    expires: "2027-02-24"
   # Microsoft's model retirement schedule (read 2026-11-18) does not list these. They stay out of
   # the catalog until Microsoft confirms a date.
   - id: azure_openai/gpt-6-astra
