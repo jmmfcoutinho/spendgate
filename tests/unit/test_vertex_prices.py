@@ -1,15 +1,19 @@
 """scripts/vertex_prices.py and the Vertex AI entries it generates (issue #107, ADR-0028).
 
 No network: the importer reads the recorded subset in tests/data/gcp_pricing/ (a trimmed snapshot
-of the Cloud Billing SKUs and v1beta prices and of Google's locations page, 2026-11-26).
+of the Cloud Billing SKUs and v1beta prices and of Google's locations page, 2026-11-26). The
+bundled-catalog tests hold the generated block to the structure Google's prices have, and check
+that a Vertex deployment (always with a Region) takes it while the Gemini API keeps its own price.
 """
 # ruff: noqa: ANN401  (the script is loaded dynamically, so its types are Any here)
 
 import copy
 import importlib.util
+import json
 import sys
 from datetime import UTC, datetime
 from decimal import Decimal
+from importlib import resources
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -17,7 +21,9 @@ from typing import Any
 import pytest
 import yaml
 
-from spendgate.core.catalog import parse
+from spendgate.config import ConfigError, check_config, load
+from spendgate.core.catalog import Catalog, ModelNotPriced, parse
+from tests.unit.test_config import ENV
 
 REPO = Path(__file__).resolve().parents[2]
 DATA = REPO / "tests" / "data" / "gcp_pricing"
@@ -461,3 +467,108 @@ def test_the_gemini_api_crosscheck_reports_differences_and_skips_programme_skus(
     found = vp.crosscheck(data, yaml.safe_load(CATALOG_HEAD), "2026-11-26")
     assert not [f for f in found if "gemini-4-neon" in f]
     assert "google/gemini-4-carbon: in the Gemini API SKUs, no region-less entry in force" in found
+
+
+# --- the bundled catalog ------------------------------------------------------------------------
+
+NOW_MS = ms("2026-11-27")
+
+
+def bundled_text() -> str:
+    return (resources.files("spendgate.catalog") / "prices.yaml").read_text(encoding="utf-8")
+
+
+def vertex_entries() -> list[dict[str, Any]]:
+    _, block, _ = vp.split_block(bundled_text())
+    assert block is not None
+    entries: list[dict[str, Any]] = yaml.safe_load("models:\n" + block)["models"]
+    return entries
+
+
+def bundled() -> Catalog:
+    return parse([yaml.safe_load(bundled_text())], SHA, ledger_currency="USD")
+
+
+def test_the_bundled_vertex_block_covers_every_reviewed_model() -> None:
+    entries = vertex_entries()
+    assert {e["id"].removeprefix("google/") for e in entries} == set(vp.MODELS)
+    for e in entries:
+        assert e["regions"] and e["verified"] is True and e["source_url"] == vp.SOURCE_URL
+        assert e["limits"]["max_output_tokens"] == vp.MODELS[e["id"][7:]].max_output_tokens
+
+
+def test_every_non_global_vertex_price_is_1_1x_the_global_price_meter_by_meter() -> None:
+    # Pricing page, "Non-global" rows of the Gemini 3 and 4 tables: 10% over the global price.
+    pairs: dict[str, dict[str, dict[str, Any]]] = {}
+    for e in vertex_entries():
+        pairs.setdefault(e["id"], {})["global" if e["regions"] == ["global"] else "other"] = e
+    both = {m: p for m, p in pairs.items() if len(p) == 2}
+    assert len(both) == 14
+    for model, p in both.items():
+        assert set(p["other"]["meters"]) == set(p["global"]["meters"]), model
+        for name, value in p["global"]["meters"].items():
+            assert Decimal(p["other"]["meters"][name]) == Decimal(value) * Decimal("1.1"), model
+
+
+@pytest.mark.parametrize(
+    ("region", "price_id"),
+    [
+        ("us", "google/gemini-4-neon@2026-11-26~us"),
+        ("eu", "google/gemini-4-neon@2026-11-26~eu"),
+        ("global", "google/gemini-4-neon@2026-11-26~global"),
+        (None, "google/gemini-4-neon@2026-11-26"),  # the Gemini API: no Region
+        ("europe-west4", "google/gemini-4-neon@2026-11-26"),  # not sold there: region-less price
+    ],
+)
+def test_m10_a_vertex_region_takes_its_region_scoped_entry_and_the_gemini_api_its_own(
+    region: str | None, price_id: str
+) -> None:
+    found = bundled().lookup("google", "gemini-4-neon", NOW_MS, region)
+    assert found.price_id_in(region) == price_id
+
+
+def test_m10_a_model_retired_on_vertex_is_refused_there_but_not_on_the_gemini_api() -> None:
+    catalog = bundled()
+    with pytest.raises(ModelNotPriced):
+        catalog.lookup("google", "gemini-2.5-flash", NOW_MS, "us-central1")
+    assert catalog.lookup("google", "gemini-2.5-flash", NOW_MS, None).verified
+
+
+VERTEX_CONFIG = """\
+server: {listen: 127.0.0.1:8080, key_pepper: "env:SPENDGATE_KEY_PEPPER"}
+ledger: {currency: USD, backend: {kind: sqlite, path: ./l.db}}
+providers:
+  google: {base_url: "https://aiplatform.us.rep.googleapis.com", auth: bearer_token,
+           credential: adc, region: us}
+models:
+  g: {catalog_id: google/gemini-4-neon, deployments: [DEPLOYMENTS]}
+"""
+
+
+def vertex_config(tmp_path: Path, deployments: str) -> Path:
+    path = tmp_path / "spendgate.yaml"
+    path.write_text(VERTEX_CONFIG.replace("DEPLOYMENTS", deployments), encoding="utf-8")
+    return path
+
+
+def test_a_vertex_deployment_loads_with_the_region_scoped_price(tmp_path: Path) -> None:
+    path = vertex_config(tmp_path, "{provider: google}")
+    report = check_config(path, env=ENV, now_ms=NOW_MS)
+    assert report.ok and not report.unlisted_regions
+    settings = load(path, env=ENV, now_ms=NOW_MS)
+    regions = [d.region for d in settings.routes["g"].deployments]
+    entry = settings.catalog.lookup_route("google", "gemini-4-neon", regions, NOW_MS)
+    assert entry.price_id_in("us") == "google/gemini-4-neon@2026-11-26~us"
+
+
+def test_m01_a_vertex_route_mixing_global_and_us_is_refused(tmp_path: Path) -> None:
+    path = vertex_config(tmp_path, "{provider: google}, {provider: google, region: global}")
+    with pytest.raises(ConfigError, match="different prices"):
+        load(path, env=ENV, now_ms=NOW_MS)
+
+
+def test_the_recorded_subset_is_small_and_holds_no_account_data() -> None:
+    for name in vp.FILES:
+        text = (DATA / name).read_text(encoding="utf-8")
+        assert len(text) < 64_000 and "billingAccounts" not in text
+    assert json.loads((DATA / "vertex-skus.json").read_text(encoding="utf-8"))["skus"]
