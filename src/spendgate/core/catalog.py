@@ -6,7 +6,7 @@ fail open: unknown keys, a zero-charge option or out-of-range `free_statuses` ar
 """
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -18,6 +18,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationEr
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.money import FxSnapshot, Money, convert_to
 from spendgate.core.outcomes import provider_free_statuses, validate_free_statuses
+from spendgate.core.price_regions import Region, can_price, overlap, pick, split
 
 PROVIDERS = (
     "openai", "azure_openai", "anthropic", "bedrock", "google", "azure_speech", "elevenlabs",
@@ -54,6 +55,7 @@ Multiplier = Annotated[Decimal, _decimal_string(_MULTIPLIER)]
 IsoDate = Annotated[date, BeforeValidator(_iso_date)]
 PosInt = Annotated[int, Field(strict=True, ge=1)]
 Text = Annotated[str, Field(strict=True)]
+RegionSlug = Annotated[str, Field(strict=True, pattern=f"^{_REGION.pattern}$")]
 
 
 class CatalogError(ValueError):
@@ -140,7 +142,8 @@ class PriceEntry(_Strict):
         ]
         | None
     ) = None
-    region: Annotated[str, Field(strict=True, pattern=f"^{_REGION.pattern}$")] | None = None
+    region: RegionSlug | None = None  # documentation only; `regions` is enforced
+    regions: Annotated[tuple[RegionSlug, ...], Field(min_length=1)] | None = None
     price_multiplier: Multiplier = Decimal(1)
     meters: Meters
     long_context: LongContext | None = None
@@ -157,8 +160,32 @@ class PriceEntry(_Strict):
 
     @property
     def price_id(self) -> str:
-        """The `(id, effective_from)` pair recorded on every call row."""
+        """The `(id, effective_from)` pair; `price_id_in` is what a call row records."""
         return f"{self.id}@{self.effective_from.isoformat()}"
+
+    @property
+    def key(self) -> tuple[str, date, frozenset[str] | None]:
+        """What overrides merge by: one entry per id, date and Region set."""
+        return (self.id, self.effective_from, frozenset(self.regions or ()) or None)
+
+    def price_id_in(self, region: Region) -> str:
+        """The price id recorded on a call row: `~<region>` when a Region-scoped entry priced it.
+
+        Region sets of one id and date are disjoint, so the suffix names exactly one entry.
+        """
+        if self.regions is not None and region in self.regions:
+            return f"{self.price_id}~{region}"
+        return self.price_id
+
+    def described(self) -> str:
+        """`price_id` plus the Regions it is scoped to, for messages."""
+        return f"{self.price_id}~{','.join(self.regions)}" if self.regions else self.price_id
+
+    @model_validator(mode="after")
+    def _regions_unique(self) -> Self:
+        if self.regions is not None and len(set(self.regions)) != len(self.regions):
+            raise ValueError("regions must not repeat a region")
+        return self
 
     @model_validator(mode="after")
     def _mode_rules(self) -> Self:
@@ -218,12 +245,13 @@ def _validate(raw: Mapping[str, object], index: int) -> _Document:
             for e in exc.errors(include_input=False, include_url=False)
         )
         raise CatalogError(f"catalog document {index}: {found}") from exc
-    seen: set[tuple[str, date]] = set()
+    seen: set[tuple[str, date, frozenset[str] | None]] = set()
     for entry in doc.models:
-        key = (entry.id, entry.effective_from)
-        if key in seen:
-            raise CatalogError(f"catalog document {index}: duplicate {entry.price_id}")
-        seen.add(key)
+        if entry.key in seen:
+            raise CatalogError(f"catalog document {index}: duplicate {entry.described()}")
+        seen.add(entry.key)
+    if (problem := overlap(doc.models)) is not None:
+        raise CatalogError(f"catalog document {index}: {problem}")
     return doc
 
 
@@ -238,16 +266,41 @@ class Catalog:
     _free: Mapping[str, frozenset[int]]
     _replaced_verified: frozenset[str] = frozenset()  # unverified price_ids that replaced one
 
-    def lookup(self, provider: str, model: str, now: int) -> PriceEntry:
-        """Entry in force at `now` (epoch ms, UTC date), or `ModelNotPriced`."""
-        today = datetime.fromtimestamp(now // 1000, tz=UTC).date()
-        for entry in self._by_model.get((provider, model), ()):
-            if entry.effective_from > today:
-                continue
-            if entry.deprecation_date is not None and entry.deprecation_date <= today:
-                raise ModelNotPriced(provider, model, "model is past its deprecation date")
-            return entry
-        raise ModelNotPriced(provider, model, "no price entry in force")
+    def lookup(self, provider: str, model: str, now: int, region: Region = None) -> PriceEntry:
+        """Entry in force at `now` (epoch ms, UTC date) for a deployment in `region`.
+
+        `ModelNotPriced` when none is. A deprecated winner never falls back to an older entry.
+        """
+        entry = pick(self._by_model.get((provider, model), ()), region, _day(now))
+        if entry is None:
+            raise ModelNotPriced(provider, model, "no price entry in force")
+        if entry.deprecation_date is not None and entry.deprecation_date <= _day(now):
+            raise ModelNotPriced(provider, model, "model is past its deprecation date")
+        return entry
+
+    def lookup_route(
+        self, provider: str, model: str, regions: Sequence[Region], now: int
+    ) -> PriceEntry:
+        """The one entry that prices every deployment Region of a route (ADR-0028, point 4).
+
+        Load refuses a route whose Regions resolve differently; refusing here too keeps a hold
+        from ever being sized with one Region's price for another.
+        """
+        entries = [self.lookup(provider, model, now, r) for r in regions or (None,)]
+        if len({e.key for e in entries}) > 1:
+            raise ModelNotPriced(provider, model, "deployments resolve to different prices")
+        return entries[0]
+
+    def could_price(self, provider: str, model: str, region: Region) -> bool:
+        """Whether some entry, on some date, prices a deployment in `region`."""
+        return can_price(self._by_model.get((provider, model), ()), region)
+
+    def split_by_region(
+        self, provider: str, model: str, regions: Sequence[Region], now: int | None
+    ) -> Mapping[Region, PriceEntry] | None:
+        """Regions that resolve to different entries, from `now` on (any date if None)."""
+        today = None if now is None else _day(now)
+        return split(self._by_model.get((provider, model), ()), regions, today)
 
     def free_statuses(self, provider: str) -> frozenset[int]:
         """Statuses that mean 'rejected before processing' for this provider."""
@@ -277,6 +330,10 @@ class Catalog:
         return tuple(sorted(found))
 
 
+def _day(now: int) -> date:
+    return datetime.fromtimestamp(now // 1000, tz=UTC).date()
+
+
 def parse(
     documents: Sequence[Mapping[str, object]],
     sha256: str,
@@ -286,21 +343,22 @@ def parse(
 ) -> Catalog:
     """Validate the bundled document and overrides, merge them and require FX for every currency.
 
-    Later documents win per `(id, effective_from)` and per provider block. Raises `CatalogError`
-    for invalid data and `MissingFxRate` when a currency cannot reach the ledger currency.
+    Later documents win per `(id, effective_from, regions)` and per provider block; Region sets
+    of one id and date that overlap are refused. Raises `CatalogError` for invalid data and
+    `MissingFxRate` when a currency cannot reach the ledger currency.
     """
     if not _SHA256.fullmatch(sha256):
         raise CatalogError("sha256 must be 64 lower-case hex characters")
-    merged: dict[tuple[str, date], PriceEntry] = {}
+    merged: dict[tuple[str, date, frozenset[str] | None], PriceEntry] = {}
     free: dict[str, frozenset[int]] = {}
     replaced: set[str] = set()
     for index, raw in enumerate(documents):
         doc = _validate(raw, index)
         for e in doc.models:
-            before = merged.get((e.id, e.effective_from))
+            before = merged.get(e.key)
             if before is not None and before.verified and not e.verified:
                 replaced.add(e.price_id)
-            merged[(e.id, e.effective_from)] = e
+            merged[e.key] = e
         for slug, rule in doc.providers.items():
             rules: dict[str, object] = {}
             if rule.free_statuses is not None:
@@ -308,20 +366,26 @@ def parse(
             free[slug] = provider_free_statuses(slug, rules)  # the model already validated it
     if not merged:
         raise CatalogError("no catalog documents given")
+    if (problem := overlap(merged.values())) is not None:
+        raise CatalogError(f"catalog documents overlap: {problem}")
     for currency in sorted({e.currency for e in merged.values()}):
         convert_to(Money.zero(currency), ledger_currency, fx)  # raises MissingFxRate
-    grouped: dict[tuple[str, str], list[PriceEntry]] = {}
-    for entry in merged.values():
-        grouped.setdefault((entry.provider, entry.model), []).append(entry)
-    index_by_model = {
-        key: tuple(sorted(group, key=lambda e: e.effective_from, reverse=True))
-        for key, group in grouped.items()
-    }
     return Catalog(
         sha256,
         ledger_currency,
         tuple(fx),
-        MappingProxyType(index_by_model),
+        MappingProxyType(_by_model(merged.values())),
         MappingProxyType(free),
         frozenset(replaced),
     )
+
+
+def _by_model(entries: Iterable[PriceEntry]) -> dict[tuple[str, str], tuple[PriceEntry, ...]]:
+    """Entries per (provider, model), newest `effective_from` first."""
+    grouped: dict[tuple[str, str], list[PriceEntry]] = {}
+    for entry in entries:
+        grouped.setdefault((entry.provider, entry.model), []).append(entry)
+    return {
+        key: tuple(sorted(group, key=lambda e: e.effective_from, reverse=True))
+        for key, group in grouped.items()
+    }
