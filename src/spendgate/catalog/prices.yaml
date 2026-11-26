@@ -479,12 +479,13 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Flagship. Global 10/1/12.5/50 x 1.20 Data Zone upper bound (retail meters DZ 11-12 / 55-60)."
+    note: "Flagship. Global 10/1/12.5/50 x 1.20 Data Zone upper bound (retail meters DZ 11-12 / 55-60). Version 2026-09-03 retires 2028-01-11 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26."
     deployment_type: data_zone
     price_multiplier: "1.20"
     meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "12.5", output_per_mtok: "50" }
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
     limits: { max_output_tokens: 128000, context_window: 1050000, max_image_tokens: 45000 }
+    deprecation_date: "2028-01-11"
   - id: azure_openai/gpt-6-luna
     mode: responses
     currency: USD
@@ -492,12 +493,13 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Small/cheap. Global 0.10/0.01/0.125/0.50 x 1.20 Data Zone upper bound."
+    note: "Small/cheap. Global 0.10/0.01/0.125/0.50 x 1.20 Data Zone upper bound. Version 2026-09-22 retires 2028-03-11 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26."
     deployment_type: data_zone
     price_multiplier: "1.20"
     meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.125", output_per_mtok: "0.5" }
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
     limits: { max_output_tokens: 128000, context_window: 1050000 }
+    deprecation_date: "2028-03-11"
   - id: azure_openai/gpt-6.1-terra
     mode: responses
     currency: USD
@@ -505,12 +507,13 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Global 1.00/0.05/1.25/5.00 x 1.20 Data Zone upper bound."
+    note: "Global 1.00/0.05/1.25/5.00 x 1.20 Data Zone upper bound. Version 2026-10-26 retires 2027-10-26 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26."
     deployment_type: data_zone
     price_multiplier: "1.20"
     meters: { input_per_mtok: "1", cached_input_per_mtok: "0.05", cache_write_per_mtok: "1.25", output_per_mtok: "5" }
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
     limits: { max_output_tokens: 128000, context_window: 1050000 }
+    deprecation_date: "2027-10-26"
   - id: azure_openai/gpt-6.1-sol
     mode: responses
     currency: USD
@@ -518,12 +521,13 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Global 2.00/0.10/2.50/10.00 x 1.20 Data Zone upper bound."
+    note: "Global 2.00/0.10/2.50/10.00 x 1.20 Data Zone upper bound. Version 2026-09-29 retires 2028-03-11 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26."
     deployment_type: data_zone
     price_multiplier: "1.20"
     meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "2.5", output_per_mtok: "10" }
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
     limits: { max_output_tokens: 128000, context_window: 1050000 }
+    deprecation_date: "2028-03-11"
 
   # --- Azure OpenAI speech-to-text (highest regional meter = upper bound; all from the Azure Retail Prices API) ---
   - id: azure_openai/whisper
@@ -543,8 +547,9 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Data Zone meter 0.297 USD/h (global 0.27)."
+    note: "Data Zone meter 0.297 USD/h (global 0.27). Version 2026-07-28 retires 2028-02-01 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule, read 2026-11-26."
     meters: { audio_input_per_minute: "0.00495" }
+    deprecation_date: "2028-02-01"
   - id: azure_openai/gpt-live-transcribe
     mode: transcription
     currency: USD
@@ -552,8 +557,9 @@ models:
     source_url: https://prices.azure.com/api/retail/prices
     verified: true
     checked_on: "2026-11-13"
-    note: "Data Zone meter 1.122 USD/h (global 1.02). Microsoft documents it as a Realtime API model only (Foundry models page, read 2026-11-26), so the transcription endpoint may not serve it."
+    note: "Data Zone meter 1.122 USD/h (global 1.02). Realtime API only per Microsoft's models page, so the transcription endpoint may not serve it. Version 2026-07-28 retires 2028-02-01 per https://learn.microsoft.com/en-us/azure/foundry/openai/concepts/model-retirement-schedule (both read 2026-11-26)."
     meters: { audio_input_per_minute: "0.0187" }
+    deprecation_date: "2028-02-01"
   - id: azure_openai/gpt-4o-transcribe
     mode: transcription
     currency: USD

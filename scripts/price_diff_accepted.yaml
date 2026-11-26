@@ -60,41 +60,4 @@ differences:
     accepted_by: jmmfcoutinho
     accepted_on: "2026-11-26"
     expires: "2027-02-24"
-deprecations:
-  # Microsoft's model retirement schedule (read 2026-11-18) does not list these. They stay out of
-  # the catalog until Microsoft confirms a date.
-  - id: azure_openai/gpt-6-astra
-    litellm_date: "2028-01-11"
-    status: unconfirmed
-    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
-    accepted_by: jmmfcoutinho
-    accepted_on: "2026-11-18"
-    expires: "2027-02-16"
-  - id: azure_openai/gpt-6-luna
-    litellm_date: "2028-03-11"
-    status: unconfirmed
-    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
-    accepted_by: jmmfcoutinho
-    accepted_on: "2026-11-18"
-    expires: "2027-02-16"
-  - id: azure_openai/gpt-6.1-sol
-    litellm_date: "2028-03-11"
-    status: unconfirmed
-    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
-    accepted_by: jmmfcoutinho
-    accepted_on: "2026-11-18"
-    expires: "2027-02-16"
-  - id: azure_openai/gpt-transcribe
-    litellm_date: "2028-02-01"
-    status: unconfirmed
-    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
-    accepted_by: jmmfcoutinho
-    accepted_on: "2026-11-18"
-    expires: "2027-02-16"
-  - id: azure_openai/gpt-live-transcribe
-    litellm_date: "2028-02-01"
-    status: unconfirmed
-    reason: "Not in Microsoft's Azure OpenAI retirement schedule; date known only from LiteLLM."
-    accepted_by: jmmfcoutinho
-    accepted_on: "2026-11-18"
-    expires: "2027-02-16"
+deprecations: []
