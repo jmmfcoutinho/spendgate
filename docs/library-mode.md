@@ -55,7 +55,9 @@ the ledger connections (`await guard.aclose()` for async clients).
   OpenAI, `ANTHROPIC_API_KEY` for Anthropic, or pass `provider_keys={"openai": "..."}`. No
   credential means an error that names both variables. Other providers (Azure, Bedrock, Google,
   ElevenLabs) need a config file: `guard(cap=..., config="spendgate.yaml")`. Its `bootstrap`
-  section is not applied; the cap comes from `cap=`.
+  section is not applied; the cap comes from `cap=`. These routes have no `region`, so they are
+  priced by region-less entries only; a model whose entries all list `regions` is not routed
+  ([catalog-how-to.md](catalog-how-to.md) section 8).
 - **The cap** is a lifetime budget of the ledger file, created once. Asking for another cap on an
   existing ledger raises `CapMismatch` instead of changing it, because other scripts share it. Use
   another `ledger_path=` for a separate pool.
