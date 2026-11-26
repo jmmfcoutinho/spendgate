@@ -10,6 +10,7 @@ import yaml
 from spendgate.core.catalog import Catalog, parse
 from spendgate.core.cost import Usage, actual_cost
 from spendgate.core.errors import ErrorCode
+from spendgate.core.money import Money
 from spendgate.core.outcomes import Outcome
 from spendgate.providers import openai_shapes as shapes
 from spendgate.providers.azure_openai import AzureOpenAIProvider
@@ -106,6 +107,39 @@ def test_transcription_costs_equal_the_earlier_guard(catalog: Catalog) -> None:
             input_tokens=100, audio_input_tokens=1000, output_tokens=200
         )  # text and audio counted apart
         assert cost(catalog, model, usage) == (1000 * a + 100 * t + 200 * o) / M
+
+
+NOW_MS = 1_795_651_200_000  # 2026-11-26
+TEXT_MODES = ("chat", "responses")
+
+
+def azure_text_routes() -> list[tuple[str, str | None]]:
+    """Every bundled azure_openai chat or Responses id, with each Region it is scoped to (#106).
+
+    A Region-less entry is priced for a deployment without a Region; a Region-scoped one for each
+    Region it lists. Bare ids and generated `global.`/`datazone.`/`regional.` ids alike.
+    """
+    routes: set[tuple[str, str | None]] = set()
+    for e in yaml.safe_load(PRICES.read_text())["models"]:
+        if e["id"].startswith("azure_openai/") and e["mode"] in TEXT_MODES:
+            model = e["id"].removeprefix("azure_openai/")
+            routes |= {(model, r) for r in e.get("regions") or [None]}
+    return sorted(routes, key=lambda r: (r[0], r[1] or ""))
+
+
+@pytest.mark.parametrize(("model", "region"), azure_text_routes())
+def test_usage_prices_through_every_bundled_azure_text_entry(
+    catalog: Catalog, provider: AzureOpenAIProvider, model: str, region: str | None
+) -> None:
+    usage = provider.usage(REQ, answer("chat_completion.json"))
+    assert usage == Usage(input_tokens=1000, output_tokens=50, cached_input_tokens=100)
+    entry = catalog.lookup("azure_openai", model, NOW_MS, region)
+    m = entry.meters
+    assert m.input_per_mtok is not None and m.output_per_mtok is not None
+    cached = m.cached_input_per_mtok if m.cached_input_per_mtok is not None else m.input_per_mtok
+    expected = (900 * m.input_per_mtok + 100 * cached + 50 * m.output_per_mtok) / M
+    # one ceiling to whole nano-USD at the end (catalog-schema.md section 5)
+    assert actual_cost(entry, usage) == Money.from_amount(expected * entry.price_multiplier, "USD")
 
 
 def test_content_filter_400_is_a_free_client_error(provider: AzureOpenAIProvider) -> None:
