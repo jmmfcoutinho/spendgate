@@ -117,10 +117,6 @@ class Model:
     retires: str | None = None  # retirement schedule date, the catalog `deprecation_date`
     long_context: bool = False  # Azure sells short- and long-context meters for it
     retired_types: tuple[str, ...] = ()  # deployment types Microsoft has already retired
-    caveat: str = ""  # appended to every entry's note
-
-
-_PROMO = "OpenAI's own price for gpt-5.6-sol is promotional until 2026-11-30; Azure lists no end."
 
 
 def _text(  # noqa: PLR0913 - one table row
@@ -132,9 +128,8 @@ def _text(  # noqa: PLR0913 - one table row
     mode: str = "responses",
     long_context: bool = False,
     retired_types: tuple[str, ...] = (),
-    caveat: str = "",
 ) -> Model:
-    return Model(name, mode, "text", out, ctx, retires, long_context, retired_types, caveat)
+    return Model(name, mode, "text", out, ctx, retires, long_context, retired_types)
 
 
 # fmt: off
@@ -146,7 +141,6 @@ MODELS: tuple[Model, ...] = (
     _text("gpt-6-astra", 128000, 1050000, "2028-01-11", long_context=True),
     _text("gpt-6-sol", 128000, 1050000, "2028-03-11", long_context=True),
     _text("gpt-6-luna", 128000, 1050000, "2028-03-11", long_context=True),
-    _text("gpt-5.6-sol", 128000, 1050000, "2028-01-11", long_context=True, caveat=_PROMO),
     _text("gpt-5.6-terra", 128000, 1050000, "2028-01-11", long_context=True),
     _text("gpt-5.6-luna", 128000, 1050000, "2028-01-11", long_context=True),
     _text("gpt-5.5", 128000, 1050000, "2027-10-26", long_context=True),
@@ -193,7 +187,6 @@ ALIASES: Mapping[str, str] = {
     "6.2 astra": "gpt-6.2-astra", "6.2 sol": "gpt-6.2-sol",
     "6.1 sol": "gpt-6.1-sol", "61 terra": "gpt-6.1-terra",
     "6 astra": "gpt-6-astra", "6 sol": "gpt-6-sol", "6 luna": "gpt-6-luna",
-    "5.6 sol": "gpt-5.6-sol", "56 sol": "gpt-5.6-sol",
     "5.6 terra": "gpt-5.6-terra", "5.6 luna": "gpt-5.6-luna",
     "5.5": "gpt-5.5", "5.4": "gpt-5.4", "5.4 pro": "gpt-5.4-pro",
     "5.4 mini": "gpt-5.4-mini", "5.4 nano": "gpt-5.4-nano",
@@ -222,6 +215,10 @@ ALIASES: Mapping[str, str] = {
 
 # Models the price list carries that are deliberately not imported, with the reviewed reason.
 _RETIRED = f"retired per the retirement schedule ({SCHEDULE_PAGE}, read {READ_ON})"
+_PROMO = (
+    "left out like openai/gpt-5.6-sol: OpenAI's price is promotional until 2026-11-30 and Azure"
+    " usually tracks OpenAI; the price watch adds it once the later price is published"
+)
 _NOT_LISTED = f"not on Microsoft's models page or retirement schedule (read {READ_ON}): no limits"
 LEFT_OUT: Mapping[str, str] = {
     "gpt 5 chat": _RETIRED, "gpt 5.1 chat": _RETIRED, "gpt 5.2 chat": _RETIRED,
@@ -232,6 +229,7 @@ LEFT_OUT: Mapping[str, str] = {
     "o1 preview": _RETIRED,
     "o1 mini": _NOT_LISTED + " (its o-series siblings retired 2026-11-19)",
     "gpt 5.2 pro": _NOT_LISTED,
+    "5.6 sol": _PROMO, "56 sol": _PROMO,
     "chat latest 07012026": "no gpt-chat-latest version 2026-07-01 on Microsoft's models page",
     "gpt 4 turbo vision 128k": _NOT_LISTED, "gpt 4 turbo 128k": _NOT_LISTED,
     "gpt 4 turbo128k": _NOT_LISTED, "gpt 4 32k": _NOT_LISTED, "gpt 4 8k": _NOT_LISTED,
@@ -686,7 +684,6 @@ def entry_lines(entry: Entry, checked_on: date) -> list[str]:
         note = (
             f"Azure Retail Prices API, {label}: the same price in all {entry.of_regions} Regions."
         )
-    note = f"{note} {model.caveat}".rstrip()
     lines = [
         f"  - id: {catalog_id(entry)}",
         f"    mode: {model.mode}",

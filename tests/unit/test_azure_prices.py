@@ -84,7 +84,6 @@ CLASSIFIED = [
     # GPT-5 styles
     ("5.4 nano Inp Dz 1M Tokens", "gpt-5.4-nano", DZ, IN, ""),
     ("5.4 longco cd inp Gl 1M Tokens", "gpt-5.4", GL, CACHED, "long"),
-    ("56 sol ShortCo Cd Inp Std Rg 1M Tokens", "gpt-5.6-sol", RG, CACHED, ""),
     ("GPT 5 Mini cchd Inpt DZone 1M Tokens", "gpt-5-mini", DZ, CACHED, ""),
     ("GPT 5 outpt Glbl 1M Tokens", "gpt-5", GL, OUT, ""),
     ("gpt-5-codex-ccchd-inp-dzone Tokens", "gpt-5-codex", DZ, CACHED, ""),
@@ -136,6 +135,8 @@ SKIPPED = [
     ("gpt-live-transcribe Gl Unit", "gpt live transcribe: a Realtime API model"),
     ("Az-GPT-3.5-turbo Tokens", "legacy"),
     ("gpt 4o 0513 Output regional Tokens", "gpt-4o-2024-05-13 Regional Standard: retired"),
+    ("56 sol ShortCo Cd Inp Std Rg 1M Tokens", "56 sol: left out like openai/gpt-5.6-sol"),
+    ("5.6 sol LongCo Inp Std DZ 1M Tokens", "5.6 sol: left out like openai/gpt-5.6-sol"),
 ]
 
 
@@ -146,6 +147,12 @@ def test_variants_and_models_not_imported_are_skipped_with_their_reviewed_reason
     found = ap.classify(name)
     assert isinstance(found, ap.Skip)
     assert found.reason.startswith(reason)
+
+
+def test_the_short_abbreviations_of_each_deployment_type_are_read() -> None:
+    assert ap.words("56 sol ShortCo Cd Inp Std Rg 1M Tokens").dtype == "regional"
+    assert ap.words("gpt 4o 0806 Inp Data Zone Tokens").dtype == "data_zone"
+    assert ap.words("6-luna ShortCo Inp Std Gl 1M Tokens").dtype == "global"
 
 
 @pytest.mark.parametrize(

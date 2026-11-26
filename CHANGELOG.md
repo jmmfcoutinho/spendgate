@@ -14,16 +14,17 @@ affected.
 ### Added
 
 - Azure OpenAI prices for every deployment type and Region Azure sells them in, generated from the
-  public Azure Retail Prices API by a new maintainer script, `scripts/azure_prices.py` (#106). 47
+  public Azure Retail Prices API by a new maintainer script, `scripts/azure_prices.py` (#106). 46
   models the `azure_openai` adapter serves (GPT-6.2 down to GPT-4o mini, `gpt-chat-latest`,
-  `gpt-oss-120b`, three embedding models, four transcription models and `tts`/`tts-hd`) get 105 new ids,
+  `gpt-oss-120b`, three embedding models, four transcription models and `tts`/`tts-hd`) get 103 new ids,
   one per deployment type: `azure_openai/global.<model>`, `azure_openai/datazone.<model>` and
-  `azure_openai/regional.<model>`, in 158 entries over 42 Regions. Where Azure charges different prices
-  in different Regions (90 entries, most Data Zone and Regional deployments), each price is scoped to its
+  `azure_openai/regional.<model>`, in 156 entries over 42 Regions. Where Azure charges different prices
+  in different Regions (89 entries, most Data Zone and Regional deployments), each price is scoped to its
   Regions and a Region Azure does not list is refused rather than charged another Region's price.
   Limits come from Microsoft's models page and shutdown dates from its retirement schedule. Batch,
   Priority, Flex, provisioned, fine-tuned, Realtime, image and audio chat meters, the 12-hour cache write
-  and retired models are not imported. The script refuses any Azure OpenAI meter name it cannot
+  and retired models are not imported, nor is `gpt-5.6-sol`, left out like `openai/gpt-5.6-sol` while
+  OpenAI's price is promotional. The script refuses any Azure OpenAI meter name it cannot
   classify, and `--check` (exit 1 on drift) is ready for the daily price-watch job. The hand-written
   bare ids (`azure_openai/gpt-6-luna` and the others) are unchanged. See "Azure OpenAI: which catalog
   id" in docs/catalog-how-to.md.

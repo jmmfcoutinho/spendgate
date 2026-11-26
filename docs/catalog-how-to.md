@@ -331,8 +331,8 @@ models:
 - **The bare ids** (`azure_openai/gpt-6-luna` and the other hand-written ones) stay as they were:
   Global meters times the highest Data Zone uplift, a conservative upper bound for any deployment type.
 - **Not priced:** Batch, Priority processing, Flex, provisioned (PTU), fine-tuned, Realtime, image and
-  audio chat models, the 12-hour cache write, and models Microsoft has retired or does not list on its
-  models page. A Region that lacks a meter the model has elsewhere (a cache-write or long-context price)
+  audio chat models, the 12-hour cache write, models Microsoft has retired or does not list on its
+  models page, and `gpt-5.6-sol` while OpenAI's own price for it is promotional. A Region that lacks a meter the model has elsewhere (a cache-write or long-context price)
   is left out. The script prints each one when it runs. Use an override file (section 1) for them.
 - **Updating** (maintainers): `uv run python scripts/azure_prices.py --download azure.json --check`
   exits 1 when the price list no longer matches the catalog; `--from-file azure.json --write` rewrites

@@ -878,34 +878,6 @@ models:
     long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
     limits: { max_output_tokens: 128000, context_window: 1050000 }
     deprecation_date: "2028-03-11"
-  - id: azure_openai/global.gpt-5.6-sol
-    mode: responses
-    currency: USD
-    effective_from: "2026-10-01"
-    source_url: https://prices.azure.com/api/retail/prices
-    verified: true
-    checked_on: "2026-11-26"
-    note: "Azure Retail Prices API, Global Standard: the same price in all 25 Regions. OpenAI's own price for gpt-5.6-sol is promotional until 2026-11-30; Azure lists no end."
-    deployment_type: global
-    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.4", cache_write_per_mtok: "5", output_per_mtok: "20" }
-    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
-    limits: { max_output_tokens: 128000, context_window: 1050000 }
-    deprecation_date: "2028-01-11"
-  - id: azure_openai/datazone.gpt-5.6-sol
-    mode: responses
-    currency: USD
-    effective_from: "2026-09-01"
-    source_url: https://prices.azure.com/api/retail/prices
-    verified: true
-    checked_on: "2026-11-26"
-    note: "Azure Retail Prices API, Data Zone Standard: 13 of the 15 Regions Azure lists it in. OpenAI's own price for gpt-5.6-sol is promotional until 2026-11-30; Azure lists no end."
-    deployment_type: data_zone
-    regions: [centralus, eastus, eastus2, francecentral, germanywestcentral, northcentralus, polandcentral,
-              southcentralus, spaincentral, swedencentral, westeurope, westus, westus3]
-    meters: { input_per_mtok: "4.4", cached_input_per_mtok: "0.44", cache_write_per_mtok: "5.5", output_per_mtok: "22" }
-    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
-    limits: { max_output_tokens: 128000, context_window: 1050000 }
-    deprecation_date: "2028-01-11"
   - id: azure_openai/global.gpt-5.6-terra
     mode: responses
     currency: USD
