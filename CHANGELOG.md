@@ -39,6 +39,11 @@ Region-scoped entry yet, no existing route is affected.
   different catalog entries, today or from a later `effective_from`, naming the route and the Regions.
   Until now the hold and the charge silently used one price for every deployment of a route; route
   differently-priced Regions as separate models (ADR-0028, #103).
+- Gemini API: Gemini 4 Carbon and Gemini 4 Argon are charged their billed list price ($4 input,
+  $0.20 cached, $20 output per MTok) from 2026-11-26, not the $2 / $0.10 / $10 the pricing page shows
+  through 2026-11-30. The Gemini API billing SKUs (Cloud Billing service `AEFD-7695-64FA`) list the
+  full price and the promotion is paid as credits back, so the lower price would undercharge. The
+  2026-12-01 entries already had this price (#107).
 - Catalog overrides now merge by `id`, `effective_from` and `regions`: an override with a different set of
   `regions` adds an entry instead of replacing the region-less one, and one whose Regions overlap another
   entry of the same id and date is a load error.

@@ -1075,6 +1075,16 @@ models:
   - id: google/gemini-4-carbon
     mode: chat
     currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Billed list price, per the Gemini API billing SKUs (Cloud Billing service AEFD-7695-64FA, 2026-11-26); the page's $2 / $0.10 / $10 through 2026-11-30 is a promotion paid as credits back."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", output_per_mtok: "20" }
+    limits: { max_output_tokens: 65536, context_window: 1000000, max_image_tokens: 1400 }
+  - id: google/gemini-4-carbon
+    mode: chat
+    currency: USD
     effective_from: "2026-12-01"
     source_url: https://ai.google.dev/gemini-api/docs/pricing
     verified: true
@@ -1096,8 +1106,10 @@ models:
   # --- Every other text model generateContent serves (issue #108) ---
   # Prices: aistudio.google.com/docs/pricing, Standard tab, Paid tier, read 2026-11-26. input_per_mtok is the text / image
   # price (the adapter admits no audio, video or PDF); output includes thinking tokens. Context-cache storage per hour is
-  # not encoded (as for gemini-3.5-flash-lite). Dated changes are separate entries: Gemini 4 Argon doubles from
-  # 2026-12-01, Gemini 3.8 Flash, 3.6 Flash and Robotics-ER 2 double from 2027-01-01. deprecation_date is the shutdown
+  # not encoded (as for gemini-3.5-flash-lite). Dated changes are separate entries: Gemini 3.8 Flash, 3.6 Flash and
+  # Robotics-ER 2 double from 2027-01-01. Gemini 4 Carbon and Argon are at their billed list price from 2026-11-26 (the
+  # Gemini API billing SKUs, Cloud Billing service AEFD-7695-64FA): the lower page price through 2026-11-30 is paid as
+  # credits back, so it is not charged (the 2026-12-01 entries repeat the same price). deprecation_date is the shutdown
   # date on aistudio.google.com/docs/deprecations (2026-11-26). For gemini-2.5-pro and gemini-2.5-flash that page gives
   # 2026-12-01, while the pricing page says requests to them are then routed to gemini-3.8-flash and gemini-3.5-flash-lite
   # and billed at those models' rates; the catalog refuses them from that date, so a caller picks the replacement model
@@ -1115,8 +1127,8 @@ models:
     source_url: https://ai.google.dev/gemini-api/docs/pricing
     verified: true
     checked_on: "2026-11-26"
-    note: "Price valid through 2026-11-30; doubles from 2026-12-01 (see next entry). Implicit caching only."
-    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", output_per_mtok: "10" }
+    note: "Billed list price, per the Gemini API billing SKUs (Cloud Billing service AEFD-7695-64FA, 2026-11-26); the page's $2 / $0.10 / $10 through 2026-11-30 is a promotion paid as credits back. Implicit caching only."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", output_per_mtok: "20" }
     limits: { max_output_tokens: 65536, context_window: 1048576, max_image_tokens: 1400 }
   - id: google/gemini-4-argon
     mode: chat
