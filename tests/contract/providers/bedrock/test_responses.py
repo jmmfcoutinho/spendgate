@@ -212,9 +212,14 @@ def test_a_stream_cut_inside_a_frame_is_an_error_on_close() -> None:
 # --- usage and cost --------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "model", ["global.anthropic.claude-fable-5-2", "anthropic.claude-haiku-5-5"]
-)
+def bedrock_catalog_ids() -> list[str]:
+    """Every bundled Bedrock model id: each geographic, global and in-Region profile (#100)."""
+    text = (resources.files("spendgate.catalog") / "prices.yaml").read_text(encoding="utf-8")
+    ids = [e["id"] for e in yaml.safe_load(text)["models"] if e["id"].startswith("bedrock/")]
+    return sorted(i.removeprefix("bedrock/") for i in ids)
+
+
+@pytest.mark.parametrize("model", bedrock_catalog_ids())
 async def test_usage_prices_through_the_bundled_bedrock_catalog_entries(model: str) -> None:
     fake = FakeUpstream(Script(usage=USAGE))
     up = adapter().translate(request({"messages": [USER]}), deployment(model))
