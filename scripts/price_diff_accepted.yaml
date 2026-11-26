@@ -2,8 +2,10 @@
 #
 # A difference listed here no longer fails the weekly cross-check. Rules, enforced by the script:
 #   - differences: only `relation: ours_higher` exists. Our price below LiteLLM's always fails.
-#   - deprecations: LiteLLM-only dates Microsoft's own schedule does not list ("unconfirmed"). The
-#     exact LiteLLM date is part of the item, so a changed date fails again.
+#   - deprecations: LiteLLM-only dates Microsoft's own schedule does not list ("unconfirmed"), or a
+#     date of ours from the provider's schedule that is earlier than LiteLLM's ("ours_earlier":
+#     the catalog refuses the model sooner). The exact LiteLLM date is part of the item, so a
+#     changed date fails again.
 #   - Every item names who accepted it and when, and expires at most 90 days later. After that it
 #     fails again until someone re-reviews it against the provider's page and renews it.
 # Add an item only after reading the provider's own page; do not add one to silence a failure.
@@ -51,7 +53,24 @@ differences:
     accepted_on: "2026-11-18"
     expires: "2027-02-16"
 
+  - id: bedrock/anthropic.claude-opus-5-5
+    meters: [input_per_mtok, cached_input_per_mtok, cache_write_per_mtok, output_per_mtok]
+    relation: ours_higher
+    reason: "In-Region (eu-west-2 only) on-demand price, the standard price 1.1x the global one; LiteLLM lists the global price. AWS Price List AmazonBedrockFoundationModels 20261123095841, read 2026-11-26 (#100)."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
 deprecations:
+  # Our date comes from Microsoft's retirement schedule and is earlier than LiteLLM's, so the
+  # catalog refuses the model sooner (fail closed). LiteLLM's date matches OpenAI's own, non-Azure
+  # shutdown date for the same model.
+  - id: azure_openai/gpt-4o-transcribe
+    litellm_date: "2027-02-26"
+    status: ours_earlier
+    reason: "Retired 2026-10-15 per Microsoft's Azure OpenAI retirement schedule (read 2026-11-13; Microsoft: retirement dates are not extendable). 2027-02-26 is OpenAI's shutdown date for its own API."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
   # Microsoft's model retirement schedule (read 2026-11-18) does not list these. They stay out of
   # the catalog until Microsoft confirms a date.
   - id: azure_openai/gpt-6-astra
