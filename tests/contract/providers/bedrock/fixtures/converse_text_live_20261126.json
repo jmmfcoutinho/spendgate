@@ -1,0 +1,7 @@
+{
+  "_note": "Captured from the live API on 2026-11-26 (spendgate 0.3.0 smoke test, issue #9): Converse, eu.anthropic.claude-haiku-5-5 inference profile, eu-west-1, prompt 'Reply with the single word OK.'.",
+  "output": {"message": {"role": "assistant", "content": [{"text": "OK"}]}},
+  "stopReason": "end_turn",
+  "usage": {"inputTokens": 18, "outputTokens": 4, "totalTokens": 22, "cacheReadInputTokens": 0, "cacheWriteInputTokens": 0},
+  "metrics": {"latencyMs": 470}
+}
