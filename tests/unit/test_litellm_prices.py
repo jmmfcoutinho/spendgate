@@ -533,3 +533,12 @@ def test_main_uses_the_allow_list(tmp_path: Path) -> None:
     path = tmp_path / "a.yaml"
     path.write_text(yaml.safe_dump({"differences": [item()]}), encoding="utf-8")
     assert lp.main([*base, "--accepted", str(path)]) == 1  # gpt-transcribe is ours lower
+
+
+def test_region_scoped_entries_are_not_compared_with_litellm(tmp_path: Path) -> None:
+    # Vertex AI prices (regions: [...]) are not what LiteLLM's Gemini API rows describe.
+    doc = yaml.safe_load((DATA / "catalog.yaml").read_text(encoding="utf-8"))
+    vertex = {**doc["models"][0], "regions": ["global"], "meters": {"input_per_mtok": "99"}}
+    path = tmp_path / "catalog.yaml"
+    path.write_text(yaml.safe_dump({**doc, "models": [*doc["models"], vertex]}), encoding="utf-8")
+    assert lp.load_ours(path) == lp.load_ours(DATA / "catalog.yaml")

@@ -196,10 +196,15 @@ def _date(value: object) -> date:
 
 
 def load_ours(path: Path) -> list[Ours]:
+    """Our region-less entries. A Region-scoped entry (`regions`, ADR-0028) prices provider
+    Regions LiteLLM's rows do not describe: the `google` ones are Vertex AI prices, while LiteLLM's
+    `gemini` rows are the Gemini API. Their importers' tests hold them to the provider's source."""
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         entries = []
         for raw in doc["models"]:
+            if raw.get("regions"):
+                continue
             lc = raw.get("long_context")
             entries.append(
                 Ours(
