@@ -8,6 +8,13 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Bedrock prices for every geography AWS offers the current Claude models in: an entry per inference
+  profile for Haiku 5.5 (`us.`, `ca.`, `eu.`, `au.`, `jp.`, `global.`), Sonnet 5.5 (`us.`, `ca.`, `eu.`,
+  `au.`, `global.`), Opus 5.5 (`us.`, `eu.`, `au.`, `jp.`, `global.` and in-Region in eu-west-2) and
+  Fable 5.2 (`us.`), from the AWS Price List read for all 35 Regions. Sonnet 5.5 and Opus 5.5 on Bedrock,
+  and any profile outside the US, were refused as `model_not_priced` before. `docs/catalog-how-to.md`
+  says which id to use per geography (#100).
+
 - Live smoke test of AWS Bedrock (eu-west-1, Claude Haiku, Sonnet and Opus 5.5 through `eu.` inference
   profiles), recorded in `docs/reviews/live-smoke-v0.2.md`: plain, streamed and tool calls all pass and
   the Haiku charges match the catalog to the nano-unit. The Bedrock contract tests now also run on

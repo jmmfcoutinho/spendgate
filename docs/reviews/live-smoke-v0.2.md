@@ -145,3 +145,4 @@ non-stream usage has both at 0. All decode and price correctly.
 - **Bedrock adapter:** the same for a 401/403/404 on our AWS account (#98).
 - **Catalog:** verify Vertex AI prices for the Gemini models, or encode Vertex entries.
 - **Catalog:** Bedrock prices for EU inference profiles, and Bedrock entries for Sonnet 5.5 and Opus 5.5.
+  Done in #100: every geographic and global profile, and the EU price equals the US one.
