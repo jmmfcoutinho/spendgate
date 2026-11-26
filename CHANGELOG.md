@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Bedrock: a provider 401, 403 or 404 (`AccessDeniedException`, `UnrecognizedClientException`,
+  `ResourceNotFoundException`: the gateway's own AWS credentials, model access or model id) is
+  `upstream_unavailable` (502, provider named), as protocol.md 4.2 rule 1 says and every other
+  adapter does. It was a 500 `internal_error` ("The provider rejected the gateway."), which reads as
+  a gateway bug and which SDKs retry. The charge (0, nothing processed) is unchanged.
+
 ## [0.3.0] - 2026-11-25
 
 **Upgrading from 0.2.x:** no migration and no config change is needed. Pull the 0.3.0 images: the
