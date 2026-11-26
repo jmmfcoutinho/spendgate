@@ -32,6 +32,7 @@ from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
 from spendgate.core.pepper import MIN_PEPPER_BYTES
 
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
+_HINT = " (price it in a catalog.paths file, or draft a stand-in with `spendgate catalog draft`)"
 
 
 class ConfigError(Exception):
@@ -256,7 +257,9 @@ def _routes(cfg: Config, catalog: Catalog, now_ms: int | None, ctx: _Ctx) -> dic
         provider, _, model_part = route.catalog_id.partition("/")
         if not _priced(catalog, route.catalog_id, now_ms):
             ctx.unpriced.append(route.catalog_id)
-            issues.append((f"{at}.catalog_id", f"{route.catalog_id} has no price in the catalog"))
+            issues.append(
+                (f"{at}.catalog_id", f"{route.catalog_id} has no price in the catalog{_HINT}")
+            )
         deployments = []
         for i, spec in enumerate(route.deployments):
             here = f"{at}.deployments.{i}"

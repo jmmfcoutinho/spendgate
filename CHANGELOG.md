@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
   `--out` without `--force` and loads the result before writing. `docs/catalog-how-to.md` section 8
   (ADR-0028, #104).
 
+### Changed
+
+- The `model_not_priced` refusal and the `check-config` error for an unpriced route now say how to
+  price the model: an override file in `catalog.paths`, or a stand-in from `spendgate catalog draft`.
+  The code, status and the leading `<provider>/<model>: <reason>` of the message are unchanged (#104).
+
 ## [0.3.1] - 2026-11-26
 
 **Upgrading from 0.3.0:** no migration and no config change is needed. On Bedrock you can now name the

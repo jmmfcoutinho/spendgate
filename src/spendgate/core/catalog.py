@@ -75,8 +75,15 @@ class ModelNotPriced(LookupError):
         self.reason = reason
 
     def refusal(self) -> Refusal:
-        """The protocol refusal for this error."""
-        return Refusal(ErrorCode.MODEL_NOT_PRICED, str(self), param="model")
+        """The protocol refusal: no price, no call (ADR-0028), and where an operator adds one."""
+        catalog_id = f"{self.provider}/{self.model}"
+        return Refusal(
+            ErrorCode.MODEL_NOT_PRICED,
+            f"{self}. An operator can price it in a catalog override file (catalog.paths), or "
+            f"draft a stand-in with `spendgate catalog draft --like <priced id> --as {catalog_id} "
+            "--out <file>`.",
+            param="model",
+        )
 
 
 class _Strict(BaseModel):
