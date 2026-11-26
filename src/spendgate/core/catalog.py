@@ -58,6 +58,16 @@ Text = Annotated[str, Field(strict=True)]
 RegionSlug = Annotated[str, Field(strict=True, pattern=f"^{_REGION.pattern}$")]
 
 
+def is_catalog_id(text: str) -> bool:
+    """`provider/model` as an entry's `id` must spell it (the provider is not checked here)."""
+    return _ID.fullmatch(text) is not None
+
+
+def is_region_slug(text: str) -> bool:
+    """A Region as `regions` and `region` must spell it (`swedencentral`, `eu-west-1`)."""
+    return _REGION.fullmatch(text) is not None
+
+
 class CatalogError(ValueError):
     """The catalog documents are invalid; nothing is served from them."""
 
@@ -72,8 +82,15 @@ class ModelNotPriced(LookupError):
         self.reason = reason
 
     def refusal(self) -> Refusal:
-        """The protocol refusal for this error."""
-        return Refusal(ErrorCode.MODEL_NOT_PRICED, str(self), param="model")
+        """The protocol refusal: no price, no call (ADR-0028), and where an operator adds one."""
+        catalog_id = f"{self.provider}/{self.model}"
+        return Refusal(
+            ErrorCode.MODEL_NOT_PRICED,
+            f"{self}. An operator can price it in a catalog override file (catalog.paths), or "
+            f"draft a stand-in with `spendgate catalog draft --like <priced id> --as {catalog_id} "
+            "--out <file>`.",
+            param="model",
+        )
 
 
 class _Strict(BaseModel):

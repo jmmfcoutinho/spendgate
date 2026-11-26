@@ -32,6 +32,7 @@ from spendgate.core.money import FxSnapshot, MissingFxRate, MoneyError
 from spendgate.core.pepper import MIN_PEPPER_BYTES
 
 _LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})  # hostnames as `urlsplit` gives them
+_HINT = " (price it in a catalog.paths file, or draft a stand-in with `spendgate catalog draft`)"
 
 
 class ConfigError(Exception):
@@ -256,8 +257,8 @@ def _price_issue(
     if unpriced:
         ctx.unpriced.append(catalog_id)
         if len(unpriced) == len(set(regions)):
-            return f"{catalog_id} has no price in the catalog"
-        return f"{catalog_id} has no price in the catalog for {_places(unpriced)}"
+            return f"{catalog_id} has no price in the catalog{_HINT}"
+        return f"{catalog_id} has no price in the catalog for {_places(unpriced)}{_HINT}"
     provider, _, model = catalog_id.partition("/")
     split = catalog.split_by_region(provider, model, regions, now_ms)
     if split is None:
@@ -344,16 +345,13 @@ def _ledger_file_issue(path: Path) -> str | None:
     return None
 
 
-def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: list[str]) -> Settings:
-    name = str(path)
-    cfg = _validate(_yaml_mapping(_read(path), name), name)
-    base = path.resolve().parent
-    ctx = _Ctx(env, [], unpriced)
-    issues = ctx.issues
+def _catalog(
+    cfg: Config, base: Path, name: str
+) -> tuple[tuple[Mapping[str, object], ...], str, tuple[FxSnapshot, ...], Catalog]:
     try:
         docs, sha = _catalog_documents(cfg, base)
         fx = _fx(cfg)
-        catalog = parse(docs, sha, ledger_currency=cfg.ledger.currency, fx=fx)
+        return docs, sha, fx, parse(docs, sha, ledger_currency=cfg.ledger.currency, fx=fx)
     except ConfigError as exc:
         raise ConfigError(name, [(p or exc.file, m) for p, m in exc.issues]) from None
     except MissingFxRate as exc:
@@ -362,6 +360,27 @@ def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: lis
         ) from None
     except CatalogError as exc:
         raise ConfigError(name, [("catalog", str(exc))]) from None
+
+
+def read_catalog(path: str | Path) -> tuple[Catalog, tuple[Mapping[str, object], ...]]:
+    """The effective catalog of the file (bundled, then `catalog.paths`) and its documents.
+
+    Like `read_config`, no secret is resolved and nothing else is cross-checked: for an offline
+    tool (`spendgate catalog draft`) that copies a price, not for serving.
+    """
+    p = Path(path)
+    cfg = read_config(p)
+    docs, _, _, catalog = _catalog(cfg, p.resolve().parent, str(p))
+    return catalog, docs
+
+
+def _build(path: Path, env: Mapping[str, str], now_ms: int | None, unpriced: list[str]) -> Settings:
+    name = str(path)
+    cfg = _validate(_yaml_mapping(_read(path), name), name)
+    base = path.resolve().parent
+    ctx = _Ctx(env, [], unpriced)
+    issues = ctx.issues
+    docs, sha, fx, catalog = _catalog(cfg, base, name)
     pepper = _pepper(cfg.server.key_pepper, ctx)
     backend = cfg.ledger.backend
     dsn = ledger_path = None
