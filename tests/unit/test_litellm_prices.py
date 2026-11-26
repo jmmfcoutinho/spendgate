@@ -533,3 +533,47 @@ def test_main_uses_the_allow_list(tmp_path: Path) -> None:
     path = tmp_path / "a.yaml"
     path.write_text(yaml.safe_dump({"differences": [item()]}), encoding="utf-8")
     assert lp.main([*base, "--accepted", str(path)]) == 1  # gpt-transcribe is ours lower
+
+
+# --- Region-scoped entries and long contexts (#105) ------------------------------------------
+
+
+def lc_finding(ours: str = "none", threshold: int = 200000) -> Any:
+    theirs = f">{threshold} tokens: input x2, output x1.5"
+    return lp.Finding(
+        "bedrock/x", "x", "long_context", "long_context", ours, theirs, None, True, "check"
+    )
+
+
+def test_a_long_context_rate_the_provider_does_not_bill_can_be_accepted(tmp_path: Path) -> None:
+    path = tmp_path / "accepted.yaml"
+    lc = {"id": "bedrock/x", "litellm_threshold": 200000, "status": "not_offered"}
+    lc |= {"reason": "no long-context price", "accepted_by": "t"}
+    lc |= {"accepted_on": "2026-11-26", "expires": "2027-02-24"}
+    path.write_text(yaml.safe_dump({"long_contexts": [lc]}), encoding="utf-8")
+    items = lp.load_accepted(path)
+    today = date(2026, 11, 26)
+    assert not lp._cover(lc_finding(), items, today, set()).failing
+    assert lp._cover(lc_finding(threshold=128000), items, today, set()).failing  # moved: review
+    assert lp._cover(lc_finding(ours="100000"), items, today, set()).failing  # a rule of ours
+    path.write_text(yaml.safe_dump({"long_contexts": [lc | {"status": "x"}]}), encoding="utf-8")
+    with pytest.raises(lp.InputError, match="not_offered"):
+        lp.load_accepted(path)
+
+
+def scoped(price: str, regions: list[str]) -> Any:
+    meters = {"input_per_mtok": Decimal(price), "output_per_mtok": Decimal(price) * 4}
+    raw = {"regions": regions}
+    return lp.Ours("bedrock/x", date(2026, 11, 1), meters, Decimal(1), None, None, raw)
+
+
+def test_region_scoped_entries_compare_the_one_that_matches_litellm_else_the_cheapest() -> None:
+    entries = [scoped("0.9", ["eu-west-2"]), scoped("0.6", ["us-east-1"])]
+    entries.append(scoped("0.7", ["ap-south-1"]))
+    current, other = lp._in_force(entries, date(2026, 11, 26))
+    assert len(current) == 1 and len(current[0]) == 3 and other == []
+    theirs: Any = type("Theirs", (), {"key": "x"})()
+    match = {"input_per_mtok": Decimal("0.7"), "output_per_mtok": Decimal("2.8")}
+    assert lp._closest(current[0], theirs, match, Decimal(1)) is entries[2]
+    none = {"input_per_mtok": Decimal("0.65"), "output_per_mtok": Decimal("2.6")}
+    assert lp._closest(current[0], theirs, none, Decimal(1)) is entries[1]  # ours lower shows
