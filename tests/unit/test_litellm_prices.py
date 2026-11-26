@@ -490,9 +490,35 @@ def test_unconfirmed_deprecations_are_accepted_by_exact_date(tmp_path: Path) -> 
     assert findings(gone, "openai/whisper-1")["deprecation_date"].failing
 
 
-def test_deprecation_items_need_the_unconfirmed_status(tmp_path: Path) -> None:
+def test_deprecation_items_need_a_known_status(tmp_path: Path) -> None:
     with pytest.raises(lp.InputError):
         accepted(tmp_path, [], [dep_item(status="confirmed")])
+
+
+def dep_finding(ours: str, theirs: str = "2027-02-26") -> Any:
+    return lp.Finding(
+        "azure_openai/x", "azure/x", "deprecation", "deprecation_date", ours, theirs, None, True
+    )
+
+
+def test_an_earlier_date_of_ours_is_accepted_only_while_it_refuses_sooner(tmp_path: Path) -> None:
+    items = accepted(
+        tmp_path, [], [dep_item(id="azure_openai/x", status="ours_earlier", reason="Microsoft")]
+    )
+    today = date(2026, 11, 26)
+    covered = lp._cover(dep_finding("2026-10-15"), items, today, set())
+    assert not covered.failing and covered.accepted.startswith(lp.OURS_EARLIER_LABEL)
+    for ours in ("2027-03-01", "2027-02-26", "none"):  # later, equal or no date of ours: fails
+        assert lp._cover(dep_finding(ours), items, today, set()).failing, ours
+    moved = lp._cover(dep_finding("2026-10-15", theirs="2027-05-01"), items, today, set())
+    assert moved.failing  # LiteLLM's date moved: review again
+
+
+def test_an_ours_earlier_acceptance_renders_as_such(tmp_path: Path) -> None:
+    items = accepted(tmp_path, [], [dep_item(id="azure_openai/x", status="ours_earlier")])
+    f = lp._cover(dep_finding("2026-10-15"), items, date(2026, 11, 26), set())
+    rep = lp.Report(None, "0" * 64, 0, 0, Decimal(1), date(2026, 11, 26), 180, findings=[f])
+    assert "OURS EARLIER, accepted: only LiteLLM lists it" in lp.render(rep)
 
 
 def test_the_shipped_allow_list_is_valid_and_has_no_ours_lower_item() -> None:
