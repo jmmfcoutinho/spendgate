@@ -203,7 +203,10 @@ D: dict[str, str] = {
         "service-account JSON, or `adc` for application default credentials (workload "
         "identity, the metadata server). A `file:` credential is read again on `SIGHUP`."
     ),
-    "Provider.region": "Provider region, where the adapter needs one (Bedrock, Azure).",
+    "Provider.region": (
+        "Provider region, where the adapter needs one (Bedrock, Azure). Also selects a catalog "
+        "entry scoped to this Region (`regions`), if there is one."
+    ),
     "Provider.api_version": (
         "Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version "
         "must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the "
@@ -218,12 +221,15 @@ D: dict[str, str] = {
     ),
     "DeploymentSpec.auth": "Overrides `providers.<slug>.auth` for this deployment.",
     "DeploymentSpec.credential": "Overrides `providers.<slug>.credential` for this deployment.",
-    "DeploymentSpec.region": "Overrides `providers.<slug>.region` for this deployment.",
+    "DeploymentSpec.region": (
+        "Overrides `providers.<slug>.region` for this deployment, including for pricing."
+    ),
     "DeploymentSpec.api_version": "Overrides `providers.<slug>.api_version` for this deployment.",
     # ModelRoute
     "ModelRoute.catalog_id": (
-        "Catalog id, `provider/model`. Its price entry prices every deployment; no entry in "
-        "force means `model_not_priced`."
+        "Catalog id, `provider/model`. One price entry prices every deployment; no entry in "
+        "force means `model_not_priced`. Deployments whose Regions resolve to different entries "
+        "are refused at start: route them as separate models."
     ),
     "ModelRoute.deployments": (
         "Candidates in preference order. A throttled or unreachable one is skipped for the "

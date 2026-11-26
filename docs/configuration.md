@@ -85,7 +85,7 @@ Used at `providers.<name>`.
 | `base_url` | string (optional) | unset | Provider API root. `https` only, or `http` for loopback. May be `env:NAME`, read at start. For `openai` and `azure_openai` the upstream must honour `max_completion_tokens`: the proxy sends the held output ceiling in that field only, so an OpenAI-compatible server (vLLM, LiteLLM, ...) that ignores it does not enforce the ceiling (protocol.md 2.1). |
 | `auth` | `api_key` or `bearer_token` or `sigv4` | `"api_key"` | How the proxy authenticates to the provider. |
 | `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Secret reference for the key or token. Not used with `sigv4`, which reads the standard AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the service-account JSON, or `adc` for application default credentials (workload identity, the metadata server). A `file:` credential is read again on `SIGHUP`. |
-| `region` | string (optional) | unset | Provider region, where the adapter needs one (Bedrock, Azure). |
+| `region` | string (optional) | unset | Provider region, where the adapter needs one (Bedrock, Azure). Also selects a catalog entry scoped to this Region (`regions`), if there is one. |
 | `api_version` | string (optional) | unset | Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version must accept `max_completion_tokens`, the only output ceiling field the proxy sends; the minimum version is not verified here, so prefer the v1 API. |
 
 ## ModelRoute
@@ -94,7 +94,7 @@ Used at `models.<name>`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `catalog_id` | catalog id `provider/model` | required | Catalog id, `provider/model`. Its price entry prices every deployment; no entry in force means `model_not_priced`. |
+| `catalog_id` | catalog id `provider/model` | required | Catalog id, `provider/model`. One price entry prices every deployment; no entry in force means `model_not_priced`. Deployments whose Regions resolve to different entries are refused at start: route them as separate models. |
 | `deployments` | list of [DeploymentSpec](#deploymentspec) | required | Candidates in preference order. A throttled or unreachable one is skipped for the next, at no cost. |
 
 ## Defaults
@@ -203,7 +203,7 @@ Used at `models.<name>.deployments[]`.
 | `base_url` | string (optional) | unset | Overrides `providers.<slug>.base_url` for this deployment. May be `env:NAME`. |
 | `auth` | `api_key` or `bearer_token` or `sigv4` (optional) | unset | Overrides `providers.<slug>.auth` for this deployment. |
 | `credential` | secret reference (`env:NAME` or `file:/path`) or `adc` (optional) | unset | Overrides `providers.<slug>.credential` for this deployment. |
-| `region` | string (optional) | unset | Overrides `providers.<slug>.region` for this deployment. |
+| `region` | string (optional) | unset | Overrides `providers.<slug>.region` for this deployment, including for pricing. |
 | `api_version` | string (optional) | unset | Overrides `providers.<slug>.api_version` for this deployment. |
 
 ## DefaultLimits

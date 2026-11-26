@@ -138,7 +138,9 @@ class Forwarder:
             internal = Refusal(ErrorCode.INTERNAL_ERROR, "The upstream request could not be built.")
             return Failed(internal, 500, fault=fault_of("routing.translate", exc))
         started = self._now()
-        book.flight = Flight(book.next_number, target.provider, target.label, started)
+        book.flight = Flight(
+            book.next_number, target.provider, target.label, started, target.deployment.region
+        )
         try:
             if job.request.stream:
                 opened = await open_response(self._sender, upstream)
@@ -177,7 +179,16 @@ class Forwarder:
             return Failed(refusal, 500, fault=fault_of("routing.relay", exc))
         self._router.succeeded(target, self._now(), started)
         broke = lambda: self._router.failed(target, self._now())  # noqa: E731 - a one-line callback
-        return Live(opened, relay, job.model, target.provider, target.label, started, broke)
+        return Live(
+            opened,
+            relay,
+            job.model,
+            target.provider,
+            target.label,
+            started,
+            broke,
+            target.deployment.region,
+        )
 
     # --- outcomes of one attempt ---------------------------------------------------------------
 
@@ -197,7 +208,9 @@ class Forwarder:
     ) -> AttemptRecord:
         """Write the attempt's row and end its flight: the outcome is now recorded."""
         now = self._now()
-        flight = Flight(book.next_number, target.provider, target.label, started)
+        flight = Flight(
+            book.next_number, target.provider, target.label, started, target.deployment.region
+        )
         record = attempt_record(
             book,
             flight,

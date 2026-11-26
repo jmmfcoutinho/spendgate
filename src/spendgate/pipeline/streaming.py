@@ -83,6 +83,7 @@ class Live:
     deployment: str
     started: int
     broke: Callable[[], None]  # health feedback when the provider side cut the stream
+    region: str | None = None  # the deployment's, for the price id on the row
 
 
 @dataclass(frozen=True, slots=True)
@@ -345,7 +346,7 @@ class StreamBody:
         number = book.flight.number if book.flight else book.next_number
         record = attempt_record(
             book,
-            Flight(number, live.provider, live.deployment, live.started),
+            Flight(number, live.provider, live.deployment, live.started, live.region),
             outcome,
             now,
             request_id=self._id,

@@ -446,6 +446,10 @@ def _compare_deprecation(ours: Ours, theirs: Mapped, today: date, horizon: int) 
 
 ACCEPTED = ROOT / "scripts" / "price_diff_accepted.yaml"
 MAX_ACCEPTANCE_DAYS = 90
+# unconfirmed: only LiteLLM has a date. ours_earlier: our date comes from the provider's own
+# schedule and is earlier than LiteLLM's, so the catalog refuses the model sooner (fail closed).
+DEPRECATION_STATUSES = frozenset({"unconfirmed", "ours_earlier"})
+OURS_EARLIER_LABEL = "[ours earlier] "
 
 
 @dataclass(frozen=True, slots=True)
@@ -457,10 +461,12 @@ class Acceptance:
     accepted_by: str
     accepted_on: date
     expires: date
+    status: str = ""  # deprecations only: "unconfirmed" or "ours_earlier"
 
     def label(self) -> str:
         who = f"accepted by {self.accepted_by} on {self.accepted_on}, expires {self.expires}"
-        return f"{self.reason} ({who})"
+        prefix = OURS_EARLIER_LABEL if self.status == "ours_earlier" else ""
+        return f"{prefix}{self.reason} ({who})"
 
 
 def _acceptance(raw: object, relation_needed: bool) -> Acceptance:
@@ -484,8 +490,12 @@ def _acceptance(raw: object, relation_needed: bool) -> Acceptance:
             what, lit = frozenset(meters), None
         else:
             what, lit = frozenset({"deprecation_date"}), _date(raw["litellm_date"])
-            if raw["status"] != "unconfirmed":
-                raise InputError(f"accepted list: {entry_id}: status must be unconfirmed")
+            status = str(raw["status"])
+            if status not in DEPRECATION_STATUSES:
+                raise InputError(
+                    f"accepted list: {entry_id}: status must be one of "
+                    + ", ".join(sorted(DEPRECATION_STATUSES))
+                )
     except (KeyError, TypeError, ValueError) as exc:
         raise InputError(f"accepted list: bad item ({type(exc).__name__}: {exc})") from None
     if not reason or not by:
@@ -495,7 +505,7 @@ def _acceptance(raw: object, relation_needed: bool) -> Acceptance:
             f"accepted list: {entry_id}: expires must be after accepted_on and at most "
             f"{MAX_ACCEPTANCE_DAYS} days later"
         )
-    return Acceptance(entry_id, what, lit, reason, by, on, expires)
+    return Acceptance(entry_id, what, lit, reason, by, on, expires, status if lit else "")
 
 
 def load_accepted(path: Path) -> list[Acceptance]:
@@ -513,6 +523,13 @@ def load_accepted(path: Path) -> list[Acceptance]:
     ]
 
 
+def _earlier(ours: str, theirs: str) -> bool:
+    try:
+        return date.fromisoformat(ours) < date.fromisoformat(theirs)
+    except ValueError:  # "none": we have no date, so nothing of ours refuses sooner
+        return False
+
+
 def _cover(f: Finding, accepted: Sequence[Acceptance], today: date, used: set[int]) -> Finding:
     """`f` marked accepted when a live allow-list item covers it; never for a lower price."""
     for i, a in enumerate(accepted):
@@ -521,6 +538,8 @@ def _cover(f: Finding, accepted: Sequence[Acceptance], today: date, used: set[in
         if f.kind == "deprecation":
             if a.litellm_date is None or a.litellm_date.isoformat() != f.theirs:
                 continue
+            if a.status == "ours_earlier" and not _earlier(f.ours, f.theirs):
+                continue  # only a date of ours that refuses sooner can be accepted
         elif f.pct is None or f.pct >= 0 or f.theirs == "-":
             continue  # ours is lower (or not comparable): only ours_higher can be accepted
         used.add(i)
@@ -646,7 +665,12 @@ def render(report: Report) -> str:  # noqa: PLR0912
     lines += ["", "DEPRECATION DATES IN LITELLM"]
     deps = [f for f in report.findings if f.kind == "deprecation"]
     for f in deps:
-        status = f"UNCONFIRMED, accepted: {f.accepted}" if f.accepted else f.note
+        status = f.note
+        if f.accepted:
+            if f.accepted.startswith(OURS_EARLIER_LABEL):
+                status = f"OURS EARLIER, accepted: {f.accepted.removeprefix(OURS_EARLIER_LABEL)}"
+            else:
+                status = f"UNCONFIRMED, accepted: {f.accepted}"
         lines.append(f"  {f.id}: ours {f.ours}, LiteLLM {f.theirs} - {status}")
     if not deps:
         lines.append("  none")

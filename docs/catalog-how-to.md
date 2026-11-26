@@ -70,7 +70,7 @@ catalog:
 ```
 
 An override is applied after the bundled catalog and replaces an entry with the same `id` and
-`effective_from`; anything else is added. Then route the model in `models:`:
+`effective_from` (and the same `regions`, section 8); anything else is added. Then route the model in `models:`:
 
 ```yaml
 models:
@@ -232,3 +232,61 @@ models:
 - **Updating:** the entries come from the AWS Price List bulk API (offer `AmazonBedrockFoundationModels`,
   `region_index.json` and the per-Region files). `tests/unit/test_bedrock_catalog.py` checks that every
   standard price is 1.1x its global price and that the profile set per model matches AWS's model cards.
+
+## 8. Prices that differ by Region
+
+Some providers charge a different price for the same model in different Regions (Azure OpenAI does for
+many data-zone and regional deployments). A catalog entry can be scoped to the Regions it prices with
+`regions` ([ADR-0028](adr/0028-price-coverage-and-regional-prices.md)). The deployment's `region` in
+`spendgate.yaml` (its own, or its provider's) picks the entry. Write the Region-scoped entry with the same
+`id` as the region-less one, in your override file (illustrative numbers):
+
+<!-- doctest: catalog-regions -->
+```yaml
+catalog_version: 1
+models:
+  - id: azure_openai/example-model      # every Region not listed below
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://example.com/pricing
+    verified: false
+    meters: {input_per_mtok: "2", output_per_mtok: "8"}
+    limits: {max_output_tokens: 16384}
+  - id: azure_openai/example-model      # these two Regions only
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-01"
+    regions: [swedencentral, westeurope]
+    source_url: https://example.com/pricing
+    verified: false
+    meters: {input_per_mtok: "2.2", output_per_mtok: "8.8"}
+    limits: {max_output_tokens: 16384}
+```
+
+- **A listed Region takes the Region-scoped entry**, the newest in force among those that list it; it
+  never falls back to a region-less entry while one is in force. **Every other Region**, and a deployment
+  without a `region`, takes the newest region-less entry in force. If there is none, the call is refused
+  with `model_not_priced`: a Region-scoped price is never used for a Region it does not list.
+- `region` (singular) stays documentation only; `regions` is the one that is enforced. Region names are
+  compared as written, so use the provider's own slug (`swedencentral`, `eu-west-1`) in both files.
+  `check-config` and `serve` warn about a deployment Region that no entry of its Region-scoped id lists
+  (it takes the region-less price), naming the Regions the catalog does list, so a typo shows at start.
+- Entries of one `id` and `effective_from` must not list the same Region twice, and at most one of them
+  may omit `regions`: either is a load error. An override replaces the entry with the same `id`,
+  `effective_from` and set of `regions`; one whose Regions only overlap is refused.
+- The call row's `price_id` gains the Region when a Region-scoped entry priced the call:
+  `azure_openai/example-model@2026-11-01~swedencentral`. A region-less entry's id is unchanged.
+
+**One route, one price.** Every deployment of a model in `models:` must resolve to the same entry, so the
+hold and the charge are the same whichever deployment serves and failover never changes what a call
+costs. `check-config` and `serve` refuse (exit 3) a route whose deployments resolve to different entries,
+today or from a later `effective_from` already in the catalog, naming the route, each Region and the
+price it would get. Deployments in `swedencentral` and `westeurope` above can share a route; a deployment
+in `eastus` cannot join them. Route differently-priced Regions as separate models:
+
+```yaml
+models:
+  example-eu: {catalog_id: azure_openai/example-model, deployments: [{provider: azure_openai, region: swedencentral}, {provider: azure_openai, region: westeurope}]}
+  example-us: {catalog_id: azure_openai/example-model, deployments: [{provider: azure_openai, region: eastus}]}
+```
