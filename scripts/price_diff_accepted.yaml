@@ -6,6 +6,10 @@
 #     date of ours from the provider's schedule that is earlier than LiteLLM's ("ours_earlier":
 #     the catalog refuses the model sooner). The exact LiteLLM date is part of the item, so a
 #     changed date fails again.
+#   - long_contexts: LiteLLM lists a long-context rate we do not carry, and the provider bills none
+#     ("not_offered": its own price list has no long-context price, and its model card caps the
+#     context at that threshold or below). The exact LiteLLM threshold is part of the item. A
+#     long-context rule of ours that differs from LiteLLM's is never accepted.
 #   - Every item names who accepted it and when, and expires at most 90 days later. After that it
 #     fails again until someone re-reviews it against the provider's page and renews it.
 # Add an item only after reading the provider's own page; do not add one to silence a failure.
@@ -60,6 +64,13 @@ differences:
     accepted_by: jmmfcoutinho
     accepted_on: "2026-11-26"
     expires: "2027-02-24"
+  - id: bedrock/qwen.qwen3-next-80b-a3b
+    meters: [input_per_mtok, output_per_mtok]
+    relation: ours_higher
+    reason: "AWS Price List AmazonBedrock 20261125184041 has a Standard price for this model in ap-south-1 only (0.18 / 1.41 per MTok), so the catalog prices it there only; LiteLLM's 0.15 / 1.2 is no Standard price in that list (#105)."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
 deprecations:
   # Our date comes from Microsoft's retirement schedule and is earlier than LiteLLM's, so the
   # catalog refuses the model sooner (fail closed). LiteLLM's date matches OpenAI's own, non-Azure
@@ -108,3 +119,49 @@ deprecations:
     accepted_by: jmmfcoutinho
     accepted_on: "2026-11-18"
     expires: "2027-02-16"
+  # AWS's model card for Claude Haiku 4.5 (read 2026-11-26) says Active, EOL date N/A.
+  - id: bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0
+    litellm_date: "2026-10-15"
+    status: unconfirmed
+    reason: "AWS's Claude Haiku 4.5 model card lists the model as Active with no EOL date; date known only from LiteLLM."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
+long_contexts:
+  # Claude Sonnet 4.5 on Bedrock: the model card (read 2026-11-26) gives a 200K context window, and
+  # the AWS Price List (AmazonBedrockFoundationModels 20261123095841) has no long-context price.
+  - id: bedrock/us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    litellm_threshold: 200000
+    status: not_offered
+    reason: "AWS bills no long-context rate: no long-context row in the Price List, 200K context on the model card."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
+  - id: bedrock/eu.anthropic.claude-sonnet-4-5-20250929-v1:0
+    litellm_threshold: 200000
+    status: not_offered
+    reason: "AWS bills no long-context rate: no long-context row in the Price List, 200K context on the model card."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
+  - id: bedrock/au.anthropic.claude-sonnet-4-5-20250929-v1:0
+    litellm_threshold: 200000
+    status: not_offered
+    reason: "AWS bills no long-context rate: no long-context row in the Price List, 200K context on the model card."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
+  - id: bedrock/jp.anthropic.claude-sonnet-4-5-20250929-v1:0
+    litellm_threshold: 200000
+    status: not_offered
+    reason: "AWS bills no long-context rate: no long-context row in the Price List, 200K context on the model card."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"
+  - id: bedrock/global.anthropic.claude-sonnet-4-5-20250929-v1:0
+    litellm_threshold: 200000
+    status: not_offered
+    reason: "AWS bills no long-context rate: no long-context row in the Price List, 200K context on the model card."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-26"
+    expires: "2027-02-24"

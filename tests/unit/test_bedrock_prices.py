@@ -358,6 +358,13 @@ def test_the_bundled_model_table_loads_and_every_model_has_an_output_limit() -> 
         assert spec.geo or spec.global_sources or spec.in_region or spec.keep_bare, spec.model_id
 
 
+def test_the_bundled_bedrock_entries_are_all_inside_the_generated_block() -> None:
+    text = bp.CATALOG.read_text(encoding="utf-8")
+    before, block, after = bp.split_catalog(text)
+    assert "id: bedrock/" in block
+    assert "id: bedrock/" not in before + after
+
+
 # --- downloading -----------------------------------------------------------------------------
 
 

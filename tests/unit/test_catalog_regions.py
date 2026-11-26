@@ -182,6 +182,7 @@ def test_a_route_split_is_found_on_the_date_a_region_scoped_entry_starts() -> No
     assert catalog.split_by_region("azure_openai", "gpt-x", ["eastus", None], None) is None
 
 
-def test_the_bundled_catalog_loads_unchanged_with_no_region_scoped_entry_yet() -> None:
+def test_the_bundled_catalog_scopes_entries_to_regions_only_where_an_importer_wrote_them() -> None:
     catalog = parse([yaml.safe_load(bundled_text())], SHA, ledger_currency="USD")
-    assert all(e.regions is None for e in catalog.entries())
+    scoped = {e.provider for e in catalog.entries() if e.regions is not None}
+    assert scoped <= {"bedrock", "azure_openai", "google"}  # the Price List / pricing importers
