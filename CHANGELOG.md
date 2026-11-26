@@ -12,6 +12,18 @@ Region-scoped entry yet, no existing route is affected.
 
 ### Added
 
+- Prices for every current model the `openai`, `anthropic` and `google` (Gemini API) adapters serve,
+  read from each provider's own pricing, model and deprecation pages on 2026-11-26 and cross-checked
+  with LiteLLM (no price differs). Anthropic: 16 more Claude models, from Opus and Sonnet 5.5 to
+  Haiku 4.5, including the Mythos models for verified organisations. OpenAI: 28 more chat and
+  Responses models (GPT-6.2 Astra and Sol down to GPT-4o mini and o3), `text-embedding-3-large`,
+  `text-embedding-ada-002`, and `tts-1` and `tts-1-hd`, the first OpenAI speech models with a price.
+  Gemini API: 13 more text models, among them Gemini 4 Argon, Neon and Hydrogen and Gemini 3.8 Flash,
+  with their announced price changes (Argon doubles on 2026-12-01, 3.8 Flash and 3.6 Flash on
+  2027-01-01) as dated entries. Models the providers have scheduled for shutdown carry that date and
+  are refused from it (Gemini 2.5 Pro and 2.5 Flash on 2026-12-01, for example). Each catalog comment
+  lists the models left out and why, such as `gpt-5.6-sol`, whose promotional price ends on 2026-11-30
+  with no later price published. Before this, these models were refused as `model_not_priced` (#108).
 - Region-scoped prices: a catalog entry may list the deployment Regions it prices (`regions: [...]`), and
   prices only those. The deployment's `region` picks the entry; every other Region, and a deployment
   without a `region`, takes the region-less entry. Entries of one id and date must not list the same

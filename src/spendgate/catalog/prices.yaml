@@ -57,6 +57,389 @@ models:
     checked_on: "2026-11-13"
     meters: { input_per_mtok: "0.02" }
 
+  # --- Every other text model the chat and Responses endpoints serve (issue #108) ---
+  # Prices: developers.openai.com/api/docs/pricing, Standard tier; limits, deprecation flags and per-model rules:
+  # developers.openai.com/api/docs/models/<id>; shutdown dates: developers.openai.com/api/docs/deprecations. All read
+  # 2026-11-26. Cache write is the 30-minute price: the 12-hour price needs `prompt_cache_retention`, which the gateway
+  # refuses. Models whose pricing page lists no cache-write or cached-input price have no such meter (the cost falls back
+  # to the input price, never lower). Long context (over 272K input: 2x input, cached and cache write, 1.5x output) only
+  # where the pricing page lists long-context prices. Not encoded: gpt-5.6-sol (its price is promotional "until November
+  # 30, 2026" and the page gives no later price), the Cyber, Rosalind, Law and Healthcare models (trusted access or
+  # promotional prices, and no model page or no long-context cache-write price), gpt-5-search-api (search tool), image,
+  # Realtime, audio and GPT-Live models (not served), gpt-4o-mini-tts (billed per audio token; the speech adapter reports
+  # only characters). max_image_tokens stays at the estimator default: the vision guide covers only gpt-6-astra.
+  - id: openai/gpt-6.2-astra
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6.2-astra
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Flagship. 8 / 0.40 cached / 10 cache write (30m; 12h 20) / 40. Max input 922,000 tokens."
+    deployment_type: standard
+    meters: { input_per_mtok: "8", cached_input_per_mtok: "0.4", cache_write_per_mtok: "10", output_per_mtok: "40" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-6.2-sol
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6.2-sol
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2 / 0.10 cached / 2.50 cache write (30m; 12h 5) / 10. Max input 922,000 tokens."
+    deployment_type: standard
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "2.5", output_per_mtok: "10" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-6.1-sol
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6.1-sol
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2 / 0.10 cached (5%) / 2.50 cache write (30m) / 10."
+    deployment_type: standard
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "2.5", output_per_mtok: "10" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-6.1-terra
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6.1-terra
+    verified: true
+    checked_on: "2026-11-26"
+    note: "1 / 0.05 cached (5%) / 1.25 cache write (30m; 12h 2.50) / 5."
+    deployment_type: standard
+    meters: { input_per_mtok: "1", cached_input_per_mtok: "0.05", cache_write_per_mtok: "1.25", output_per_mtok: "5" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-6-sol
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-6-sol
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2 / 0.20 cached (10%) / 2.50 cache write (30m) / 10."
+    deployment_type: standard
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", cache_write_per_mtok: "2.5", output_per_mtok: "10" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.6-terra
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.6-terra
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2 / 0.20 cached / 2.50 cache write (30m, 1.25x input) / 12."
+    deployment_type: standard
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", cache_write_per_mtok: "2.5", output_per_mtok: "12" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.6-luna
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.6-luna
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.20 / 0.02 cached / 0.25 cache write (30m, 1.25x input) / 1.20."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.2", cached_input_per_mtok: "0.02", cache_write_per_mtok: "0.25", output_per_mtok: "1.2" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.5
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.5
+    verified: true
+    checked_on: "2026-11-26"
+    note: "5 / 0.50 cached / 30. No cache-write price listed."
+    deployment_type: standard
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", output_per_mtok: "30" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.5-pro
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.5-pro
+    verified: true
+    checked_on: "2026-11-26"
+    note: "30 / 180, no cached-input discount. Responses API only. Long-context prices 60 / 270 (pricing page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "30", output_per_mtok: "180" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.4
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.4
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2.50 / 0.25 cached / 15. No cache-write price listed."
+    deployment_type: standard
+    meters: { input_per_mtok: "2.5", cached_input_per_mtok: "0.25", output_per_mtok: "15" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.4-pro
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.4-pro
+    verified: true
+    checked_on: "2026-11-26"
+    note: "30 / 180, no cached-input price. Responses API only."
+    deployment_type: standard
+    meters: { input_per_mtok: "30", output_per_mtok: "180" }
+    long_context: { threshold_input_tokens: 272000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+  - id: openai/gpt-5.4-mini
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.4-mini
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.75 / 0.075 cached / 4.50."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.75", cached_input_per_mtok: "0.075", output_per_mtok: "4.5" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+  - id: openai/gpt-5.4-nano
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.4-nano
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.20 / 0.02 cached / 1.25. Deprecated; shutdown 2027-04-01 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.2", cached_input_per_mtok: "0.02", output_per_mtok: "1.25" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+    deprecation_date: "2027-04-01"
+  - id: openai/gpt-5.2
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.2
+    verified: true
+    checked_on: "2026-11-26"
+    note: "1.75 / 0.175 cached / 14."
+    deployment_type: standard
+    meters: { input_per_mtok: "1.75", cached_input_per_mtok: "0.175", output_per_mtok: "14" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+  - id: openai/gpt-5.2-pro
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.2-pro
+    verified: true
+    checked_on: "2026-11-26"
+    note: "21 / 168, no cached-input price. Responses API only."
+    deployment_type: standard
+    meters: { input_per_mtok: "21", output_per_mtok: "168" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+  - id: openai/gpt-5.1
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.1
+    verified: true
+    checked_on: "2026-11-26"
+    note: "1.25 / 0.125 cached / 10. Deprecated; shutdown 2027-04-01 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "1.25", cached_input_per_mtok: "0.125", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+    deprecation_date: "2027-04-01"
+  - id: openai/gpt-5
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5
+    verified: true
+    checked_on: "2026-11-26"
+    note: "1.25 / 0.125 cached / 10. Deprecated; shutdown 2026-12-11 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "1.25", cached_input_per_mtok: "0.125", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+    deprecation_date: "2026-12-11"
+  - id: openai/gpt-5-mini
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5-mini
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.25 / 0.025 cached / 2. Deprecated; shutdown 2026-12-11 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.25", cached_input_per_mtok: "0.025", output_per_mtok: "2" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+    deprecation_date: "2026-12-11"
+  - id: openai/gpt-5-nano
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5-nano
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.05 / 0.005 cached / 0.40. Deprecated; shutdown 2026-12-11 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.05", cached_input_per_mtok: "0.005", output_per_mtok: "0.4" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+    deprecation_date: "2026-12-11"
+  - id: openai/gpt-5-pro
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5-pro
+    verified: true
+    checked_on: "2026-11-26"
+    note: "15 / 120, no cached-input price. Responses API only. Deprecated; shutdown 2026-12-11 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "15", output_per_mtok: "120" }
+    limits: { max_output_tokens: 272000, context_window: 400000 }
+    deprecation_date: "2026-12-11"
+  - id: openai/gpt-4.1
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-4.1
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2 / 0.50 cached / 8. Deprecated; shutdown 2027-01-14 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.5", output_per_mtok: "8" }
+    limits: { max_output_tokens: 32768, context_window: 1047576 }
+    deprecation_date: "2027-01-14"
+  - id: openai/gpt-4.1-mini
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-4.1-mini
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.40 / 0.10 cached / 1.60. Deprecated; shutdown 2027-01-14 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.4", cached_input_per_mtok: "0.1", output_per_mtok: "1.6" }
+    limits: { max_output_tokens: 32768, context_window: 1047576 }
+    deprecation_date: "2027-01-14"
+  - id: openai/gpt-4o
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-4o
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2.50 / 1.25 cached / 10. Deprecated; shutdown 2027-01-14 (deprecations page, gpt-4o-2024-08-06 and -11-20)."
+    deployment_type: standard
+    meters: { input_per_mtok: "2.5", cached_input_per_mtok: "1.25", output_per_mtok: "10" }
+    limits: { max_output_tokens: 16384, context_window: 128000 }
+    deprecation_date: "2027-01-14"
+  - id: openai/gpt-4o-mini
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-4o-mini
+    verified: true
+    checked_on: "2026-11-26"
+    note: "0.15 / 0.075 cached / 0.60. Deprecated; shutdown 2027-01-14 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "0.15", cached_input_per_mtok: "0.075", output_per_mtok: "0.6" }
+    limits: { max_output_tokens: 16384, context_window: 128000 }
+    deprecation_date: "2027-01-14"
+  - id: openai/o3
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/o3
+    verified: true
+    checked_on: "2026-11-26"
+    note: "2 / 0.50 cached / 8. Deprecated; shutdown 2026-12-11 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.5", output_per_mtok: "8" }
+    limits: { max_output_tokens: 100000, context_window: 200000 }
+    deprecation_date: "2026-12-11"
+  - id: openai/o3-pro
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/o3-pro
+    verified: true
+    checked_on: "2026-11-26"
+    note: "20 / 80, no cached-input price. Responses API only. Deprecated; shutdown 2026-12-11 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "20", output_per_mtok: "80" }
+    limits: { max_output_tokens: 100000, context_window: 200000 }
+    deprecation_date: "2026-12-11"
+  - id: openai/chat-latest
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/chat-latest
+    verified: true
+    checked_on: "2026-11-26"
+    note: "5 / 0.50 cached / 30. Points to the Instant model ChatGPT uses; the snapshot behind it changes."
+    deployment_type: standard
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", output_per_mtok: "30" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+  - id: openai/gpt-5.3-codex
+    mode: responses
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/models/gpt-5.3-codex
+    verified: true
+    checked_on: "2026-11-26"
+    note: "1.75 / 0.175 cached / 14. Deprecated; shutdown 2027-04-01 (deprecations page)."
+    deployment_type: standard
+    meters: { input_per_mtok: "1.75", cached_input_per_mtok: "0.175", output_per_mtok: "14" }
+    limits: { max_output_tokens: 128000, context_window: 400000 }
+    deprecation_date: "2027-04-01"
+  - id: openai/text-embedding-3-large
+    mode: embedding
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    meters: { input_per_mtok: "0.13" }
+  - id: openai/text-embedding-ada-002
+    mode: embedding
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    meters: { input_per_mtok: "0.1" }
+
+  # --- OpenAI text-to-speech (pricing page and /models/<id> pages read 2026-11-26): priced per character, which is what
+  # the speech adapter bills on. Both are deprecated; shutdown 2027-01-06 (deprecations page). ---
+  - id: openai/tts-1
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "15 USD per 1M characters (pricing page and model page)."
+    meters: { per_1k_characters: "0.015" }
+    deprecation_date: "2027-01-06"
+  - id: openai/tts-1-hd
+    mode: speech
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://developers.openai.com/api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "30 USD per 1M characters (pricing page and model page)."
+    meters: { per_1k_characters: "0.03" }
+    deprecation_date: "2027-01-06"
+
   # --- OpenAI speech-to-text (pricing page and /models/<id> pages read 2026-11-18). Not encoded: gpt-live-transcribe and
   # gpt-realtime-whisper (Realtime only, on the roadmap); gpt-4o-transcribe, gpt-4o-mini-transcribe and gpt-4o-transcribe-diarize
   # (deprecated, shutdown 2027-02-26; the pages disagree on whether their token prices are audio or text tokens). ---
@@ -246,6 +629,180 @@ models:
     meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.2", output_per_mtok: "0.5" }
     long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
     limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+
+  # --- Every other model the Claude API still serves (issue #108) ---
+  # Prices: platform.claude.com/docs/en/about-claude/pricing, model table, read 2026-11-26. Cache hit is 0.1x input except
+  # Fable/Mythos 5.2 and 5.1 (0.025x) and Opus/Sonnet 5.5 (0.05x); 1h cache write is 2x input on every model; cache write
+  # stores the 1h price. Only Haiku 5.5 has a long-context price; "Claude 4.6 and later models" bill the full 1M window at
+  # standard rates, and the 4.5 models have a 200K window. Limits, model ids and lifecycle: /docs/en/models/overview and
+  # each /docs/en/models/<model>/overview page (2026-11-26); "128K" is stored as 128000 and "64K" as 64000, the lower
+  # reading, because the ceiling is sent upstream. Not encoded: Opus 4.1, Opus 4 and Sonnet 4 (retired on the Claude API);
+  # the 4.5 aliases (claude-opus-4-5 etc.), only their pinned snapshot ids. Mythos models are the same model and price
+  # as the Fable model of the same version, for verified organisations only.
+  # max_image_tokens 6,000: vision page (2026-11-26): Claude 4.7 and later bill at most 4,784 visual tokens per image,
+  # every other model at most 1,568 (standard tier), so 6,000 (4,784 + 25%) covers both.
+  - id: anthropic/claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Input 4, cache write 5m 5 (1h 8 stored), cache hit 0.20 (0.05x), output 20. Retirement not sooner than 2027-09-22."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", cache_write_per_mtok: "8", output_per_mtok: "20" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Input 2, cache write 5m 2.50 (1h 4 stored), cache hit 0.10 (0.05x), output 10. Retirement not sooner than 2027-09-28."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "4", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-mythos-5-2
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Limited availability (verification programs). Same price as Fable 5.2: input 8, cache write 5m 10 (1h 16 stored), cache hit 0.20 (0.025x), output 40."
+    meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-fable-5-1
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 10, cache write 5m 12.50 (1h 20 stored), cache hit 0.25 (0.025x), output 50. Retirement not sooner than 2027-09-01."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "0.25", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-mythos-5-1
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Limited availability (verification programs). Same price as Fable 5.1."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "0.25", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-fable-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 10, cache write 5m 12.50 (1h 20 stored), cache hit 1 (0.1x), output 50. Retirement not sooner than 2027-06-09."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-mythos-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Limited availability (verification programs). Same price as Fable 5."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-07-24."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-8
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-05-28."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-7
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-04-16."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-6
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-02-05."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-5-20251101
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Deprecated, retires 2027-01-22 (model page). Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2027-01-22"
+  - id: anthropic/claude-sonnet-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 2, cache write 5m 2.50 (1h 4 stored), cache hit 0.20, output 10 (the launch price is now standard; the planned rise to 3/15 will not occur). Retirement not sooner than 2027-06-30."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", cache_write_per_mtok: "4", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-sonnet-4-6
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 3, cache write 5m 3.75 (1h 6 stored), cache hit 0.30, output 15. Retirement not sooner than 2027-02-17."
+    meters: { input_per_mtok: "3", cached_input_per_mtok: "0.3", cache_write_per_mtok: "6", output_per_mtok: "15" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-sonnet-4-5-20250929
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Deprecated, retires 2026-11-30 (model page). Input 3, cache write 5m 3.75 (1h 6 stored), cache hit 0.30, output 15."
+    meters: { input_per_mtok: "3", cached_input_per_mtok: "0.3", cache_write_per_mtok: "6", output_per_mtok: "15" }
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2026-11-30"
+  - id: anthropic/claude-haiku-4-5-20251001
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 1, cache write 5m 1.25 (1h 2 stored), cache hit 0.10, output 5. Retirement not sooner than 2026-10-15 (no date announced)."
+    meters: { input_per_mtok: "1", cached_input_per_mtok: "0.1", cache_write_per_mtok: "2", output_per_mtok: "5" }
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
 
   # ===================== AWS Bedrock (Converse) =====================
   # Source: AWS Price List bulk API (pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current),
@@ -535,6 +1092,198 @@ models:
     note: "Small/cheap current model (stable). Output includes thinking. Cache storage ($1/MTok/h) not encoded. Output limit not stated by Google."
     meters: { input_per_mtok: "0.3", cached_input_per_mtok: "0.03", output_per_mtok: "2.5" }
     limits: { max_output_tokens: 65536 }
+
+  # --- Every other text model generateContent serves (issue #108) ---
+  # Prices: aistudio.google.com/docs/pricing, Standard tab, Paid tier, read 2026-11-26. input_per_mtok is the text / image
+  # price (the adapter admits no audio, video or PDF); output includes thinking tokens. Context-cache storage per hour is
+  # not encoded (as for gemini-3.5-flash-lite). Dated changes are separate entries: Gemini 4 Argon doubles from
+  # 2026-12-01, Gemini 3.8 Flash, 3.6 Flash and Robotics-ER 2 double from 2027-01-01. deprecation_date is the shutdown
+  # date on aistudio.google.com/docs/deprecations (2026-11-26). For gemini-2.5-pro and gemini-2.5-flash that page gives
+  # 2026-12-01, while the pricing page says requests to them are then routed to gemini-3.8-flash and gemini-3.5-flash-lite
+  # and billed at those models' rates; the catalog refuses them from that date, so a caller picks the replacement model
+  # itself. Not encoded: gemini-3.5-flash and gemini-3.7-flash, which route to 3.6 Flash and 3.8 Flash and have no price
+  # of their own on the pricing page. Limits: aistudio.google.com/docs/models/<id> (2026-11-26): every model here has an
+  # output token limit of 65,536 (Gemini 4: "65,536 (default synchronous)"; long decode up to 1M is opt-in and the gateway
+  # sends the catalog ceiling). max_image_tokens 1,400 only on Gemini 4 models, as for gemini-4-carbon (media-resolution page,
+  # re-read 2026-11-26: 1,120 per image at the default and high resolution for Gemini 4 and Gemini 3). Not encoded: image
+  # generation models (Nano Banana: image output tokens), TTS, Live, Transcribe, Omni, Genie, Lyria, Decision, embeddings
+  # (deferred), Gemma, and gemini-robotics-er-2-streaming-preview (the Live API streaming variant).
+  - id: google/gemini-4-argon
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Price valid through 2026-11-30; doubles from 2026-12-01 (see next entry). Implicit caching only."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", output_per_mtok: "10" }
+    limits: { max_output_tokens: 65536, context_window: 1048576, max_image_tokens: 1400 }
+  - id: google/gemini-4-argon
+    mode: chat
+    currency: USD
+    effective_from: "2026-12-01"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Announced price from 2026-12-01 ($4 input, $0.20 cached, $20 output)."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", output_per_mtok: "20" }
+    limits: { max_output_tokens: 65536, context_window: 1048576, max_image_tokens: 1400 }
+  - id: google/gemini-4-neon
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Implicit caching only."
+    meters: { input_per_mtok: "3", cached_input_per_mtok: "0.15", output_per_mtok: "15" }
+    limits: { max_output_tokens: 65536, context_window: 1048576, max_image_tokens: 1400 }
+  - id: google/gemini-4-hydrogen
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Implicit caching only."
+    meters: { input_per_mtok: "1.5", cached_input_per_mtok: "0.075", output_per_mtok: "7.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576, max_image_tokens: 1400 }
+  - id: google/gemini-3.8-flash
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Price valid through 2026-12-31; doubles from 2027-01-01 (see next entry)."
+    meters: { input_per_mtok: "0.75", cached_input_per_mtok: "0.075", output_per_mtok: "3.75" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-3.8-flash
+    mode: chat
+    currency: USD
+    effective_from: "2027-01-01"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Announced price from 2027-01-01 ($1.50 input, $0.15 cached, $7.50 output)."
+    meters: { input_per_mtok: "1.5", cached_input_per_mtok: "0.15", output_per_mtok: "7.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-3.6-flash
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Previous generation. Price valid through 2026-12-31; doubles from 2027-01-01 (see next entry)."
+    meters: { input_per_mtok: "0.75", cached_input_per_mtok: "0.075", output_per_mtok: "3.75" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-3.6-flash
+    mode: chat
+    currency: USD
+    effective_from: "2027-01-01"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Announced price from 2027-01-01 ($1.50 input, $0.15 cached, $7.50 output)."
+    meters: { input_per_mtok: "1.5", cached_input_per_mtok: "0.15", output_per_mtok: "7.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-3.1-flash-lite
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Text / image / video price (audio 0.50 in, 0.05 cached; not admitted). Shutdown 2027-05-07 (deprecations page)."
+    meters: { input_per_mtok: "0.25", cached_input_per_mtok: "0.025", output_per_mtok: "1.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+    deprecation_date: "2027-05-07"
+  - id: google/gemini-3.1-pro-preview
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Preview. Prompts over 200k tokens: 4 input, 0.40 cached, 18 output."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", output_per_mtok: "12" }
+    long_context: { threshold_input_tokens: 200000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-3.1-pro-preview-customtools
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Endpoint of Gemini 3.1 Pro Preview tuned for custom tools; the pricing page prices both ids in one table and the model page gives one set of limits."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", output_per_mtok: "12" }
+    long_context: { threshold_input_tokens: 200000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-3-flash-preview
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Preview, legacy. Text / image / video price (audio 1.00 in, 0.10 cached; not admitted)."
+    meters: { input_per_mtok: "0.5", cached_input_per_mtok: "0.05", output_per_mtok: "3" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-2.5-pro
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Deprecated; shutdown 2026-12-01 (deprecations page), after which Google routes it to gemini-3.8-flash. Prompts over 200k tokens: 2.50 input, 0.25 cached, 15 output."
+    meters: { input_per_mtok: "1.25", cached_input_per_mtok: "0.125", output_per_mtok: "10" }
+    long_context: { threshold_input_tokens: 200000, input_multiplier: "2", output_multiplier: "1.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+    deprecation_date: "2026-12-01"
+  - id: google/gemini-2.5-flash
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Deprecated; shutdown 2026-12-01 (deprecations page), after which Google routes it to gemini-3.5-flash-lite. Text / image / video price (audio 1.00; not admitted)."
+    meters: { input_per_mtok: "0.3", cached_input_per_mtok: "0.03", output_per_mtok: "2.5" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+    deprecation_date: "2026-12-01"
+  - id: google/gemini-2.5-flash-lite
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Not deprecated (access limited to existing users). Text / image / video price (audio 0.30; not admitted)."
+    meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", output_per_mtok: "0.4" }
+    limits: { max_output_tokens: 65536, context_window: 1048576 }
+  - id: google/gemini-robotics-er-2-preview
+    mode: chat
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Preview. Price valid through 2026-12-31; doubles from 2027-01-01 (see next entry). Input token limit 131,072."
+    meters: { input_per_mtok: "1", cached_input_per_mtok: "0.1", output_per_mtok: "5" }
+    limits: { max_output_tokens: 65536, context_window: 131072 }
+  - id: google/gemini-robotics-er-2-preview
+    mode: chat
+    currency: USD
+    effective_from: "2027-01-01"
+    source_url: https://ai.google.dev/gemini-api/docs/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Announced price from 2027-01-01 ($2 input, $0.20 cached, $10 output)."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", output_per_mtok: "10" }
+    limits: { max_output_tokens: 65536, context_window: 131072 }
 
   # ===================== ElevenLabs (TTS, per 1,000 characters) =====================
   - id: elevenlabs/eleven_v4
