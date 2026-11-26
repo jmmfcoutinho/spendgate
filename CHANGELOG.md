@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-26
+
+**Upgrading from 0.3.0:** no migration and no config change is needed. On Bedrock you can now name the
+inference profile you call as the catalog id (`bedrock/eu.anthropic.claude-haiku-5-5`, `bedrock/global.…`)
+instead of mapping the bare id with `model:`; `docs/catalog-how-to.md` section 7 lists them.
+
 ### Added
 
 - Bedrock prices for every geography AWS offers the current Claude models in: an entry per inference
