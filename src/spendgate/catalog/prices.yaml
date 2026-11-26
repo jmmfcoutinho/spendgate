@@ -247,6 +247,180 @@ models:
     long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
     limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
 
+  # --- Every other model the Claude API still serves (issue #108) ---
+  # Prices: platform.claude.com/docs/en/about-claude/pricing, model table, read 2026-11-26. Cache hit is 0.1x input except
+  # Fable/Mythos 5.2 and 5.1 (0.025x) and Opus/Sonnet 5.5 (0.05x); 1h cache write is 2x input on every model; cache write
+  # stores the 1h price. Only Haiku 5.5 has a long-context price; "Claude 4.6 and later models" bill the full 1M window at
+  # standard rates, and the 4.5 models have a 200K window. Limits, model ids and lifecycle: /docs/en/models/overview and
+  # each /docs/en/models/<model>/overview page (2026-11-26); "128K" is stored as 128000 and "64K" as 64000, the lower
+  # reading, because the ceiling is sent upstream. Not encoded: Opus 4.1, Opus 4 and Sonnet 4 (retired on the Claude API);
+  # the 4.5 aliases (claude-opus-4-5 etc.), only their pinned snapshot ids. Mythos models are the same model and price
+  # as the Fable model of the same version, for verified organisations only.
+  # max_image_tokens 6,000: vision page (2026-11-26): Claude 4.7 and later bill at most 4,784 visual tokens per image,
+  # every other model at most 1,568 (standard tier), so 6,000 (4,784 + 25%) covers both.
+  - id: anthropic/claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Input 4, cache write 5m 5 (1h 8 stored), cache hit 0.20 (0.05x), output 20. Retirement not sooner than 2027-09-22."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", cache_write_per_mtok: "8", output_per_mtok: "20" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Input 2, cache write 5m 2.50 (1h 4 stored), cache hit 0.10 (0.05x), output 10. Retirement not sooner than 2027-09-28."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "4", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-mythos-5-2
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Limited availability (verification programs). Same price as Fable 5.2: input 8, cache write 5m 10 (1h 16 stored), cache hit 0.20 (0.025x), output 40."
+    meters: { input_per_mtok: "8", cached_input_per_mtok: "0.2", cache_write_per_mtok: "16", output_per_mtok: "40" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-fable-5-1
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 10, cache write 5m 12.50 (1h 20 stored), cache hit 0.25 (0.025x), output 50. Retirement not sooner than 2027-09-01."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "0.25", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-mythos-5-1
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Limited availability (verification programs). Same price as Fable 5.1."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "0.25", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-fable-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 10, cache write 5m 12.50 (1h 20 stored), cache hit 1 (0.1x), output 50. Retirement not sooner than 2027-06-09."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-mythos-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Limited availability (verification programs). Same price as Fable 5."
+    meters: { input_per_mtok: "10", cached_input_per_mtok: "1", cache_write_per_mtok: "20", output_per_mtok: "50" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-07-24."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-8
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-05-28."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-7
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-04-16."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-6
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25. Retirement not sooner than 2027-02-05."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-opus-4-5-20251101
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Deprecated, retires 2027-01-22 (model page). Input 5, cache write 5m 6.25 (1h 10 stored), cache hit 0.50, output 25."
+    meters: { input_per_mtok: "5", cached_input_per_mtok: "0.5", cache_write_per_mtok: "10", output_per_mtok: "25" }
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2027-01-22"
+  - id: anthropic/claude-sonnet-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 2, cache write 5m 2.50 (1h 4 stored), cache hit 0.20, output 10 (the launch price is now standard; the planned rise to 3/15 will not occur). Retirement not sooner than 2027-06-30."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.2", cache_write_per_mtok: "4", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-sonnet-4-6
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 3, cache write 5m 3.75 (1h 6 stored), cache hit 0.30, output 15. Retirement not sooner than 2027-02-17."
+    meters: { input_per_mtok: "3", cached_input_per_mtok: "0.3", cache_write_per_mtok: "6", output_per_mtok: "15" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic/claude-sonnet-4-5-20250929
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Deprecated, retires 2026-11-30 (model page). Input 3, cache write 5m 3.75 (1h 6 stored), cache hit 0.30, output 15."
+    meters: { input_per_mtok: "3", cached_input_per_mtok: "0.3", cache_write_per_mtok: "6", output_per_mtok: "15" }
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2026-11-30"
+  - id: anthropic/claude-haiku-4-5-20251001
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-26"
+    source_url: https://platform.claude.com/docs/en/about-claude/pricing
+    verified: true
+    checked_on: "2026-11-26"
+    note: "Legacy. Input 1, cache write 5m 1.25 (1h 2 stored), cache hit 0.10, output 5. Retirement not sooner than 2026-10-15 (no date announced)."
+    meters: { input_per_mtok: "1", cached_input_per_mtok: "0.1", cache_write_per_mtok: "2", output_per_mtok: "5" }
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+
   # ===================== AWS Bedrock (Converse) =====================
   # Source: AWS Price List bulk API (pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current),
   # read 2026-11-13; the aws.amazon.com/bedrock/pricing page itself did not render the Anthropic tables to the fetcher.
