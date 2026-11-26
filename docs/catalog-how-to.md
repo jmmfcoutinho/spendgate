@@ -195,13 +195,14 @@ report as an artifact.
 **The script's `override` command** writes the same kind of file from the script's pinned commit;
 operators use `spendgate catalog import` instead, which needs no checkout of this repository.
 
-## 7. AWS Bedrock: which catalog id to use in your geography
+## 7. AWS Bedrock: which catalog id to use, and how the entries are made
 
-On Bedrock the current Claude models are called through **inference profiles**: the model id is prefixed
-with a geography (`eu.anthropic.claude-haiku-5-5`) or `global.`. In many Regions there is no in-Region
-on-demand Claude at all (eu-west-1, for example), so the bare id would not work there. The bundled catalog
-prices each profile AWS offers on bedrock-runtime under its own id, so name the model by the profile you
-call and leave the deployment's `model` unset:
+On Bedrock most models are called through **inference profiles**: the model id is prefixed with a
+geography (`eu.anthropic.claude-haiku-5-5`) or `global.`. Some are served **in-Region** under the bare id
+(`mistral.mistral-large-3-675b-instruct`), and some both ways. The bundled catalog prices each id AWS's model
+cards list on bedrock-runtime, for every text model the Converse adapter can serve, so name the model by the id
+you call and leave the deployment's `model` unset. Always set the deployment's `region` (the Region in
+`base_url`): many Bedrock prices depend on it.
 
 ```yaml
 providers:
@@ -212,26 +213,52 @@ models:
     deployments: [{ provider: bedrock }]
 ```
 
-| Model | Geographic profiles (standard price) | `global.` (about 10% less) | Bare id, in-Region |
-|---|---|---|---|
-| Claude Haiku 5.5 | `us.` `ca.` `eu.` `au.` `jp.` | yes | none (the older `anthropic.claude-haiku-5-5` entry carries the standard price) |
-| Claude Sonnet 5.5 | `us.` `ca.` `eu.` `au.` | yes | none |
-| Claude Opus 5.5 | `us.` `eu.` `au.` `jp.` | yes | `anthropic.claude-opus-5-5` (eu-west-2 only) |
-| Claude Fable 5.2 | `us.` | yes | none |
+What is bundled (AWS Price List and model cards read 2026-11-26; "in-Region" = the bare id):
 
-- **Pick the profile of the Region in `base_url`:** `eu.` for the EU Regions, `jp.` for Tokyo and Osaka,
-  `au.` for Sydney and Melbourne, `ca.` for Canada, `us.` for the US (it also accepts the Canadian Regions
-  as source). AWS bills a geographic profile at the standard price of the Region you call from. That price
-  is the same in every commercial Region, which is why one entry per geography is exact.
-- **`global.`** can route to any commercial Region and costs about 10% less. Use it only if your data may
-  leave your geography.
-- **Not priced:** AWS GovCloud (us-gov-*) has no inference profile on bedrock-runtime and costs 1.2x, and
-  so do older Claude models and other model families. Add an override file (section 1) for them. Pointing a
-  catalog id at a different model with a deployment `model:` is possible, but then that entry's price is
-  what gets charged.
-- **Updating:** the entries come from the AWS Price List bulk API (offer `AmazonBedrockFoundationModels`,
-  `region_index.json` and the per-Region files). `tests/unit/test_bedrock_catalog.py` checks that every
-  standard price is 1.1x its global price and that the profile set per model matches AWS's model cards.
+| Family | Models | Ids |
+|---|---|---|
+| Anthropic Claude 5.x | Fable 5, 5.1, 5.2; Mythos 5.1, 5.2; Haiku 5.5; Sonnet 5, 5.5; Opus 5, 5.5 | `us.` and `global.` for all; Haiku 5.5 also `ca.` `eu.` `au.` `jp.`; Sonnet 5.5 `ca.` `eu.` `au.`; Opus 5.5 `eu.` `au.` `jp.` and in-Region (eu-west-2); Sonnet 5 and Opus 5 `eu.` `au.` `in.` |
+| Anthropic Claude 4.x | Haiku 4.5, Sonnet 4.5, 4.6, Opus 4.1, 4.5, 4.6, 4.7, 4.8 | `us.` (all), `eu.`, `au.`, `jp.`, `in.` and `global.` as each card lists |
+| Amazon Nova | Nova 2 Lite, Nova Pro, Lite, Micro | `us.` `eu.` (`apac.` `ca.` `jp.` `global.` where offered), in-Region |
+| Meta Llama | Llama 3 8B, 70B; 3.1 8B, 70B; 3.3 70B; 4 Scout, Maverick | in-Region and `us.` |
+| Mistral AI | Mistral 7B, Large (2402), Large 3, Small (2402), Mixtral 8x7B, Ministral 3B, 8B, 14B, Magistral Small, Devstral 2, Pixtral Large | in-Region; Pixtral `us.` `eu.` |
+| OpenAI | GPT-5.4, 5.5, 5.6 Luna, Sol, Terra; GPT-6 Astra, Luna, Sol; 6.1 Sol, Terra; 6.2 Astra, Sol | `us.`, `global.` (not 5.4, 5.5, 6.1 Sol: see below), `in.` for 5.6 Luna and Terra |
+| OpenAI open weights | gpt-oss 20B, 120B, gpt-oss-safeguard 20B, 120B | in-Region, `us-gov.` for gpt-oss |
+| Others | DeepSeek R1, V3.1, V3.2; Gemma 3 4B, 12B, 27B; MiniMax M2, M2.1, M2.5; Kimi K2 Thinking, K2.5; Nemotron Nano 9B v2, 12B v2 VL, Nano 3 30B, Super 3 120B; Qwen3 32B, 235B, Coder 30B, 480B, Coder Next, Next 80B, VL 235B; Writer Palmyra X4, X5, Vision 7B; GLM 4.7, 4.7 Flash, 5 | in-Region (DeepSeek R1, Palmyra X4 and X5: `us.`; Nemotron: also `us-gov.`) |
+
+- **The price follows the Region you call from.** A geographic profile and an in-Region id cost the Standard price
+  of the source Region; `global.` costs its global price (for Claude about 10% less than the geographic ones,
+  and it may route to any commercial Region: use it only if your data may leave your geography). Where all source
+  Regions have the same price the entry has no `regions`; otherwise there is one Region-scoped entry per price
+  (section 8), so a route spanning two of them must be split. A source Region where AWS lists no price has no
+  entry, and calls from there are refused (`model_not_priced`), for example `global.anthropic.claude-sonnet-5-5`
+  from ap-northeast-1. The `us.` profile also accepts the Canadian Regions as source.
+- **Not priced, and why** (each listed in `scripts/bedrock_models.yaml`): models whose card names no maximum output
+  tokens (GPT-5.6 Cyber, Daybreak Blue, Voxtral, Kimi K3, Grok 4.6), models priced only on the bedrock-mantle
+  endpoint (Grok 4.7, Kimi K3), no Converse (embeddings, image, video, speech, Gemma 4, Pegasus), no model card
+  (Nova 2 Pro and Omni, Nova Premier, Claude 3.x and older, Titan Text) and models at or past end of life (Llama 3.1
+  405B and 3.2, Command R, Jamba 1.5, Claude Sonnet 4 and 3 Haiku). Ids a card lists but the Price List prices in
+  no source Region are left out too: `global.openai.gpt-5.4`, `global.openai.gpt-5.5` and the `us-gov.` OpenAI GPT
+  profiles; `global.openai.gpt-6.1-sol`'s card lists no source Regions. Flex, Priority, batch, latency-optimized and
+  Ultrafast prices are not encoded: the adapter never asks for them. Add an override file (section 1) for anything
+  else; pointing a catalog id at a different model with a deployment `model:` charges that entry's price.
+- **Updating.** The entries live between the `>>> generated by scripts/bedrock_prices.py` markers in
+  `prices.yaml`; do not edit them by hand. They come from the AWS Price List bulk API (offers
+  `AmazonBedrockFoundationModels` and `AmazonBedrock`, `region_index.json` and every Region file) and from
+  `scripts/bedrock_models.yaml`, the reviewed table of what the price list does not say (ids, profiles and their
+  source Regions, limits, long-context thresholds, retirement dates, from AWS's model cards):
+
+  ```bash
+  uv run python scripts/bedrock_prices.py --download /tmp/aws-prices    # a new, empty directory
+  uv run python scripts/bedrock_prices.py --from-dir /tmp/aws-prices --write
+  uv run python scripts/bedrock_prices.py --from-dir /tmp/aws-prices --check   # exit 1 when out of date
+  ```
+
+  It downloads only over https from `pricing.us-east-1.amazonaws.com`, follows no redirect and caps each file at
+  32 MiB. It stops (exit 2) on any usage type it cannot map, on a model the table neither maps nor skips, and on
+  prices the catalog cannot express, rather than skipping them silently: a new model means a reviewed change to the
+  table, read from its model card. `tests/unit/test_bedrock_catalog.py` holds the Claude 5.x entries to AWS's
+  structure (every standard price 1.1x the global one) and the profile set per model to the model cards.
 
 ## 8. Prices that differ by Region
 
