@@ -6,7 +6,8 @@ optional local override file. [catalog-example.yaml](catalog-example.yaml) is th
 price of a private tool that predates spendgate, except Realtime (on the roadmap). Consumers: `core/catalog.py`, `core/cost.py`.
 `spendgate.config` reads the YAML files and computes their sha256; `core.catalog.parse(dicts, sha)` validates and
 resolves them (core never reads files). No remote fetch at serve time: `spendgate catalog import` downloads
-LiteLLM's price file only when an operator runs it, to draft an override file ([ADR-0014](adr/0014-catalog-import-command.md)).
+LiteLLM's price file only when an operator runs it, to draft an override file ([ADR-0014](adr/0014-catalog-import-command.md)), and
+`spendgate catalog draft` writes a `verified: false` stand-in priced like another entry ([how-to section 8](catalog-how-to.md#8-when-a-model-has-no-price)).
 
 ```
 uvx check-jsonschema --schemafile src/spendgate/catalog/schema.json docs/catalog-example.yaml   # from the repository root

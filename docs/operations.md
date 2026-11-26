@@ -14,7 +14,7 @@ proxy, add `--local` instead: it opens the ledger from `--config` directly and n
 Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output. These
 three flags belong to the admin commands; `serve`, `migrate` and `check-config` take only
 `--config` (plus `serve --migrate`, `serve --no-bootstrap` and `migrate --bootstrap`), and `catalog import` (drafting an override file from LiteLLM's price file,
-[catalog how-to section 6](catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)) takes neither. `spendgate --version` prints the installed version.
+[catalog how-to section 6](catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)) takes neither; `catalog draft` (a `verified: false` stand-in priced like another model, [section 8](catalog-how-to.md#8-when-a-model-has-no-price)) takes only an optional `--config`, to read its override files. `spendgate --version` prints the installed version.
 Exit codes: 0 ok, 1 refused by the server, 2 bad command line, 3 bad configuration, 4 no or wrong
 admin key, 5 cannot reach the API or the ledger.
 

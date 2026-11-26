@@ -56,6 +56,11 @@ PosInt = Annotated[int, Field(strict=True, ge=1)]
 Text = Annotated[str, Field(strict=True)]
 
 
+def is_catalog_id(text: str) -> bool:
+    """`provider/model` as an entry's `id` must spell it (the provider is not checked here)."""
+    return _ID.fullmatch(text) is not None
+
+
 class CatalogError(ValueError):
     """The catalog documents are invalid; nothing is served from them."""
 

@@ -4,7 +4,8 @@ Prices are data. A new model, or a new price for an existing one, is a YAML edit
 The format is described in [catalog-schema.md](catalog-schema.md) and enforced by
 [`src/spendgate/catalog/schema.json`](../src/spendgate/catalog/schema.json). This page is the
 short path. A model that has no price in force is refused with `model_not_priced`, so a missing
-entry is safe, never free.
+entry is safe, never free; [section 8](#8-when-a-model-has-no-price) says how to price it, or to
+stand it in with `spendgate catalog draft` until its price is known.
 
 ## 1. Write the entry
 
@@ -232,3 +233,47 @@ models:
 - **Updating:** the entries come from the AWS Price List bulk API (offer `AmazonBedrockFoundationModels`,
   `region_index.json` and the per-Region files). `tests/unit/test_bedrock_catalog.py` checks that every
   standard price is 1.1x its global price and that the profile set per model matches AWS's model cards.
+
+## 8. When a model has no price
+
+A model with no price in force is never guessed, never free: `check-config` and `serve` refuse a
+route to it, and a call is refused with `model_not_priced` before any provider contact. The
+message names the model and the two ways to price it:
+
+- **The provider's price, in an override file** (sections 1 to 3). This is the real fix.
+- **A stand-in until then: `spendgate catalog draft`.** It copies the price of a model the catalog
+  already prices, of the same provider, onto the new id (ADR-0028):
+
+```bash
+# Price a new Anthropic model like Claude Haiku 5.5, 25% dearer, until its own price is known.
+spendgate catalog draft --like anthropic/claude-haiku-5-5 --as anthropic/claude-new-model \
+  --multiplier 1.25 --out stand-in.yaml
+
+# Copy from your own override files too, not only the bundled catalog.
+spendgate catalog draft --like openai/my-model --as openai/my-model-2 --config spendgate.yaml --out stand-in.yaml
+```
+
+- **What is copied.** The `--like` entry in force today (UTC): every price meter times
+  `--multiplier`, exactly (a product that would need rounding is refused), plus `mode`,
+  `currency`, `price_multiplier`, `long_context` and `limits` as they are, and its `source_url`.
+  `region`, `deployment_type` and `deprecation_date` belong to the copied model and are left out.
+  If the `--like` model has a scheduled price (an entry with a later `effective_from`), the draft
+  follows it with one entry per date.
+- **The entry is `verified: false`**, with `effective_from` and `checked_on` today and a `note`
+  such as `Stand-in: priced like anthropic/claude-haiku-5-5@2026-11-13 x 1.25; replace with the
+  provider's price`. The start-up warning (section 2) lists it, and every call row records its
+  price id, so a charge made with a stand-in is never mistaken for a checked one.
+- **`--multiplier`** (default 1) is a plain decimal of at least 1: a stand-in can cost more than
+  the model it copies, never less. Pick it from what you know of the new model's price; when in
+  doubt, higher.
+- **Refused:** a `--like` with no price in force (an unknown id, or one not yet in force), two
+  ids of different providers, a malformed id, a multiplier below 1 or not a decimal, and an
+  existing `--out` without `--force` (which replaces the file in one rename).
+- **`--as` may already be priced.** Then the stand-in supersedes that price from today, and the
+  command warns on stderr; `check-config` warns too when the price it replaces was verified.
+- **Reads:** the bundled catalog, plus the override files in `catalog.paths` when `--config` is
+  given (no secret is read). Exit codes: 0 written; 2 bad command line, an unknown `--like` or the
+  file exists; 3 the configuration cannot be read or the draft would not load.
+
+Load the file with `catalog.paths` (section 3) and run `spendgate check-config`. Replace the entry
+with the provider's own price as soon as it is published.

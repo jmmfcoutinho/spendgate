@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- `spendgate catalog draft --like <catalog id> --as <catalog id> [--multiplier <m>] [--config <file>]
+  --out <file> [--force]` prices a model the catalog lacks like one it has, of the same provider: it
+  copies the entry in force today (and any scheduled price after it), multiplies every meter by `m`
+  (a decimal of at least 1, default 1; exact, never rounded) and writes an override entry marked
+  `verified: false` whose note names the copied entry. Like `catalog import`, it never overwrites
+  `--out` without `--force` and loads the result before writing. `docs/catalog-how-to.md` section 8
+  (ADR-0028, #104).
+
 ## [0.3.1] - 2026-11-26
 
 **Upgrading from 0.3.0:** no migration and no config change is needed. On Bedrock you can now name the

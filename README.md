@@ -166,6 +166,9 @@ For breadth, `spendgate catalog import --from-litellm <commit-sha> --out extra.y
 override file of `verified: false` entries from LiteLLM's price file at one pinned commit; nothing
 is fetched at serve time. Read it before loading it
 ([section 6](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)).
+For a model launched today, `spendgate catalog draft --like <priced id> --as <new id> --multiplier
+1.25 --out stand-in.yaml` writes a `verified: false` stand-in priced like a model the catalog has
+([section 8](https://github.com/jmmfcoutinho/spendgate/blob/main/docs/catalog-how-to.md#8-when-a-model-has-no-price)).
 
 ## Documentation
 
