@@ -292,7 +292,22 @@ def test_absent_or_unreadable_usage_is_none_so_the_hold_is_charged(usage: Json) 
         ),
         (424, "ModelErrorException", ErrorCode.UPSTREAM_UNAVAILABLE, Outcome.CLIENT_ERROR, False),
         (400, "ValidationException", ErrorCode.INVALID_REQUEST, Outcome.CLIENT_ERROR, False),
-        (403, "AccessDeniedException", ErrorCode.INTERNAL_ERROR, Outcome.CLIENT_ERROR, False),
+        # Our credentials or model config, not the caller's: upstream_unavailable (protocol 4.2 r1).
+        (403, "AccessDeniedException", ErrorCode.UPSTREAM_UNAVAILABLE, Outcome.CLIENT_ERROR, False),
+        (
+            401,
+            "UnrecognizedClientException",
+            ErrorCode.UPSTREAM_UNAVAILABLE,
+            Outcome.CLIENT_ERROR,
+            False,
+        ),
+        (
+            404,
+            "ResourceNotFoundException",
+            ErrorCode.UPSTREAM_UNAVAILABLE,
+            Outcome.CLIENT_ERROR,
+            False,
+        ),
     ],
 )
 def test_errors_map_to_core_codes_and_outcomes(
