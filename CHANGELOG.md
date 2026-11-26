@@ -7,8 +7,11 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 **Upgrading from 0.3.1:** no migration is needed. A route whose deployments' Regions would resolve to
-different catalog entries no longer starts (see Changed); with the bundled catalog, which has no
-Region-scoped entry yet, no existing route is affected.
+different catalog entries no longer starts (see Changed). With the bundled catalog this affects only
+Vertex AI routes that mix the `global` endpoint with a regional or multi-region one (or Regions Google
+prices differently): split them into separate models. A Vertex deployment is now charged Google's
+Vertex list price for its Region instead of the Gemini API price, and Vertex refuses Gemini 2.5 Pro,
+2.5 Flash and 2.5 Flash-Lite, which Google retired on Vertex on 2026-10-20 (see Added).
 
 ### Added
 
@@ -32,6 +35,19 @@ Region-scoped entry yet, no existing route is affected.
   `serve` and library mode warn about a deployment Region that no entry of its Region-scoped id
   lists, naming the Regions the catalog does list, so a misspelt Region is visible at start.
   `docs/catalog-how-to.md` section 8 shows how to write one (ADR-0028, #103).
+- Vertex AI prices for the 20 Gemini models the `google` adapter serves on Vertex (`auth:
+  bearer_token`), in every Region Google sells each one: 34 Region-scoped entries with the same ids as
+  the Gemini API (`google/gemini-4-neon` and so on), so a Vertex deployment (which always has a
+  `region`) takes the Vertex price and the Gemini API keeps its own. The global endpoint (`global`) and
+  the non-global endpoints (`us`, `eu` and the regional ones, 10% dearer for Gemini 3 and later) have
+  separate entries. Gemini 3.5 Flash, 3.7 Flash and the Cyber variants of Gemini 4 and 3.8 Flash are
+  priced on Vertex only. Prices are Google's list prices from the Cloud Pricing API: where Google gives
+  a promotional price as credits back (Gemini 4 Carbon and Argon, 3.8 Flash, 3.6 Flash, Robotics-ER 2),
+  the hold and the charge use the list price. Vertex retirement dates from Google's model pages are
+  `deprecation_date`s (2.5 models on 2026-10-20, 3.6 and 3.7 Flash on 2027-01-28). The maintainer
+  importer `scripts/vertex_prices.py` generates the block from the Pricing API and Google's endpoint
+  locations page, refuses any Gemini SKU it cannot classify, and `--check` reports drift for the
+  daily price-watch job. `docs/catalog-how-to.md` section 9 shows a Vertex config (#107).
 
 ### Changed
 

@@ -143,6 +143,10 @@ non-stream usage has both at 0. All decode and price correctly.
 - **Google adapter:** map a provider 402 (and other billing or quota errors on our key) to
   `upstream_unavailable`, per the protocol, with a contract test. Done in #93.
 - **Bedrock adapter:** the same for a 401/403/404 on our AWS account (#98).
-- **Catalog:** verify Vertex AI prices for the Gemini models, or encode Vertex entries.
+- **Catalog:** verify Vertex AI prices for the Gemini models, or encode Vertex entries. Done in #107:
+  Region-scoped Vertex entries generated from the Google Cloud Pricing API by
+  `scripts/vertex_prices.py`. On the global endpoint used above, Gemini 3.5 Flash-Lite costs the same
+  on Vertex as on the Gemini API (0.30 input, 0.03 cached, 2.50 output per MTok), so the charges in
+  the table stand; the non-global endpoints are 10% dearer.
 - **Catalog:** Bedrock prices for EU inference profiles, and Bedrock entries for Sonnet 5.5 and Opus 5.5.
   Done in #100: every geographic and global profile, and the EU price equals the US one.
