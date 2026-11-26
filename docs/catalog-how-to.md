@@ -194,3 +194,41 @@ report as an artifact.
 
 **The script's `override` command** writes the same kind of file from the script's pinned commit;
 operators use `spendgate catalog import` instead, which needs no checkout of this repository.
+
+## 7. AWS Bedrock: which catalog id to use in your geography
+
+On Bedrock the current Claude models are called through **inference profiles**: the model id is prefixed
+with a geography (`eu.anthropic.claude-haiku-5-5`) or `global.`. In many Regions there is no in-Region
+on-demand Claude at all (eu-west-1, for example), so the bare id would not work there. The bundled catalog
+prices each profile AWS offers on bedrock-runtime under its own id, so name the model by the profile you
+call and leave the deployment's `model` unset:
+
+```yaml
+providers:
+  bedrock: { base_url: https://bedrock-runtime.eu-west-1.amazonaws.com, auth: sigv4, region: eu-west-1 }
+models:
+  claude-haiku:
+    catalog_id: bedrock/eu.anthropic.claude-haiku-5-5   # the profile id is also what Bedrock is sent
+    deployments: [{ provider: bedrock }]
+```
+
+| Model | Geographic profiles (standard price) | `global.` (about 10% less) | Bare id, in-Region |
+|---|---|---|---|
+| Claude Haiku 5.5 | `us.` `ca.` `eu.` `au.` `jp.` | yes | none (the older `anthropic.claude-haiku-5-5` entry carries the standard price) |
+| Claude Sonnet 5.5 | `us.` `ca.` `eu.` `au.` | yes | none |
+| Claude Opus 5.5 | `us.` `eu.` `au.` `jp.` | yes | `anthropic.claude-opus-5-5` (eu-west-2 only) |
+| Claude Fable 5.2 | `us.` | yes | none |
+
+- **Pick the profile of the Region in `base_url`:** `eu.` for the EU Regions, `jp.` for Tokyo and Osaka,
+  `au.` for Sydney and Melbourne, `ca.` for Canada, `us.` for the US (it also accepts the Canadian Regions
+  as source). AWS bills a geographic profile at the standard price of the Region you call from. That price
+  is the same in every commercial Region, which is why one entry per geography is exact.
+- **`global.`** can route to any commercial Region and costs about 10% less. Use it only if your data may
+  leave your geography.
+- **Not priced:** AWS GovCloud (us-gov-*) has no inference profile on bedrock-runtime and costs 1.2x, and
+  so do older Claude models and other model families. Add an override file (section 1) for them. Pointing a
+  catalog id at a different model with a deployment `model:` is possible, but then that entry's price is
+  what gets charged.
+- **Updating:** the entries come from the AWS Price List bulk API (offer `AmazonBedrockFoundationModels`,
+  `region_index.json` and the per-Region files). `tests/unit/test_bedrock_catalog.py` checks that every
+  standard price is 1.1x its global price and that the profile set per model matches AWS's model cards.

@@ -247,7 +247,7 @@ models:
     long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
     limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
 
-  # ===================== AWS Bedrock (Converse), region us-east-1 =====================
+  # ===================== AWS Bedrock (Converse) =====================
   # Source: AWS Price List bulk API (pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current),
   # read 2026-11-13; the aws.amazon.com/bedrock/pricing page itself did not render the Anthropic tables to the fetcher.
   # Model ids from platform.claude.com models overview. Cache write = 1h price (dearer than 5m).
@@ -277,6 +277,223 @@ models:
     meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
     long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
     limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+
+  # --- Inference profiles by geography (issue #100) ---
+  # Source: AWS Price List bulk API, offer AmazonBedrockFoundationModels version 20261123095841 (effective 2026-11-01),
+  # all 35 Region files read 2026-11-26. In every commercial Region the global profile has one price, and the standard
+  # price (geographic profiles and in-Region) is exactly 1.1x it; every source Region of each geography below agrees
+  # (tests/unit/test_bedrock_catalog.py checks the 1.1x). GovCloud is 1.2x but has no profile on bedrock-runtime, so it is
+  # not encoded. Profile ids per model: AWS model cards (docs.aws.amazon.com/bedrock/latest/userguide/
+  # model-card-anthropic-claude-*.md, 2026-11-26): Haiku 5.5 us/ca/eu/au/jp/global, Sonnet 5.5 us/ca/eu/au/global,
+  # Opus 5.5 us/eu/au/jp/global plus in-Region in eu-west-2, Fable 5.2 us/global. The us. profile also serves
+  # ca-central-1 and ca-west-1 as source Regions. Limits and Haiku's long-context rule: platform.claude.com models overview
+  # and pricing pages (2026-11-26). Cache write = 1h price, cache hit = the "cache read" meter.
+  - id: bedrock/us.anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (us.); standard price, 1.1x global, the same in all its source Regions (us-east-1, us-east-2, us-west-1, us-west-2, ca-central-1, ca-west-1). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/ca.anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (ca.); standard price, 1.1x global, the same in all its source Regions (ca-central-1, ca-west-1). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/eu.anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (eu.); standard price, 1.1x global, the same in all its source Regions (eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/au.anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (au.); standard price, 1.1x global, the same in all its source Regions (ap-southeast-2, ap-southeast-4). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/jp.anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (jp.); standard price, 1.1x global, the same in all its source Regions (ap-northeast-1, ap-northeast-3). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.11", cached_input_per_mtok: "0.011", cache_write_per_mtok: "0.22", output_per_mtok: "0.55" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/global.anthropic.claude-haiku-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: global
+    note: "Global cross-Region inference profile price (the same in every commercial Region). Over 100,000 input tokens: 5x all meters."
+    meters: { input_per_mtok: "0.1", cached_input_per_mtok: "0.01", cache_write_per_mtok: "0.2", output_per_mtok: "0.5" }
+    long_context: { threshold_input_tokens: 100000, input_multiplier: "5", output_multiplier: "5" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/us.anthropic.claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (us.); standard price, 1.1x global, the same in all its source Regions (us-east-1, us-east-2, us-west-1, us-west-2, ca-central-1, ca-west-1)."
+    meters: { input_per_mtok: "2.2", cached_input_per_mtok: "0.11", cache_write_per_mtok: "4.4", output_per_mtok: "11" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/ca.anthropic.claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (ca.); standard price, 1.1x global, the same in all its source Regions (ca-central-1, ca-west-1)."
+    meters: { input_per_mtok: "2.2", cached_input_per_mtok: "0.11", cache_write_per_mtok: "4.4", output_per_mtok: "11" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/eu.anthropic.claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (eu.); standard price, 1.1x global, the same in all its source Regions (eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3)."
+    meters: { input_per_mtok: "2.2", cached_input_per_mtok: "0.11", cache_write_per_mtok: "4.4", output_per_mtok: "11" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/au.anthropic.claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (au.); standard price, 1.1x global, the same in all its source Regions (ap-southeast-2, ap-southeast-4)."
+    meters: { input_per_mtok: "2.2", cached_input_per_mtok: "0.11", cache_write_per_mtok: "4.4", output_per_mtok: "11" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/global.anthropic.claude-sonnet-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: global
+    note: "Global cross-Region inference profile price (the same in every commercial Region)."
+    meters: { input_per_mtok: "2", cached_input_per_mtok: "0.1", cache_write_per_mtok: "4", output_per_mtok: "10" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/us.anthropic.claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (us.); standard price, 1.1x global, the same in all its source Regions (us-east-1, us-east-2, us-west-1, us-west-2, ca-central-1, ca-west-1)."
+    meters: { input_per_mtok: "4.4", cached_input_per_mtok: "0.22", cache_write_per_mtok: "8.8", output_per_mtok: "22" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/eu.anthropic.claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (eu.); standard price, 1.1x global, the same in all its source Regions (eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3)."
+    meters: { input_per_mtok: "4.4", cached_input_per_mtok: "0.22", cache_write_per_mtok: "8.8", output_per_mtok: "22" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/au.anthropic.claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (au.); standard price, 1.1x global, the same in all its source Regions (ap-southeast-2, ap-southeast-4)."
+    meters: { input_per_mtok: "4.4", cached_input_per_mtok: "0.22", cache_write_per_mtok: "8.8", output_per_mtok: "22" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/jp.anthropic.claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (jp.); standard price, 1.1x global, the same in all its source Regions (ap-northeast-1, ap-northeast-3)."
+    meters: { input_per_mtok: "4.4", cached_input_per_mtok: "0.22", cache_write_per_mtok: "8.8", output_per_mtok: "22" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/global.anthropic.claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: global
+    note: "Global cross-Region inference profile price (the same in every commercial Region)."
+    meters: { input_per_mtok: "4", cached_input_per_mtok: "0.2", cache_write_per_mtok: "8", output_per_mtok: "20" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/anthropic.claude-opus-5-5
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    region: eu-west-2
+    deployment_type: regional
+    note: "In-Region on-demand, eu-west-2 only (AWS model card); standard price, 1.1x global."
+    meters: { input_per_mtok: "4.4", cached_input_per_mtok: "0.22", cache_write_per_mtok: "8.8", output_per_mtok: "22" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: bedrock/us.anthropic.claude-fable-5-2
+    mode: messages
+    currency: USD
+    effective_from: "2026-11-01"
+    source_url: https://aws.amazon.com/bedrock/pricing/
+    verified: true
+    checked_on: "2026-11-26"
+    deployment_type: data_zone
+    note: "Geographic cross-Region profile (us.); standard price, 1.1x global, the same in all its source Regions (us-east-1, us-east-2, us-west-1, us-west-2, ca-central-1, ca-west-1)."
+    meters: { input_per_mtok: "8.8", cached_input_per_mtok: "0.22", cache_write_per_mtok: "17.6", output_per_mtok: "44" }
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+
 
   # ===================== Google (Gemini API, AI Studio) =====================
   # Page: ai.google.dev/gemini-api/docs/pricing (redirects to aistudio.google.com/docs/pricing), Standard paid tier.
