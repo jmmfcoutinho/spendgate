@@ -2,7 +2,8 @@
 
 Second round of calls to real providers (issue #9), for the adapters [v0.1](live-smoke-v0.1.md)
 could not reach: OpenAI chat, Responses and embeddings, Anthropic, and Google through both the
-Gemini API and Vertex AI. Code at 0.2.0 (`ab6e2b9`), through a local `spendgate serve` (SQLite
+Gemini API and Vertex AI, and [AWS Bedrock](#aws-bedrock-2026-11-26) the next day. Code at 0.2.0
+(`ab6e2b9`; Bedrock at 0.3.0), through a local `spendgate serve` (SQLite
 ledger in EUR, one budget of 1 EUR, FX USD→EUR fixed at a conservative 0.95). Provider credentials
 came by `file:` reference (Vertex by `credential: adc`); the client held only spendgate keys.
 
@@ -60,7 +61,7 @@ No real answer showed a shape the adapters mishandle.
 
 ## Findings
 
-None is a money or budget problem; one needs a small adapter fix.
+None is a money or budget problem. Findings 6 to 9 come from the Bedrock run below.
 
 1. **Gemini API prepaid credit.** The first Gemini API calls got a provider **402
    `RESOURCE_EXHAUSTED`**: the AI Studio account had no prepaid credit. spendgate settled them at 0
@@ -84,15 +85,63 @@ None is a money or budget problem; one needs a small adapter fix.
    needed a direct call to OpenAI to read the reason. The provider's status is in
    `calls.http_status`.
 
+## AWS Bedrock (2026-11-26)
+
+Run on a second machine with AWS access, in **eu-west-1**, with spendgate 0.3.0 (`v0.3.0`) and the same
+setup (SQLite ledger in EUR, one budget of 1 EUR, FX 0.95). Bedrock signed with the standard AWS credential
+chain (`auth: sigv4`); the client held only spendgate keys. Claude is reachable in eu-west-1 only through
+inference profiles (no Claude foundation model is listed as on-demand there), so each deployment set
+`model:` to the `eu.` profile id.
+
+**Total spend: 0.013678822 EUR** (ledger, 9 calls), nothing left held. Almost all of it is the
+placeholder price below; the real Bedrock cost was a small fraction of that.
+
+| Call | Model (deployment `model`) | Result | Tokens in / out | Charged (EUR) |
+|---|---|---|---|---|
+| Chat completion | `eu.anthropic.claude-haiku-5-5`, priced as `bedrock/anthropic.claude-haiku-5-5` | 200, "OK" | 18 / 4 | 0.000003971 |
+| Chat completion, streamed | Haiku 5.5 | 200 | 18 / 4 | 0.000003971 |
+| Chat, function tool | Haiku 5.5 | 200, `get_weather` call | 380 / 52 | 0.000066880 |
+| Chat, plain / streamed / tool | `eu.anthropic.claude-sonnet-5-5`, placeholder price | 200 each | 18 / 4, 18 / 4, 380 / 52 | 0.000361, 0.000361, 0.006080 |
+| Chat, plain / streamed / tool | `eu.anthropic.claude-opus-5-5`, placeholder price | 200 each | 18 / 4, 18 / 4, 380 / 52 | 0.000361, 0.000361, 0.006080 |
+| Chat on a key whose budget is 0.0001 EUR | — | 402 `budget_exhausted`, no upstream call | — | 0 |
+| Model not on the key's list | — | 403 `model_not_allowed`, no upstream call | — | 0 |
+
+Haiku is priced with the bundled catalog entry (0.11 / 0.55 USD per Mtok, the us-east-1 regional price):
+(18 × 0.11 + 4 × 0.55) USD/Mtok × 0.95 = 0.000003971 EUR, and the tool call 0.000066880 EUR, both exact to
+the nano-unit. The catalog has no Bedrock entry for Sonnet or Opus, so the run added two override entries
+(`catalog.paths`) at a deliberately high placeholder price (10 / 50 USD per Mtok, `verified: false`); their
+charges match that price exactly, which checks the adapter and the arithmetic, not a real price. The
+streamed charge equals the plain one, so ConverseStream's final `metadata.usage` is read.
+
+**Fixtures.** `tests/contract/providers/bedrock/fixtures/` now holds a Converse text answer, a tool-use
+answer and the exact 880 bytes of a ConverseStream answer (event-stream frames with their CRCs), with
+`tests/contract/providers/bedrock/test_live_fixtures.py` reading them. Real details they cover: a `type`
+field on `toolUse` blocks, a `p` padding field on every stream payload, no `contentBlockStart` before a
+text delta, and a stream `metadata.usage` without cache counts (and with `serverToolUsage: {}`) where the
+non-stream usage has both at 0. All decode and price correctly.
+
+**Findings (Bedrock), none a money problem:**
+
+6. **Bedrock errors on our credentials were a 500.** A dry run with invalid AWS credentials, made while
+   preparing this run, got Bedrock's 403 back as `internal_error` (500, "The provider rejected the
+   gateway."), not `upstream_unavailable` (502) as the protocol says; fixed in #98. The charge was 0.
+7. **Prices.** The Haiku 5.5 entry is the us-east-1 regional price, applied here to the `eu.` profile in
+   eu-west-1; whether that matches the EU price was not checked. Sonnet 5.5 and Opus 5.5 have no Bedrock
+   price, so spendgate refuses them (`model_not_priced`) until they are added.
+8. **Model ids.** The deployable ids are inference-profile ids with no version suffix
+   (`eu.anthropic.claude-haiku-5-5`, `global.anthropic.claude-haiku-5-5`). The catalog id
+   `bedrock/anthropic.claude-haiku-5-5` works for them with an explicit deployment `model:`.
+9. **Tooling note.** AWS CLI v2 has no event-stream operations (`aws bedrock-runtime converse-stream` does
+   not exist), so the raw stream was captured with a SigV4-signed POST instead.
+
 ## Not covered
 
-- **AWS Bedrock**: no AWS credentials on this machine; to be run on a machine with Bedrock access.
-  Its adapter is still tested against documented shapes only.
 - OpenAI speech (no catalog price), Azure OpenAI transcription and OpenAI `whisper-1`.
 
 ## Follow-ups
 
 - **Google adapter:** map a provider 402 (and other billing or quota errors on our key) to
-  `upstream_unavailable`, per the protocol, with a contract test.
+  `upstream_unavailable`, per the protocol, with a contract test. Done in #93.
+- **Bedrock adapter:** the same for a 401/403/404 on our AWS account (#98).
 - **Catalog:** verify Vertex AI prices for the Gemini models, or encode Vertex entries.
-- **Bedrock:** a live smoke run and fixtures from real Converse answers (issue #9).
+- **Catalog:** Bedrock prices for EU inference profiles, and Bedrock entries for Sonnet 5.5 and Opus 5.5.

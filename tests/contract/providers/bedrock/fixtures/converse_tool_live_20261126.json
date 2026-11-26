@@ -1,0 +1,9 @@
+{
+  "_note": "Captured from the live API on 2026-11-26 (spendgate 0.3.0 smoke test, issue #9): Converse with a get_weather tool, eu.anthropic.claude-haiku-5-5, eu-west-1; toolUseId replaced with a fake of the same format.",
+  "output": {"message": {"role": "assistant", "content": [
+    {"toolUse": {"toolUseId": "tooluse_FIXTURE00000000000001", "name": "get_weather", "input": {"city": "Lisbon"}, "type": "tool_use"}}
+  ]}},
+  "stopReason": "tool_use",
+  "usage": {"inputTokens": 380, "outputTokens": 52, "totalTokens": 432, "cacheReadInputTokens": 0, "cacheWriteInputTokens": 0},
+  "metrics": {"latencyMs": 607}
+}

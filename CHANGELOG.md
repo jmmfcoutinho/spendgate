@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Live smoke test of AWS Bedrock (eu-west-1, Claude Haiku, Sonnet and Opus 5.5 through `eu.` inference
+  profiles), recorded in `docs/reviews/live-smoke-v0.2.md`: plain, streamed and tool calls all pass and
+  the Haiku charges match the catalog to the nano-unit. The Bedrock contract tests now also run on
+  answers recorded from the live API, including the raw event-stream bytes (#9).
+
 ### Fixed
 
 - Bedrock: a provider 401, 403 or 404 (`AccessDeniedException`, `UnrecognizedClientException`,
