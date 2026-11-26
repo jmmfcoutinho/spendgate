@@ -404,4 +404,5 @@ def check_config(
         settings.unverified_summary(),
         tuple(settings.unmatched_filters()),
         settings.superseded_summary(),
+        tuple(settings.unlisted_regions()),
     )

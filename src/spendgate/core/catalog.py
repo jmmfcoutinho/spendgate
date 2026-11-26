@@ -291,6 +291,11 @@ class Catalog:
             raise ModelNotPriced(provider, model, "deployments resolve to different prices")
         return entries[0]
 
+    def listed_regions(self, provider: str, model: str) -> tuple[str, ...]:
+        """Every Region some entry of the id is scoped to, sorted; empty for region-less ids."""
+        entries = self._by_model.get((provider, model), ())
+        return tuple(sorted({r for e in entries for r in e.regions or ()}))
+
     def could_price(self, provider: str, model: str, region: Region) -> bool:
         """Whether some entry, on some date, prices a deployment in `region`."""
         return can_price(self._by_model.get((provider, model), ()), region)

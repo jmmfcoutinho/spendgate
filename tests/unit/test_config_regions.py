@@ -129,3 +129,49 @@ def test_a_region_no_entry_prices_is_unpriced_and_named(tmp_path: Path) -> None:
         load(path, env=ENV)  # date-independent: no entry could ever price eastus
     only_eastus = check_config(write(tmp_path, "eastus", prices=scoped_only), env=ENV)
     assert any(e.endswith("has no price in the catalog") for e in only_eastus.errors)
+
+
+# --- a deployment Region the catalog never lists: a warning, not an error -----------------------
+
+
+def test_a_misspelt_region_warns_naming_the_regions_the_catalog_lists(tmp_path: Path) -> None:
+    report = check_config(write(tmp_path, "swedencental"), env=ENV, now_ms=NOW_MS)
+    assert report.ok
+    assert report.unlisted_regions == (
+        "models.m region 'swedencental' is listed by no entry of azure_openai/gpt-x-test, so it "
+        "takes the region-less price (Regions listed for that id: swedencentral, westeurope)",
+    )
+
+
+def test_a_listed_region_does_not_warn(tmp_path: Path) -> None:
+    path = write(tmp_path, "swedencentral", "westeurope")
+    assert check_config(path, env=ENV, now_ms=NOW_MS).unlisted_regions == ()
+    assert load(path, env=ENV, now_ms=NOW_MS).unlisted_regions() == []
+
+
+def test_an_id_without_region_scoped_entries_does_not_warn(tmp_path: Path) -> None:
+    path = write(tmp_path, "swedencental", "eastus", prices=catalog(entry()))
+    report = check_config(path, env=ENV, now_ms=NOW_MS)
+    assert report.ok and report.unlisted_regions == ()
+
+
+def test_the_provider_region_is_checked_and_a_long_list_is_cut_at_ten(tmp_path: Path) -> None:
+    many = ", ".join(f"r{i:02}" for i in range(13))
+    path = write(tmp_path, None, prices=catalog(entry(), entry(regions=many, price="2")))
+    (line,) = load(path, env=ENV, now_ms=NOW_MS).unlisted_regions()
+    assert "region 'eastus'" in line  # providers.azure_openai.region
+    assert line.endswith("r00, r01, r02, r03, r04, r05, r06, r07, r08, r09 and 3 more)")
+
+
+def test_check_config_and_serve_print_the_warning_and_stay_ok(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    for name, value in ENV.items():
+        monkeypatch.setenv(name, value)
+    path = str(write(tmp_path, "swedencental"))
+    assert serve.run_check_config(path) == EXIT_OK
+    settings = serve.load_settings(path)
+    assert not isinstance(settings, int)
+    serve.print_start_warnings(settings)  # what `serve` prints before it starts listening
+    err = capsys.readouterr().err
+    assert err.count("warning: models.m region 'swedencental' is listed by no entry") == 2

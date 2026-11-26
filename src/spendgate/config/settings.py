@@ -120,6 +120,33 @@ class Settings:
             f"{', '.join(ids[:_IDS_SHOWN])}{more}"
         )
 
+    def unlisted_regions(self) -> list[str]:
+        """A warning per routed deployment Region that no entry of its Region-scoped id lists.
+
+        Not an error: such a Region is priced by the region-less entry, which may be right. But
+        a Region spelled differently from the catalog (`swedencental`) would get that price too,
+        so it is named at start with the Regions the catalog does list.
+        """
+        lines: dict[str, None] = {}
+        for alias, route in self.routes.items():
+            provider, _, model = route.catalog_id.partition("/")
+            listed = self.catalog.listed_regions(provider, model)
+            if not listed:
+                continue
+            shown = ", ".join(listed[:_REGIONS_SHOWN])
+            more = (
+                f" and {len(listed) - _REGIONS_SHOWN} more" if len(listed) > _REGIONS_SHOWN else ""
+            )
+            for region in (d.region for d in route.deployments):
+                if region is not None and region not in listed:
+                    line = (
+                        f"models.{alias} region {region!r} is listed by no entry of "
+                        f"{route.catalog_id}, so it takes the region-less price (Regions listed "
+                        f"for that id: {shown}{more})"
+                    )
+                    lines[line] = None
+        return list(lines)
+
     def unmatched_filters(self) -> list[str]:
         """A warning per bootstrap budget whose `model_filter` matches no routed catalog id.
 
@@ -139,6 +166,7 @@ class Settings:
 
 
 _IDS_SHOWN = 5
+_REGIONS_SHOWN = 10
 
 
 def unverified_summary(catalog: Catalog) -> str | None:
@@ -164,6 +192,7 @@ class CheckReport:
     unverified: str | None = None  # warning line when the catalog has unverified prices
     unmatched_filters: tuple[str, ...] = ()  # bootstrap budgets whose filter matches no route
     superseded: str | None = None  # warning line when unverified entries replace verified ones
+    unlisted_regions: tuple[str, ...] = ()  # deployment Regions their Region-scoped id never lists
 
     @property
     def ok(self) -> bool:
