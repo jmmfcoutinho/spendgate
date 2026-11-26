@@ -54,7 +54,11 @@ class GuardError(ValueError):
 
 
 def _catalog_ids(extra: Path | None) -> list[str]:
-    """Model ids of the bundled catalog, then `extra`, in file order, without repeats."""
+    """Model ids of the bundled catalog, then `extra`, in file order, without repeats.
+
+    Only ids with a region-less entry: a synthesized deployment has no `region`, so an id priced
+    only for named Regions could never be priced here (ADR-0028) and would stop the start.
+    """
     blobs = [(resources.files("spendgate.catalog") / "prices.yaml").read_bytes()]
     if extra is not None:
         blobs.append(extra.read_bytes())
@@ -62,7 +66,8 @@ def _catalog_ids(extra: Path | None) -> list[str]:
     for blob in blobs:
         doc = load_yaml_bytes(blob)
         entries = doc.get("models", []) if isinstance(doc, dict) else []
-        ids.update((e["id"], None) for e in entries if isinstance(e, dict) and "id" in e)
+        plain = (e for e in entries if isinstance(e, dict) and "regions" not in e)
+        ids.update((e["id"], None) for e in plain if "id" in e)
     return [i for i in ids if isinstance(i, str)]
 
 

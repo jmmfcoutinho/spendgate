@@ -200,7 +200,8 @@ def _prepare(ctx: Context) -> Prepared | Refusal:
         return bad
     slug, _, model_part = routed.route.catalog_id.partition("/")
     try:
-        entry = ctx.settings.catalog.lookup(slug, model_part, ctx.now)
+        regions = [d.region for d in routed.route.deployments]
+        entry = ctx.settings.catalog.lookup_route(slug, model_part, regions, ctx.now)
     except ModelNotPriced as exc:
         return exc.refusal()
     key_cap = ctx.key.max_output_tokens or ctx.settings.config.defaults.max_output_tokens
@@ -376,7 +377,7 @@ def hold_request(  # noqa: PLR0913, PLR0917 - the facts the admission transactio
             Candidate(
                 t.provider,
                 t.label,
-                pricing.entry.price_id,
+                pricing.entry.price_id_in(t.deployment.region),
                 pricing.entry.currency,
                 pricing.fx_rate_nano,
             )

@@ -6,6 +6,31 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+**Upgrading from 0.3.1:** no migration is needed. A route whose deployments' Regions would resolve to
+different catalog entries no longer starts (see Changed); with the bundled catalog, which has no
+Region-scoped entry yet, no existing route is affected.
+
+### Added
+
+- Region-scoped prices: a catalog entry may list the deployment Regions it prices (`regions: [...]`), and
+  prices only those. The deployment's `region` picks the entry; every other Region, and a deployment
+  without a `region`, takes the region-less entry. Entries of one id and date must not list the same
+  Region. The call row's `price_id` gains `~<region>` when a Region-scoped entry priced the call
+  (`azure_openai/gpt-x@2026-11-01~swedencentral`); the ledger schema is unchanged. `check-config`,
+  `serve` and library mode warn about a deployment Region that no entry of its Region-scoped id
+  lists, naming the Regions the catalog does list, so a misspelt Region is visible at start.
+  `docs/catalog-how-to.md` section 8 shows how to write one (ADR-0028, #103).
+
+### Changed
+
+- One route, one price: `check-config` and `serve` refuse (exit 3) a route whose deployments resolve to
+  different catalog entries, today or from a later `effective_from`, naming the route and the Regions.
+  Until now the hold and the charge silently used one price for every deployment of a route; route
+  differently-priced Regions as separate models (ADR-0028, #103).
+- Catalog overrides now merge by `id`, `effective_from` and `regions`: an override with a different set of
+  `regions` adds an entry instead of replacing the region-less one, and one whose Regions overlap another
+  entry of the same id and date is a load error.
+
 ## [0.3.1] - 2026-11-26
 
 **Upgrading from 0.3.0:** no migration and no config change is needed. On Bedrock you can now name the
