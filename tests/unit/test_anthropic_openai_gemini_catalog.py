@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 import yaml
 
-from spendgate.core.catalog import parse
+from spendgate.core.catalog import ModelNotPriced, parse
 
 NOW_MS = 1_795_651_200_000  # 2026-11-26
 
@@ -176,9 +176,74 @@ def test_openai_speech_models_bill_per_character_as_the_adapter_counts() -> None
     }
 
 
+# --- Gemini API: aistudio.google.com/docs/pricing (Standard, Paid tier) ---------------------------
+
+# "<price> through <day>. <price> starting <day>": every meter doubles on that day.
+GEMINI_PRICE_CHANGES = {
+    "gemini-4-carbon": "2026-12-01",
+    "gemini-4-argon": "2026-12-01",
+    "gemini-3.8-flash": "2027-01-01",
+    "gemini-3.6-flash": "2027-01-01",
+    "gemini-robotics-er-2-preview": "2027-01-01",
+}
+# "prompts > 200k tokens"
+GEMINI_LONG_CONTEXT = {
+    "gemini-3.1-pro-preview",
+    "gemini-3.1-pro-preview-customtools",
+    "gemini-2.5-pro",
+}
+
+
+def gemini_history() -> dict[str, list[dict[str, Any]]]:
+    found: dict[str, list[dict[str, Any]]] = {}
+    for e in bundled():
+        if e["id"].startswith("google/"):
+            found.setdefault(e["id"].removeprefix("google/"), []).append(e)
+    return {m: sorted(es, key=lambda e: str(e["effective_from"])) for m, es in found.items()}
+
+
+def test_gemini_dated_price_changes_double_every_meter_on_the_announced_day() -> None:
+    changing = {m: es for m, es in gemini_history().items() if len(es) > 1}
+    assert {m: es[1]["effective_from"] for m, es in changing.items()} == GEMINI_PRICE_CHANGES
+    for model, (before, after) in changing.items():
+        assert set(after["meters"]) == set(before["meters"]), model
+        for name in before["meters"]:
+            assert meter(after, name) == meter(before, name) * 2, (model, name)
+        assert after["limits"] == before["limits"], model
+
+
+def test_gemini_long_context_is_the_200k_tier_where_the_page_lists_one() -> None:
+    for model, e in entries("google").items():
+        assert ("long_context" in e) == (model in GEMINI_LONG_CONTEXT), model
+        if model in GEMINI_LONG_CONTEXT:
+            # 3.1 Pro: 2 -> 4 input, 0.20 -> 0.40 cached, 12 -> 18 output.
+            # 2.5 Pro: 1.25 -> 2.50 input, 0.125 -> 0.25 cached, 10 -> 15 output.
+            assert e["long_context"] == {
+                "threshold_input_tokens": 200000,
+                "input_multiplier": "2",
+                "output_multiplier": "1.5",
+            }, model
+
+
+def test_gemini_limits_follow_the_model_pages() -> None:
+    for model, e in entries("google").items():
+        assert e["limits"]["max_output_tokens"] == 65536, model
+        # The media-resolution cap is applied to Gemini 4 only, as for gemini-4-carbon.
+        assert ("max_image_tokens" in e["limits"]) == model.startswith("gemini-4-"), model
+
+
+def test_deprecated_gemini_2_5_models_are_refused_from_their_shutdown_date() -> None:
+    catalog = parse([{"catalog_version": 1, "models": bundled()}], "0" * 64, ledger_currency="USD")
+    december_1 = NOW_MS + 5 * 86_400_000
+    for model in ("gemini-2.5-pro", "gemini-2.5-flash"):
+        assert catalog.lookup("google", model, NOW_MS).verified
+        with pytest.raises(ModelNotPriced):
+            catalog.lookup("google", model, december_1)
+
+
 def test_every_new_entry_resolves_today_through_the_bundled_catalog() -> None:
     catalog = parse([{"catalog_version": 1, "models": bundled()}], "0" * 64, ledger_currency="USD")
-    for provider in ("anthropic", "openai"):
+    for provider in ("anthropic", "openai", "google"):
         for model in entries(provider):
             entry = catalog.lookup(provider, model, NOW_MS)
             assert entry.verified, entry.id
