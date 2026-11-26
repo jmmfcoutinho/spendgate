@@ -1,16 +1,21 @@
 """A stand-in price for a model the catalog lacks: an existing entry's meters times a multiplier.
 
-Used by `spendgate catalog draft` (ADR-0028); never at serve time. The draft is an override entry
-marked `verified: false` whose note names the entry it copied, so the start-up warning and every
-call row show that the price is borrowed. The multiplier is at least 1, and each meter is
-multiplied exactly: a product that would need rounding is refused, never rounded down.
+Used by `spendgate catalog draft` (ADR-0028 point 2,
+docs/adr/0028-price-coverage-and-regional-prices.md); never at serve time. The draft is an
+override entry marked `verified: false` whose note names the entry it copied, so the start-up
+warning and every call row show that the price is borrowed. The multiplier is at least 1, and
+each meter is multiplied exactly: a product that would need rounding is refused, never rounded
+down. With Regions, the draft is scoped to them (`regions:`), and the catalog's own load rules
+(no Region in two entries of one id and date) apply.
 """
 
 import re
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, Inexact, localcontext
 
-from spendgate.core.catalog import PriceEntry, is_catalog_id
+from spendgate.core.catalog import PriceEntry, is_catalog_id, is_region_slug
+from spendgate.core.price_regions import Region
 
 # A plain decimal, no sign, exponent or leading zero; short, so every product stays exact.
 _MULTIPLIER = re.compile(r"(0|[1-9][0-9]*)(\.[0-9]+)?")
@@ -34,6 +39,23 @@ def parse_multiplier(text: str) -> Decimal:
     return value
 
 
+def parse_regions(text: str) -> tuple[str, ...]:
+    """A comma list of Region slugs, sorted and deduplicated, as `regions:` stores them."""
+    slugs = [s.strip() for s in text.split(",")]
+    if not any(slugs):
+        raise StandInError("give at least one Region slug, such as swedencentral")
+    for slug in slugs:
+        if not is_region_slug(slug):
+            raise StandInError(f"{slug!r} is not a Region slug (lower-case letters, digits, '-')")
+    return tuple(sorted(set(slugs)))
+
+
+def check_region(text: str) -> str:
+    if not is_region_slug(text):
+        raise StandInError(f"{text!r} is not a Region slug (lower-case letters, digits, '-')")
+    return text
+
+
 def check_ids(like: str, as_id: str) -> None:
     """Both are catalog ids `provider/model` of one provider."""
     for flag, value in (("--like", like), ("--as", as_id)):
@@ -46,9 +68,14 @@ def check_ids(like: str, as_id: str) -> None:
         )
 
 
-def note(source: PriceEntry, multiplier: str) -> str:
+def note(
+    source: PriceEntry, multiplier: str, regions: tuple[str, ...] = (), region: Region = None
+) -> str:
+    """Names the copied entry as a call row would (`~<region>` for a Region-scoped one)."""
+    scope = f" for Regions {', '.join(regions)}" if regions else ""
     return (
-        f"Stand-in: priced like {source.price_id} x {multiplier}; replace with the provider's price"
+        f"Stand-in: priced like {source.price_id_in(region)} x {multiplier}{scope}; "
+        "replace with the provider's price"
     )
 
 
@@ -62,14 +89,27 @@ def _times(value: Decimal, multiplier: Decimal) -> str:
     return format(product.normalize(), "f")  # plain: "1.8", "100", never an exponent
 
 
-def draft(source: PriceEntry, as_id: str, multiplier: str, today: date) -> dict[str, object]:
-    """The override entry for `as_id`: every price meter of `source` times `multiplier`.
+@dataclass(frozen=True, slots=True)
+class Spec:
+    """What to draft: `as_id`, priced like a source entry times `multiplier`, from `today`."""
+
+    as_id: str
+    multiplier: str
+    today: date
+    regions: tuple[str, ...] = ()  # the stand-in's `regions:`; empty means every Region
+    region: Region = None  # the Region the source entry was looked up in, named in the note
+
+
+def draft(source: PriceEntry, spec: Spec) -> dict[str, object]:
+    """The override entry for `spec.as_id`: every price meter of `source` times the multiplier.
 
     It takes effect today, or on `source`'s own date when that is later (a scheduled price).
     Mode, currency, `price_multiplier`, long-context tier and limits are copied as they are, so
     the stand-in costs at least what `source` costs on every request. Lifecycle and placement
-    fields (`deprecation_date`, `region`, `deployment_type`) belong to `source` and are left out.
+    fields (`deprecation_date`, `region`, `regions`, `deployment_type`) belong to `source` and
+    are left out; the stand-in's own Regions come from `spec.regions`.
     """
+    as_id, multiplier, today, regions = spec.as_id, spec.multiplier, spec.today, spec.regions
     factor = parse_multiplier(multiplier)
     meters: dict[str, object] = {}
     for name, value in source.meters.model_dump(exclude_unset=True, exclude_none=True).items():
@@ -83,8 +123,10 @@ def draft(source: PriceEntry, as_id: str, multiplier: str, today: date) -> dict[
         "source_url": source.source_url,
         "verified": False,
         "checked_on": today.isoformat(),
-        "note": note(source, multiplier),
+        "note": note(source, multiplier, regions, spec.region),
     }
+    if regions:
+        entry["regions"] = list(regions)
     if source.price_multiplier != 1:
         entry["price_multiplier"] = format(source.price_multiplier, "f")
     entry["meters"] = meters

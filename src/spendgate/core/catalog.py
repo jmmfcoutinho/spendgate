@@ -63,6 +63,11 @@ def is_catalog_id(text: str) -> bool:
     return _ID.fullmatch(text) is not None
 
 
+def is_region_slug(text: str) -> bool:
+    """A Region as `regions` and `region` must spell it (`swedencentral`, `eu-west-1`)."""
+    return _REGION.fullmatch(text) is not None
+
+
 class CatalogError(ValueError):
     """The catalog documents are invalid; nothing is served from them."""
 

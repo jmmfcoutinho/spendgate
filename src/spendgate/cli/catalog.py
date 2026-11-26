@@ -4,11 +4,14 @@ Operator actions at a desk, never part of serving: the proxy and library mode re
 catalog files (ADR-0014). `import` reads one pinned commit of BerriAI/litellm over https on
 raw.githubusercontent.com, or a local copy, and drafts the models the bundled catalog does not
 carry. `draft` prices one model like another of the same provider, times a multiplier of at
-least 1 (ADR-0028). An existing file is never overwritten without `--force`.
+least 1, optionally for some Regions only (ADR-0028 point 2,
+docs/adr/0028-price-coverage-and-regional-prices.md). An existing file is never overwritten
+without `--force`.
 
 Exit codes: 0 written; 2 bad command line (for `draft`, also a `--like` with no price in force),
-or the output exists; 3 the input is not LiteLLM's JSON, nothing could be drafted, or the
-configuration cannot be read; 5 the download failed.
+or the output exists; 3 the input is not LiteLLM's JSON, nothing could be drafted, the
+configuration cannot be read, or the draft would not load (for `draft`, a Region that another
+entry of the id and date already lists).
 """
 
 import argparse
@@ -84,6 +87,14 @@ def _add_draft(actions: "argparse._SubParsersAction[argparse.ArgumentParser]") -
     d.add_argument("--as", dest="as_id", required=True, metavar="ID", help="catalog id to price")
     d.add_argument(
         "--multiplier", default="1", help="decimal of at least 1 applied to every meter (1)"
+    )
+    d.add_argument(
+        "--regions", metavar="SLUG,...", help="price only deployments in these Regions (regions:)"
+    )
+    d.add_argument(
+        "--region",
+        metavar="SLUG",
+        help="copy the price --like has in this Region (default: its region-less price)",
     )
     d.add_argument("--config", help="also read the override files in this config's catalog.paths")
     d.add_argument("--out", type=Path, required=True, help="override file to write")
@@ -263,63 +274,91 @@ def _draft_args(args: argparse.Namespace) -> None:
         standin.parse_multiplier(args.multiplier)
     except standin.StandInError as exc:
         raise CliError(EXIT_USAGE, f"--multiplier: {exc}") from None
+    try:
+        args.regions = () if args.regions is None else standin.parse_regions(args.regions)
+    except standin.StandInError as exc:
+        raise CliError(EXIT_USAGE, f"--regions: {exc}") from None
+    try:
+        args.region = None if args.region is None else standin.check_region(args.region)
+    except standin.StandInError as exc:
+        raise CliError(EXIT_USAGE, f"--region: {exc}") from None
     if args.out.exists() and not args.force:  # checked first, and again on open
         raise CliError(EXIT_USAGE, f"{args.out} exists; pass --force to overwrite it")
 
 
-def _sources(catalog: Catalog, like: str, day: date, now_ms: int) -> list[PriceEntry]:
-    """The entry of `like` in force today, then its scheduled ones: the stand-in follows them."""
+def _ms(day: date) -> int:
+    return int(datetime.combine(day, time(), tzinfo=UTC).timestamp()) * 1000
+
+
+def _sources(catalog: Catalog, like: str, region: str | None, day: date) -> list[PriceEntry]:
+    """What `like` costs in `region` today, then on each later date its price changes there."""
     provider, _, model = like.partition("/")
     try:
-        current = catalog.lookup(provider, model, now_ms)
+        found = [catalog.lookup(provider, model, _ms(day), region)]
     except ModelNotPriced as exc:
+        listed = catalog.listed_regions(provider, model)
+        hint = (
+            f"; it is priced for --region {', '.join(listed)}" if region is None and listed else ""
+        )
+        where = f" in region {region}" if region is not None else ""
         raise CliError(
-            EXIT_USAGE, f"--like: {like} has no price in force to copy ({exc.reason})"
+            EXIT_USAGE, f"--like: {like} has no price in force{where} to copy ({exc.reason}){hint}"
         ) from None
-    later = (e for e in catalog.entries() if e.id == like and e.effective_from > day)
-    return [current, *sorted(later, key=lambda e: e.effective_from)]
+    later = {e.effective_from for e in catalog.entries() if e.id == like and e.effective_from > day}
+    for when in sorted(later):
+        try:
+            entry = catalog.lookup(provider, model, _ms(when), region)
+        except ModelNotPriced:  # past its deprecation date there: the stand-in keeps its price
+            break
+        if entry.key != found[-1].key:
+            found.append(entry)
+    return found
 
 
 def run_draft(args: argparse.Namespace, *, today: date | None = None) -> int:
     _draft_args(args)
     day = today or datetime.now(UTC).date()
-    now_ms = int(datetime.combine(day, time(), tzinfo=UTC).timestamp()) * 1000
     catalog, docs = _loaded(args.config)
-    sources = _sources(catalog, args.like, day, now_ms)
+    sources = _sources(catalog, args.like, args.region, day)
+    spec = standin.Spec(args.as_id, args.multiplier, day, args.regions, args.region)
     try:
-        entries = [standin.draft(s, args.as_id, args.multiplier, day) for s in sources]
+        entries = [standin.draft(s, spec) for s in sources]
     except standin.StandInError as exc:
         raise CliError(EXIT_CONFIG, str(exc)) from None
-    _warn_if_priced(catalog, args.as_id, now_ms, day)
+    copied = sources[0].price_id_in(args.region)
     head = _DRAFT_HEADER.format(
-        today=day, as_id=args.as_id, price_id=sources[0].price_id, multiplier=args.multiplier
+        today=day, as_id=args.as_id, price_id=copied, multiplier=args.multiplier
     )
+    if args.regions:
+        head += f"# For deployments in {', '.join(args.regions)} only (regions:).\n"
     if len(sources) > 1:
         head += f"# It follows the scheduled prices of {args.like} too: one entry per date.\n"
     body = yaml.safe_dump({"catalog_version": 1, "models": entries}, sort_keys=False, width=100)
     _check(head + body, docs, catalog.ledger_currency, catalog.fx)
+    _warn_if_priced(catalog, args.as_id, args.regions, day)
     _write(args.out, head + body, force=args.force)
     print(
         f"wrote a stand-in for {args.as_id} (verified: false, {len(entries)} "
         f"{'entry' if len(entries) == 1 else 'entries'}) to {args.out}, priced like "
-        f"{sources[0].price_id} x {args.multiplier}; load it with catalog.paths, then run "
-        "check-config"
+        f"{copied} x {args.multiplier}; load it with catalog.paths, then run check-config"
     )
     return EXIT_OK
 
 
-def _warn_if_priced(catalog: Catalog, as_id: str, now_ms: int, day: date) -> None:
+def _warn_if_priced(catalog: Catalog, as_id: str, regions: tuple[str, ...], day: date) -> None:
     """Allowed (an operator may mark a price up), but a reviewed price gives way: say so."""
     provider, _, model = as_id.partition("/")
-    try:
-        current = catalog.lookup(provider, model, now_ms)
-    except ModelNotPriced:
-        return
-    print(
-        f"warning: {as_id} is already priced ({current.price_id}); from {day} the stand-in "
-        "supersedes it, and check-config warns if that price was verified",
-        file=sys.stderr,
-    )
+    for region in regions or (None,):
+        try:
+            current = catalog.lookup(provider, model, _ms(day), region)
+        except ModelNotPriced:
+            continue
+        where = f" in region {region}" if region is not None else ""
+        print(
+            f"warning: {as_id} is already priced{where} ({current.price_id_in(region)}); from "
+            f"{day} the stand-in supersedes it, and check-config warns if that price was verified",
+            file=sys.stderr,
+        )
 
 
 def main(args: argparse.Namespace) -> int:

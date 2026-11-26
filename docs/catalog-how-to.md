@@ -300,7 +300,8 @@ message names the model and the two ways to price it:
 
 - **The provider's price, in an override file** (sections 1 to 3). This is the real fix.
 - **A stand-in until then: `spendgate catalog draft`.** It copies the price of a model the catalog
-  already prices, of the same provider, onto the new id (ADR-0028):
+  already prices, of the same provider, onto the new id
+  ([ADR-0028](adr/0028-price-coverage-and-regional-prices.md)):
 
 ```bash
 # Price a new Anthropic model like Claude Haiku 5.5, 25% dearer, until its own price is known.
@@ -309,14 +310,29 @@ spendgate catalog draft --like anthropic/claude-haiku-5-5 --as anthropic/claude-
 
 # Copy from your own override files too, not only the bundled catalog.
 spendgate catalog draft --like openai/my-model --as openai/my-model-2 --config spendgate.yaml --out stand-in.yaml
+
+# A stand-in for two Regions only (section 8), copied from the price my-model has in swedencentral.
+spendgate catalog draft --like azure_openai/my-model --as azure_openai/my-model-2 --config spendgate.yaml \
+  --region swedencentral --regions swedencentral,westeurope --multiplier 1.1 --out stand-in-eu.yaml
 ```
 
 - **What is copied.** The `--like` entry in force today (UTC): every price meter times
   `--multiplier`, exactly (a product that would need rounding is refused), plus `mode`,
   `currency`, `price_multiplier`, `long_context` and `limits` as they are, and its `source_url`.
-  `region`, `deployment_type` and `deprecation_date` belong to the copied model and are left out.
-  If the `--like` model has a scheduled price (an entry with a later `effective_from`), the draft
-  follows it with one entry per date.
+  `region`, `regions`, `deployment_type` and `deprecation_date` belong to the copied model and
+  are left out. If the `--like` model has a scheduled price (an entry with a later
+  `effective_from`), the draft follows it with one entry per date.
+- **`--regions a,b`** scopes the stand-in to those Regions (section 8): it writes `regions:`,
+  sorted and without repeats, and the note says `for Regions a, b`. Every other Region, and a
+  deployment without a `region`, keeps whatever price the id already has, or none. A slug is
+  lower-case letters, digits and `-`, as the schema requires. A Region that another entry of the
+  same id and `effective_from` already lists is refused (exit 3), because lookup must find one
+  entry per Region; an entry with exactly the same Regions is replaced, as any override is.
+- **`--region <slug>`** chooses which price of a Region-scoped `--like` is copied: the one a
+  deployment in that Region would pay, scheduled changes in that Region included, and the note
+  names it (`…@2026-11-01~swedencentral`). Without it, the region-less price is copied; a
+  `--like` priced only for some Regions is refused, and the error lists them. `--region` picks the
+  source only: the stand-in is scoped by `--regions` alone.
 - **The entry is `verified: false`**, with `effective_from` and `checked_on` today and a `note`
   such as `Stand-in: priced like anthropic/claude-haiku-5-5@2026-11-13 x 1.25; replace with the
   provider's price`. The start-up warning (section 2) lists it, and every call row records its
@@ -324,11 +340,13 @@ spendgate catalog draft --like openai/my-model --as openai/my-model-2 --config s
 - **`--multiplier`** (default 1) is a plain decimal of at least 1: a stand-in can cost more than
   the model it copies, never less. Pick it from what you know of the new model's price; when in
   doubt, higher.
-- **Refused:** a `--like` with no price in force (an unknown id, or one not yet in force), two
-  ids of different providers, a malformed id, a multiplier below 1 or not a decimal, and an
-  existing `--out` without `--force` (which replaces the file in one rename).
-- **`--as` may already be priced.** Then the stand-in supersedes that price from today, and the
-  command warns on stderr; `check-config` warns too when the price it replaces was verified.
+- **Refused:** a `--like` with no price in force (an unknown id, or one not yet in force, or
+  none in that `--region`), two ids of different providers, a malformed id or Region slug, a
+  multiplier below 1 or not a decimal, and an existing `--out` without `--force` (which replaces
+  the file in one rename).
+- **`--as` may already be priced.** Then the stand-in supersedes that price from today (in each
+  of `--regions`, if given), and the command warns on stderr; `check-config` warns too when the
+  price it replaces was verified.
 - **Reads:** the bundled catalog, plus the override files in `catalog.paths` when `--config` is
   given (no secret is read). Exit codes: 0 written; 2 bad command line, an unknown `--like` or the
   file exists; 3 the configuration cannot be read or the draft would not load.
