@@ -134,6 +134,8 @@ class Runtime:
             _log.log(level, "%s", line)
         if (unverified := settings.unverified_summary()) is not None:
             _log.warning("%s", unverified)
+        for line in settings.unlisted_regions():
+            _log.warning("%s", line)
         with contextlib.suppress(Exception):  # stale holds of a crashed script, charged in full
             await self._ledger.sweep_expired(self._now())
         self._beat = asyncio.ensure_future(self._maintain(pipeline))

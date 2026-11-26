@@ -53,7 +53,7 @@ def run_check_config(path: str) -> int:
         print(f"warning: {report.unverified}", file=sys.stderr)
     if report.superseded is not None:
         print(f"warning: {report.superseded}", file=sys.stderr)
-    for line in report.unmatched_filters:
+    for line in (*report.unmatched_filters, *report.unlisted_regions):
         print(f"warning: {line}", file=sys.stderr)
     if report.ok:
         print("configuration ok")
@@ -161,6 +161,16 @@ def parse_listen(value: str) -> Listen:
     return Listen(host.strip("[]"), int(port))
 
 
+def print_start_warnings(settings: Settings) -> None:
+    """What `serve` prints at start besides errors: fail-open options and every warning."""
+    for line in settings.fail_open_summary():
+        print(f"fail_open: {line}", file=sys.stderr)
+    if (unverified := settings.unverified_summary()) is not None:
+        print(f"warning: {unverified}", file=sys.stderr)
+    for line in (*settings.unmatched_filters(), *settings.unlisted_regions()):
+        print(f"warning: {line}", file=sys.stderr)
+
+
 async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
     settings = rt.settings
     if bootstrap:
@@ -173,12 +183,7 @@ async def _serve(rt: Runtime, *, bootstrap: bool) -> None:
                 "bootstrap: keys are created only by `spendgate migrate --bootstrap`, not by serve",
                 file=sys.stderr,
             )
-    for line in settings.fail_open_summary():
-        print(f"fail_open: {line}", file=sys.stderr)
-    if (unverified := settings.unverified_summary()) is not None:
-        print(f"warning: {unverified}", file=sys.stderr)
-    for line in settings.unmatched_filters():
-        print(f"warning: {line}", file=sys.stderr)
+    print_start_warnings(settings)
     metrics, logger = Metrics(), configure_json_logging()
     async with (
         upstream(settings) as (sender, tracer),

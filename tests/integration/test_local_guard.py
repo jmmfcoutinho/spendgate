@@ -61,6 +61,19 @@ def test_extra_catalog_models_are_routed(tmp_path: Path) -> None:
     assert "whisper-test" in ids
 
 
+def test_a_model_priced_only_for_named_regions_is_not_routed(tmp_path: Path) -> None:
+    # Synthesized deployments have no region, so only region-less entries can price them.
+    extra = tmp_path / "extra.yaml"
+    scoped = CATALOG_OVERRIDE.replace("verified: true", "verified: true\n    regions: [eastus]", 1)
+    extra.write_text(scoped)
+    with (
+        make(tmp_path, catalog=extra) as g,
+        httpx.Client(transport=g.transport(), base_url="http://x") as client,
+    ):
+        ids = {m["id"] for m in client.get("/v1/models").json()["data"]}
+    assert "whisper-test" not in ids and "tts-test" in ids
+
+
 def test_a_cap_in_another_currency_needs_an_fx_rate(tmp_path: Path) -> None:
     with pytest.raises(GuardError, match=r"no FX rate USD to EUR.*fx="):
         make(tmp_path, cap="5 EUR")

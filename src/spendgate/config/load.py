@@ -238,15 +238,41 @@ def credential_path(spec: DeploymentSpec, at: str) -> str:
     return f"{at}.credential" if spec.credential else f"providers.{spec.provider}.credential"
 
 
-def _priced(catalog: Catalog, catalog_id: str, now_ms: int | None) -> bool:
+def _priced(catalog: Catalog, catalog_id: str, region: str | None, now_ms: int | None) -> bool:
     provider, _, model = catalog_id.partition("/")
-    if now_ms is None:  # date-independent: is there any entry for this id?
-        return any(e.id == catalog_id for e in catalog.entries())
+    if now_ms is None:  # date-independent: could any entry ever price this deployment?
+        return catalog.could_price(provider, model, region)
     try:
-        catalog.lookup(provider, model, now_ms)
+        catalog.lookup(provider, model, now_ms, region)
     except ModelNotPriced:
         return False
     return True
+
+
+def _price_issue(
+    catalog: Catalog, catalog_id: str, regions: list[str | None], now_ms: int | None, ctx: _Ctx
+) -> str | None:
+    """Why the route's deployments do not share one price (ADR-0028), or None."""
+    unpriced = [r for r in dict.fromkeys(regions) if not _priced(catalog, catalog_id, r, now_ms)]
+    if unpriced:
+        ctx.unpriced.append(catalog_id)
+        if len(unpriced) == len(set(regions)):
+            return f"{catalog_id} has no price in the catalog{_HINT}"
+        return f"{catalog_id} has no price in the catalog for {_places(unpriced)}{_HINT}"
+    provider, _, model = catalog_id.partition("/")
+    split = catalog.split_by_region(provider, model, regions, now_ms)
+    if split is None:
+        return None
+    prices = ", ".join(f"{_places([r])} -> {e.price_id_in(r)}" for r, e in split.items())
+    return (
+        f"deployments resolve to different prices ({prices}); one route has one price, "
+        "so route differently-priced Regions as separate models"
+    )
+
+
+def _places(regions: list[str | None]) -> str:
+    named = [f"region {r}" for r in regions if r is not None]
+    return ", ".join(named + ["a deployment without a region"] * (None in regions))
 
 
 def _routes(cfg: Config, catalog: Catalog, now_ms: int | None, ctx: _Ctx) -> dict[str, Route]:
@@ -255,11 +281,14 @@ def _routes(cfg: Config, catalog: Catalog, now_ms: int | None, ctx: _Ctx) -> dic
     for alias, route in cfg.models.items():
         at = f"models.{alias}"
         provider, _, model_part = route.catalog_id.partition("/")
-        if not _priced(catalog, route.catalog_id, now_ms):
-            ctx.unpriced.append(route.catalog_id)
-            issues.append(
-                (f"{at}.catalog_id", f"{route.catalog_id} has no price in the catalog{_HINT}")
-            )
+        regions = [
+            s.region or cfg.providers.get(s.provider, Provider()).region
+            for s in route.deployments
+            if s.provider == provider
+        ]
+        problem = _price_issue(catalog, route.catalog_id, regions or [None], now_ms, ctx)
+        if problem is not None:
+            issues.append((f"{at}.catalog_id", problem))
         deployments = []
         for i, spec in enumerate(route.deployments):
             here = f"{at}.deployments.{i}"
@@ -394,4 +423,5 @@ def check_config(
         settings.unverified_summary(),
         tuple(settings.unmatched_filters()),
         settings.superseded_summary(),
+        tuple(settings.unlisted_regions()),
     )

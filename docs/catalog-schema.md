@@ -7,7 +7,7 @@ price of a private tool that predates spendgate, except Realtime (on the roadmap
 `spendgate.config` reads the YAML files and computes their sha256; `core.catalog.parse(dicts, sha)` validates and
 resolves them (core never reads files). No remote fetch at serve time: `spendgate catalog import` downloads
 LiteLLM's price file only when an operator runs it, to draft an override file ([ADR-0014](adr/0014-catalog-import-command.md)), and
-`spendgate catalog draft` writes a `verified: false` stand-in priced like another entry ([how-to section 8](catalog-how-to.md#8-when-a-model-has-no-price)).
+`spendgate catalog draft` writes a `verified: false` stand-in priced like another entry ([how-to section 9](catalog-how-to.md#9-when-a-model-has-no-price)).
 
 ```
 uvx check-jsonschema --schemafile src/spendgate/catalog/schema.json docs/catalog-example.yaml   # from the repository root
@@ -37,7 +37,8 @@ uvx check-jsonschema --schemafile src/spendgate/catalog/schema.json docs/catalog
 | | `verified` | bool | yes | A person compared every price to `source_url` |
 | | `checked_on`, `note` | date, text | no | Audit trail |
 | | `deployment_type` | global, data_zone, regional, standard, batch, flex, priority, provisioned | no | Documentation of what the price is for |
-| | `region` | slug | no | Documentation (for example `swedencentral`) |
+| | `region` | slug | no | Documentation (for example `swedencentral`); never used for lookup |
+| | `regions` | list of slugs, at least one, no repeats | no | The deployment Regions this entry prices, and only those (section 3, [ADR-0028](adr/0028-price-coverage-and-regional-prices.md)). Absent: every Region no entry in force lists, and deployments without a `region` |
 | | `price_multiplier` | decimal > 0, default `"1"` | no | Applied to every meter, for example Data Zone over Global |
 | Meters | `meters` | object, at least one | yes | See below; all members optional, subject to mode rules |
 | Long context | `long_context` | `threshold_input_tokens`, `input_multiplier`, `output_multiplier` | no | Per model, never global |
@@ -103,16 +104,32 @@ behaviour, not data.
 
 ## 3. Resolution rules
 
+A lookup takes the catalog id and the deployment's Region (its `region`, or its provider's; none if
+neither is set).
+
 1. Candidates: entries with the requested `id` and `effective_from <= today` (UTC date of the call).
-2. The **newest** `effective_from` among them wins. Older entries stay for history and replay.
-3. If the winner has `deprecation_date <= today`, the model is **refused** (no fallback to an older entry).
-4. No candidate, or an expired winner: error code **`model_not_priced`**, no upstream call.
-5. Two entries with the same `id` and `effective_from` in one file are a load error.
-6. Override file: same schema; its entries are merged by `(id, effective_from)`, an override replaces
-   the bundled one. Its `providers` keys replace the bundled block for that provider. To retire a bundled
-   model locally, add an entry with a newer `effective_from` and a past `deprecation_date`.
-7. The loader validates against the schema at startup and refuses to start on any error. It records
-   the catalog sha256 (`catalog_sha`) and the chosen `(id, effective_from)` (`price_id`) on every `calls` row (T-CAT-05).
+2. Region tier: if any candidate lists the deployment's Region in `regions`, only those candidates count.
+   Otherwise only the candidates without `regions` count. A deployment without a Region matches only
+   entries without `regions`; a Region-scoped entry is never used for a Region it does not list.
+3. The **newest** `effective_from` among the counted candidates wins. Older entries stay for history and replay.
+4. If the winner has `deprecation_date <= today`, the model is **refused** (no fallback to an older entry).
+5. No candidate, or an expired winner: error code **`model_not_priced`**, no upstream call.
+6. Two entries with the same `id`, `effective_from` and `regions` in one file are a load error. Entries
+   of one `id` and `effective_from` must not list the same Region (in one file or across files), and at most
+   one of them may omit `regions`.
+7. Override file: same schema; its entries are merged by `(id, effective_from, regions)` (the set of Regions,
+   in any order), an override replaces the bundled one. Its `providers` keys replace the bundled block for that
+   provider. To retire a bundled model locally, add an entry with a newer `effective_from` and a past
+   `deprecation_date`.
+8. One route, one price: every deployment of a `models:` route must resolve to the same entry, today and on
+   every later `effective_from` already in the catalog. `check-config` and `serve` refuse a route whose
+   deployments resolve to different entries (a configuration error, exit 3), naming the route and the Regions;
+   the request path refuses it too (`model_not_priced`). So the hold and the charge use one entry per request.
+9. The loader validates against the schema at startup and refuses to start on any error. It records
+   the catalog sha256 (`catalog_sha`) and the chosen entry (`price_id`) on every `calls` row (T-CAT-05):
+   `<id>@<effective_from>`, plus `~<region>` (the serving deployment's Region) when a Region-scoped entry
+   priced the call, for example `azure_openai/gpt-x@2026-11-01~swedencentral`. Region sets of one id and date
+   are disjoint, so the suffix names exactly one entry.
 
 Two entries for one id (illustrative numbers):
 
