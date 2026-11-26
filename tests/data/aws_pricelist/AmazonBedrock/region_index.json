@@ -1,0 +1,14 @@
+{
+ "formatVersion": "v1.0",
+ "publicationDate": "2026-11-23T09:58:41Z",
+ "regions": {
+  "eu-west-2": {
+   "currentVersionUrl": "/offers/v1.0/aws/AmazonBedrock/20261125184041/eu-west-2/index.json",
+   "regionCode": "eu-west-2"
+  },
+  "us-east-1": {
+   "currentVersionUrl": "/offers/v1.0/aws/AmazonBedrock/20261125184041/us-east-1/index.json",
+   "regionCode": "us-east-1"
+  }
+ }
+}
