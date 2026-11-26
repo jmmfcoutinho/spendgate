@@ -1,0 +1,1323 @@
+{
+ "0157-5929-0921": {
+  "currencyCode": "USD",
+  "name": "skus/0157-5929-0921/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 300000000,
+      "units": "3"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "03F1-86E9-1F1F": {
+  "currencyCode": "USD",
+  "name": "skus/03F1-86E9-1F1F/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "1"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "087B-6A77-B4B6": {
+  "currencyCode": "USD",
+  "name": "skus/087B-6A77-B4B6/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 300000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "0D64-5CF1-4B98": {
+  "currencyCode": "USD",
+  "name": "skus/0D64-5CF1-4B98/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "20"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "11A8-D415-F085": {
+  "currencyCode": "USD",
+  "name": "skus/11A8-D415-F085/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "4"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "1F78-CA36-8996": {
+  "currencyCode": "USD",
+  "name": "skus/1F78-CA36-8996/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 165000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "2441-0955-7C3C": {
+  "currencyCode": "USD",
+  "name": "skus/2441-0955-7C3C/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "25D2-14F6-B4CC": {
+  "currencyCode": "USD",
+  "name": "skus/25D2-14F6-B4CC/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "3"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "2737-2D33-D986": {
+  "currencyCode": "USD",
+  "name": "skus/2737-2D33-D986/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "12"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "27A4-E534-B317": {
+  "currencyCode": "USD",
+  "name": "skus/27A4-E534-B317/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 300000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "2D1C-F790-3C09": {
+  "currencyCode": "USD",
+  "name": "skus/2D1C-F790-3C09/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 250000000,
+      "units": "1"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "2F66-38A2-E6E5": {
+  "currencyCode": "USD",
+  "name": "skus/2F66-38A2-E6E5/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "15"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "38A3-5149-7411": {
+  "currencyCode": "USD",
+  "name": "skus/38A3-5149-7411/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 650000000,
+      "units": "1"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "3CE8-93F8-3C8F": {
+  "currencyCode": "USD",
+  "name": "skus/3CE8-93F8-3C8F/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "18"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "4AD6-06B5-E6A6": {
+  "currencyCode": "USD",
+  "name": "skus/4AD6-06B5-E6A6/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 150000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "4B67-DECD-6D02": {
+  "currencyCode": "USD",
+  "name": "skus/4B67-DECD-6D02/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "16"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "55DF-3B05-AEE4": {
+  "currencyCode": "USD",
+  "name": "skus/55DF-3B05-AEE4/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 82500000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "5B21-AB3A-5B24": {
+  "currencyCode": "USD",
+  "name": "skus/5B21-AB3A-5B24/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 75000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "67F1-97F9-6ED4": {
+  "currencyCode": "USD",
+  "name": "skus/67F1-97F9-6ED4/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "6C09-0CBD-7C87": {
+  "currencyCode": "USD",
+  "name": "skus/6C09-0CBD-7C87/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "15"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "7C13-537E-1E75": {
+  "currencyCode": "USD",
+  "name": "skus/7C13-537E-1E75/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 300000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "8308-9CED-8950": {
+  "currencyCode": "USD",
+  "name": "skus/8308-9CED-8950/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 200000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "8A47-3936-DC92": {
+  "currencyCode": "USD",
+  "name": "skus/8A47-3936-DC92/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 400000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "8C8B-ACEE-5B6F": {
+  "currencyCode": "USD",
+  "name": "skus/8C8B-ACEE-5B6F/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 250000000,
+      "units": "8"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "928E-2F02-F602": {
+  "currencyCode": "USD",
+  "name": "skus/928E-2F02-F602/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 200000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "97BE-8C62-88C4": {
+  "currencyCode": "USD",
+  "name": "skus/97BE-8C62-88C4/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "4"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "98E0-CA2E-4AA8": {
+  "currencyCode": "USD",
+  "name": "skus/98E0-CA2E-4AA8/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "9C6E-21E5-E99C": {
+  "currencyCode": "USD",
+  "name": "skus/9C6E-21E5-E99C/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 650000000,
+      "units": "1"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "A1C1-77CC-6FAE": {
+  "currencyCode": "USD",
+  "name": "skus/A1C1-77CC-6FAE/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 30000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "A253-E8A3-DE5C": {
+  "currencyCode": "USD",
+  "name": "skus/A253-E8A3-DE5C/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "AF56-1BF9-492A": {
+  "currencyCode": "USD",
+  "name": "skus/AF56-1BF9-492A/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "B599-63A9-9DD4": {
+  "currencyCode": "USD",
+  "name": "skus/B599-63A9-9DD4/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "BB80-660B-3EB2": {
+  "currencyCode": "USD",
+  "name": "skus/BB80-660B-3EB2/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 30000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "BD37-A5DA-7EB1": {
+  "currencyCode": "USD",
+  "name": "skus/BD37-A5DA-7EB1/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "3"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "BD9D-018A-21D2": {
+  "currencyCode": "USD",
+  "name": "skus/BD9D-018A-21D2/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "3"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "C42E-42D0-5846": {
+  "currencyCode": "USD",
+  "name": "skus/C42E-42D0-5846/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 165000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "CACD-9ACC-DF95": {
+  "currencyCode": "USD",
+  "name": "skus/CACD-9ACC-DF95/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 150000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "CD33-11F4-1220": {
+  "currencyCode": "USD",
+  "name": "skus/CD33-11F4-1220/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "D689-2571-4668": {
+  "currencyCode": "USD",
+  "name": "skus/D689-2571-4668/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 300000000,
+      "units": "3"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "E0A5-FB5D-79F4": {
+  "currencyCode": "USD",
+  "name": "skus/E0A5-FB5D-79F4/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "4"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "E576-C50D-41EF": {
+  "currencyCode": "USD",
+  "name": "skus/E576-C50D-41EF/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "7"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "EAC4-305F-1249": {
+  "currencyCode": "USD",
+  "name": "skus/EAC4-305F-1249/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "units": "2"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "F4D7-3BA1-107D": {
+  "currencyCode": "USD",
+  "name": "skus/F4D7-3BA1-107D/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 500000000,
+      "units": "1"
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "FDAB-647C-5A22": {
+  "currencyCode": "USD",
+  "name": "skus/FDAB-647C-5A22/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 300000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ },
+ "FEAF-9EAF-DE2D": {
+  "currencyCode": "USD",
+  "name": "skus/FEAF-9EAF-DE2D/price",
+  "rate": {
+   "aggregationInfo": {
+    "interval": "INTERVAL_MONTHLY",
+    "level": "LEVEL_ACCOUNT"
+   },
+   "tiers": [
+    {
+     "listPrice": {
+      "currencyCode": "USD",
+      "nanos": 150000000
+     },
+     "startAmount": {
+      "value": "0"
+     }
+    }
+   ],
+   "unitInfo": {
+    "unit": "count",
+    "unitDescription": "count",
+    "unitQuantity": {
+     "value": "1000000"
+    }
+   }
+  },
+  "valueType": "rate"
+ }
+}

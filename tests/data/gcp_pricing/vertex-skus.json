@@ -1,0 +1,1998 @@
+{
+ "skus": [
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Vertex AI: Online/Batch Prediction Nvidia Tesla P4 GPU running in Americas for AI Platform",
+   "geoTaxonomy": {
+    "regions": [
+     "southamerica-east1",
+     "us-central1",
+     "us-east1",
+     "us-west1",
+     "us-west2",
+     "us-west3",
+     "us-west4"
+    ],
+    "type": "MULTI_REGIONAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/0000-9B70-F099",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "s",
+      "baseUnitConversionFactor": 3600,
+      "baseUnitDescription": "second",
+      "displayQuantity": 1,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 690000000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "h",
+      "usageUnitDescription": "hour"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "southamerica-east1",
+    "us-central1",
+    "us-east1",
+    "us-west1",
+    "us-west2",
+    "us-west3",
+    "us-west4"
+   ],
+   "skuId": "0000-9B70-F099"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Regional Text Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/0157-5929-0921",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 3300,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "0157-5929-0921"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Global Image Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/03F1-86E9-1F1F",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "03F1-86E9-1F1F"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Text Input (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/087B-6A77-B4B6",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 300,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "087B-6A77-B4B6"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash Text Input - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/15E2-D313-1697",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 150,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "15E2-D313-1697"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Regional Image Input Caching Online",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/1F78-CA36-8996",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 165,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "1F78-CA36-8996"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Thinking Text Output (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/2441-0955-7C3C",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "2441-0955-7C3C"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Text Output - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/2737-2D33-D986",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 12000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "2737-2D33-D986"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Image Input (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/27A4-E534-B317",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 300,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "27A4-E534-B317"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": " Gemini 2.5 Pro Input Text Caching Storage",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/2D35-AFAC-1769",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "s",
+      "baseUnitConversionFactor": 3600,
+      "baseUnitDescription": "second",
+      "displayQuantity": 1,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 4500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "h",
+      "usageUnitDescription": "hour"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "2D35-AFAC-1769"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.1 Flash Lite Tuned Global Text Input - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/3266-67EA-7456",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 250,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "3266-67EA-7456"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Regional Text Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/38A3-5149-7411",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1650,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "38A3-5149-7411"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Text Output (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/3CE8-93F8-3C8F",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 18000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "3CE8-93F8-3C8F"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Image Output - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/47A8-A5A1-B26C",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 120000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "47A8-A5A1-B26C"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Global Image Input Caching Online",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/4AD6-06B5-E6A6",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 150,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "4AD6-06B5-E6A6"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Regional Text Output - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/4B67-DECD-6D02",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 16500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "4B67-DECD-6D02"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Global Audio Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/4C72-031B-513C",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "4C72-031B-513C"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Regional Text Input Caching Online",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/55DF-3B05-AEE4",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 82,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "55DF-3B05-AEE4"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Global Text Input Caching Online",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/5B21-AB3A-5B24",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 75,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "5B21-AB3A-5B24"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "CodeMender Gemini 4 Neon Global Text Input",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/5E2E-167E-67A1",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 3000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "5E2E-167E-67A1"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Global Text Output - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/6C09-0CBD-7C87",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 15000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "6C09-0CBD-7C87"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Image Input - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/7C13-537E-1E75",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 300,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "7C13-537E-1E75"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Text Input Caching",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/8308-9CED-8950",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 200,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "8308-9CED-8950"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Text Input Caching (Long)",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/8A47-3936-DC92",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 400,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "8A47-3936-DC92"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Regional Text Output - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/8C8B-ACEE-5B6F",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 8250,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "8C8B-ACEE-5B6F"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Image Input (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/97BE-8C62-88C4",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 4000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "97BE-8C62-88C4"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Image Input - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/98E0-CA2E-4AA8",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "98E0-CA2E-4AA8"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Regional Image Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/9C6E-21E5-E99C",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1650,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "9C6E-21E5-E99C"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": " Gemini 2.5 Flash GA Input Text Caching",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/A1C1-77CC-6FAE",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 30,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "A1C1-77CC-6FAE"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Text Output (Thinking On) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/A253-E8A3-DE5C",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "A253-E8A3-DE5C"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": " Gemini 2.5 Flash GA Text Output - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/AF56-1BF9-492A",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "AF56-1BF9-492A"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Text Output (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/B599-63A9-9DD4",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "B599-63A9-9DD4"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": " Gemini 2.5 Flash GA Input Text Caching (Long)",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/BB80-660B-3EB2",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 30,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "BB80-660B-3EB2"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Global Text Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/BD37-A5DA-7EB1",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 3000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "BD37-A5DA-7EB1"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Global Image Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/BD9D-018A-21D2",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 3000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "BD9D-018A-21D2"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Regional Text Input Caching Online",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/C42E-42D0-5846",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 165,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "C42E-42D0-5846"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Thinking Text Output - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/CD33-11F4-1220",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "CD33-11F4-1220"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Regional Image Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/D689-2571-4668",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 3300,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "D689-2571-4668"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Text Input (Long) - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/E0A5-FB5D-79F4",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 4000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "E0A5-FB5D-79F4"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Global Text Output - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/E576-C50D-41EF",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 7500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "E576-C50D-41EF"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Global Text Input - Batch Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/EAA1-57CD-EFD3",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "EAA1-57CD-EFD3"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 3.0 Pro / 3.1 Pro / 3 Pro Image - Text Input - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/EAC4-305F-1249",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "EAC4-305F-1249"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Hydrogen Global Text Input - Online Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/F4D7-3BA1-107D",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "F4D7-3BA1-107D"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 2.5 Flash GA Text Input - Predictions",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/FDAB-647C-5A22",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 300,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "FDAB-647C-5A22"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "AiPlatform",
+    "serviceDisplayName": "Vertex AI",
+    "usageType": "OnDemand"
+   },
+   "description": "Gemini 4 Neon Global Text Input Caching Online",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/C7E2-9256-1C43/skus/FEAF-9EAF-DE2D",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 150,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "FEAF-9EAF-DE2D"
+  }
+ ]
+}
