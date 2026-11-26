@@ -464,9 +464,24 @@ def test_the_gemini_api_crosscheck_reports_differences_and_skips_programme_skus(
         "output_per_mtok": Decimal(15),
     }
     assert rates["gemini-2.5-pro"] == {"input_per_mtok": Decimal("1.25")}  # long tier skipped
-    found = vp.crosscheck(data, yaml.safe_load(CATALOG_HEAD), "2026-11-26")
-    assert not [f for f in found if "gemini-4-neon" in f]
-    assert "google/gemini-4-carbon: in the Gemini API SKUs, no region-less entry in force" in found
+    catalog = yaml.safe_load(CATALOG_HEAD)
+    absent = ["google/gemini-2.5-pro", "google/gemini-4-carbon"]
+    assert vp.crosscheck(data, catalog, "2026-11-26") == ([], absent)
+    catalog["models"][0]["meters"]["output_per_mtok"] = "14"
+    found, _ = vp.crosscheck(data, catalog, "2026-11-26")
+    assert found == ["google/gemini-4-neon@2026-11-26 output_per_mtok: ours 14, Gemini API SKU 15"]
+
+
+def test_crosscheck_exits_1_only_on_a_price_difference(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    catalog = tmp_path / "prices.yaml"
+    catalog.write_text(CATALOG_HEAD, encoding="utf-8")
+    args = ["--from-dir", str(DATA), "--catalog", str(catalog), "--crosscheck"]
+    assert vp.main(args) == 0
+    assert "google/gemini-4-carbon" in capsys.readouterr().err
+    catalog.write_text(CATALOG_HEAD.replace('"0.15"', '"0.1"'), encoding="utf-8")
+    assert vp.main(args) == 1
 
 
 # --- the bundled catalog ------------------------------------------------------------------------

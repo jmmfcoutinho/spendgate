@@ -45,7 +45,9 @@ Limits, Regions not to price and lifecycle are hand-reviewed from the Vertex mod
 (https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/<model>, read
 2026-11-26) in `MODELS`; a model Google adds needs a row there before it is generated.
 
-Exit codes: 0 ok; 1 `--check` found drift or `--crosscheck` a difference; 2 bad input or usage.
+Exit codes: 0 ok; 1 `--check` found drift or `--crosscheck` a price difference; 2 bad input or
+usage. `--crosscheck` lists on stderr, without failing, the models the Gemini API SKUs price that
+the catalog does not carry: it leaves some out on purpose (TTS, image, routed models).
 """
 
 import argparse
@@ -659,8 +661,8 @@ def gemini_api_rates(
         hit = _GEMINI_API_SKU.match(" ".join(sku["description"].split()).casefold())
         if hit is None or "long" in hit.group(3) or sku["skuId"] not in prices:
             continue  # the long tier is a multiplier in the catalog, compared by hand
-        if re.search(r"\b(contributor|experimental|preview)$", hit.group(2)):
-            continue  # programme and preview SKUs, not the price list
+        if re.search(r"\b(contributor|experimental)$", hit.group(2)):
+            continue  # programme SKUs, not the price list
         model = "gemini-" + hit.group(2).replace(" ", "-")
         rates = out.setdefault(model, {})
         value = per_mtok(prices[sku["skuId"]])
@@ -668,9 +670,11 @@ def gemini_api_rates(
     return out
 
 
-def crosscheck(data: Source, catalog: Mapping[str, Any], day: str) -> list[str]:
-    """Differences between the Gemini API service's SKUs and our region-less google entries."""
-    found = []
+def crosscheck(data: Source, catalog: Mapping[str, Any], day: str) -> tuple[list[str], list[str]]:
+    """Price differences between the Gemini API service's SKUs and our region-less google entries
+    in force on `day`, and the models the SKUs price that have no such entry (for information:
+    the catalog leaves some out on purpose, such as TTS, image and routed models)."""
+    found, absent = [], []
     for model, rates in sorted(gemini_api_rates(data.gemini_api, data.prices).items()):
         ours = [
             e
@@ -678,7 +682,7 @@ def crosscheck(data: Source, catalog: Mapping[str, Any], day: str) -> list[str]:
             if e["id"] == f"google/{model}" and "regions" not in e and e["effective_from"] <= day
         ]
         if not ours:
-            found.append(f"google/{model}: in the Gemini API SKUs, no region-less entry in force")
+            absent.append(f"google/{model}")
             continue
         newest = max(e["effective_from"] for e in ours)
         entry = next(e for e in ours if e["effective_from"] == newest)
@@ -689,7 +693,7 @@ def crosscheck(data: Source, catalog: Mapping[str, Any], day: str) -> list[str]:
                     f"{entry['id']}@{entry['effective_from']} {meter}: ours {mine}, "
                     f"Gemini API SKU {dec(value)}"
                 )
-    return found
+    return found, absent
 
 
 # --- download -----------------------------------------------------------------------------------
@@ -824,10 +828,14 @@ def run(args: argparse.Namespace, data: Source) -> int:
     current = args.catalog.read_text(encoding="utf-8")
     if args.crosscheck:
         day = snapshot_day(data.gemini_api)
-        found = crosscheck(data, yaml.safe_load(current), day)
-        checked = len(gemini_api_rates(data.gemini_api, data.prices))
+        found, absent = crosscheck(data, yaml.safe_load(current), day)
+        checked = len(gemini_api_rates(data.gemini_api, data.prices)) - len(absent)
         print("\n".join(found) if found else "no difference")
-        print(f"{checked} Gemini API models compared on {day}", file=sys.stderr)
+        print(
+            f"{checked} Gemini API models compared on {day}; in the SKUs without a region-less "
+            f"entry (not compared): {', '.join(absent) or 'none'}",
+            file=sys.stderr,
+        )
         return 1 if found else 0
     text, entries, skipped = generate(data, current)
     regions = {r for e in entries for r in e["regions"]}
