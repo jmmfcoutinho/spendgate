@@ -254,7 +254,7 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
     pipeline_kwargs: dict[str, object] | None = None,
     wrap_ledger: Callable[[SqliteLedger], MoneyLedger] | None = None,
     providers: Mapping[str, Provider] | None = None, metrics: Metrics | None = None,
-    admin_listen: str | None = None,
+    admin_listen: str | None = None, catalog_override: str = "",
 ) -> AsyncIterator[Stack]:  # fmt: skip
     fake = fake or FakeUpstream()
     clock = FakeClock(NOW_MS)
@@ -271,7 +271,8 @@ async def open_stack(  # noqa: PLR0913 - a rig with named knobs
         main = 'server: {listen: "127.0.0.1:8080",'
         text = text.replace(main, f'{main} admin: {{listen: "{admin_listen}"}},', 1)
     path.write_text(text)
-    (tmp_path / "catalog_override.yaml").write_text(CATALOG_OVERRIDE)
+    # Extra test entries go after the shared ones: `catalog_override` is a YAML list of models.
+    (tmp_path / "catalog_override.yaml").write_text(CATALOG_OVERRIDE + catalog_override)
     settings = load(path, env=ENV)
     assert settings.ledger_path is not None
     ledger = SqliteLedger.open(str(settings.ledger_path), currency="USD")

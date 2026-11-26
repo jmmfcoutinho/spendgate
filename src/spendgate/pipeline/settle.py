@@ -57,6 +57,7 @@ class Flight:
     provider: str
     deployment: str
     started_at: int
+    region: str | None = None  # the deployment's: names a Region-scoped price on the row
 
 
 @dataclass(slots=True)
@@ -200,7 +201,7 @@ def attempt_record(  # noqa: PLR0913 - one attempt's facts, built in exactly one
         flight.number,
         flight.provider,
         flight.deployment,
-        entry.price_id,
+        entry.price_id_in(flight.region),
         outcome,
         0,
         flight.started_at,
