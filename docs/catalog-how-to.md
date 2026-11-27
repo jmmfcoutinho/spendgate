@@ -353,3 +353,52 @@ spendgate catalog draft --like azure_openai/my-model --as azure_openai/my-model-
 
 Load the file with `catalog.paths` (section 3) and run `spendgate check-config`. Replace the entry
 with the provider's own price as soon as it is published.
+
+## 10. Azure OpenAI: which catalog id to use for your deployment
+
+Azure OpenAI charges by deployment type (Global Standard, Data Zone Standard, Regional Standard)
+and, for many models, by Region too. The bundled catalog has one id per deployment type, generated
+from the Azure Retail Prices API by [`scripts/azure_prices.py`](../scripts/azure_prices.py):
+
+| Deployment type in Azure | Catalog id | Typical price |
+|---|---|---|
+| Global Standard | `azure_openai/global.<model>` | the base price, the same in every Region for almost all models |
+| Data Zone Standard | `azure_openai/datazone.<model>` | typically 10% to 20% above Global, depending on the zone |
+| Regional Standard | `azure_openai/regional.<model>` | Region-dependent; only some older models |
+
+`<model>` is Azure's model name (`gpt-6-luna`, `gpt-4.1-mini`, `text-embedding-3-small`), with the
+version appended where Azure prices versions apart (`gpt-4o-2024-11-20`,
+`gpt-chat-latest-2026-10-07`). Name the model by the deployment type you created, set the
+deployment's `model` to your Azure deployment name (the default would send `datazone.gpt-6-luna`)
+and its `region` to the Azure Region of the resource:
+
+```yaml
+providers:
+  azure_openai: { credential: env:AZURE_OPENAI_API_KEY, api_version: "2025-04-01-preview" }
+models:
+  luna:
+    catalog_id: azure_openai/datazone.gpt-6-luna   # a Data Zone Standard deployment
+    deployments:
+      - { provider: azure_openai, base_url: https://eu-north.example.openai.azure.com, model: luna-prod, region: swedencentral }
+      - { provider: azure_openai, base_url: https://eu-west.example.openai.azure.com, model: luna-prod, region: westeurope }
+```
+
+- **Where Azure charges different prices in different Regions** (most Data Zone and Regional
+  deployments), each price is its own entry scoped to the Regions that pay it (section 8), and there is
+  no entry without `regions`. A deployment without a `region`, or in a Region Azure does not list for
+  that model and deployment type, is refused with `model_not_priced` rather than charged another
+  Region's price. The two Regions above share the EU Data Zone price, so they can share a route; a US
+  deployment of the same model needs its own route (section 8, one route, one price).
+- **Where the price is the same in every Region** (Global Standard, almost always) there is one entry
+  without `regions`, which prices any Region.
+- **The bare ids** (`azure_openai/gpt-6-luna` and the other hand-written ones) stay as they were:
+  Global meters times the highest Data Zone uplift, a conservative upper bound for any deployment type.
+- **Not priced:** Batch, Priority processing, Flex, provisioned (PTU), fine-tuned, Realtime, image and
+  audio chat models, the 12-hour cache write, models Microsoft has retired or does not list on its
+  models page, and `gpt-5.6-sol` while OpenAI's own price for it is promotional. A Region that lacks a meter the model has elsewhere (a cache-write or long-context price)
+  is left out. The script prints each one when it runs. Use an override file (section 1) for them.
+- **Updating** (maintainers): `uv run python scripts/azure_prices.py --download azure.json --check`
+  exits 1 when the price list no longer matches the catalog; `--from-file azure.json --write` rewrites
+  the generated block. The script stops on a meter name it cannot classify rather than guess.
+  `tests/unit/test_azure_prices.py` and `tests/unit/test_azure_openai_catalog.py` test it on recorded
+  API items.

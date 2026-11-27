@@ -182,6 +182,9 @@ def test_a_route_split_is_found_on_the_date_a_region_scoped_entry_starts() -> No
     assert catalog.split_by_region("azure_openai", "gpt-x", ["eastus", None], None) is None
 
 
-def test_the_bundled_catalog_loads_unchanged_with_no_region_scoped_entry_yet() -> None:
+def test_only_the_generated_azure_openai_entries_of_the_bundled_catalog_are_region_scoped() -> None:
     catalog = parse([yaml.safe_load(bundled_text())], SHA, ledger_currency="USD")
-    assert all(e.regions is None for e in catalog.entries())
+    scoped = {e.id for e in catalog.entries() if e.regions is not None}
+    assert scoped  # Azure prices many deployments differently per Region (#106)
+    generated = ("azure_openai/global.", "azure_openai/datazone.", "azure_openai/regional.")
+    assert all(i.startswith(generated) for i in scoped)
