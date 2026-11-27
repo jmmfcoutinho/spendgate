@@ -132,6 +132,22 @@ async def test_t_key_01_a_bootstrap_key_with_empty_models_is_refused(tmp_path: P
         ledger.close()
 
 
+@async_test
+async def test_a_bad_bootstrap_key_is_refused_before_any_row_is_written(tmp_path: Path) -> None:
+    """A later key's error must not leave an earlier key created and its secret never shown."""
+    bad = BOOTSTRAP + '    - {name: empty, scope: "org:acme/project:app", models: []}\n'
+    settings = await _settings(tmp_path, bad)
+    ledger = SqliteLedger.open(settings.ledger_path, currency="USD")  # type: ignore[arg-type]
+    try:
+        with pytest.raises(ValueError, match="bootstrap key empty: models must not be empty"):
+            await apply_bootstrap(settings, ledger, KeyService(ledger, PEPPER), NOW_MS)
+        assert await ledger.list_keys(None) == ()
+        assert await ledger.find_scope("org:acme") is None
+        assert await ledger.get_budget("bootstrap-monthly", NOW_MS) is None
+    finally:
+        ledger.close()
+
+
 # T-SESS-09
 @async_test
 async def test_m11_a_bootstrap_agent_key_stores_session_required_and_the_new_session_bound(
