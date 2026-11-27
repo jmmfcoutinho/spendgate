@@ -71,6 +71,20 @@ differences:
     accepted_by: jmmfcoutinho
     accepted_on: "2026-11-26"
     expires: "2027-02-24"
+  - id: google/gemini-4-carbon
+    meters: [input_per_mtok, cached_input_per_mtok, output_per_mtok]
+    relation: ours_higher
+    reason: "Charged the billed list price (4 / 0.2 / 20) from 2026-11-26: Google's Gemini API billing SKUs (Cloud Billing service AEFD-7695-64FA) list it, and the 2 / 0.1 / 10 promotion is paid as credits back; LiteLLM shows the promotional price. Equal again from 2026-12-01 (#116)."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-27"
+    expires: "2026-12-31"
+  - id: google/gemini-4-argon
+    meters: [input_per_mtok, cached_input_per_mtok, output_per_mtok]
+    relation: ours_higher
+    reason: "Charged the billed list price (4 / 0.2 / 20) from 2026-11-26: Google's Gemini API billing SKUs (Cloud Billing service AEFD-7695-64FA) list it, and the 2 / 0.1 / 10 promotion is paid as credits back; LiteLLM shows the promotional price. Equal again from 2026-12-01 (#116)."
+    accepted_by: jmmfcoutinho
+    accepted_on: "2026-11-27"
+    expires: "2026-12-31"
 deprecations:
   # AWS's model card for Claude Haiku 4.5 (read 2026-11-26) says Active, EOL date N/A.
   - id: bedrock/eu.anthropic.claude-haiku-4-5-20251001-v1:0
