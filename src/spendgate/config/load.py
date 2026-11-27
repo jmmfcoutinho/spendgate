@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from importlib import resources
 from pathlib import Path
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 import yaml
@@ -25,6 +26,7 @@ from spendgate.config.settings import (
     Route,
     Settings,
     WebhookTarget,
+    is_vertex,
 )
 from spendgate.config.yamlio import load_yaml_bytes
 from spendgate.core.catalog import Catalog, CatalogError, ModelNotPriced, parse
@@ -238,35 +240,63 @@ def credential_path(spec: DeploymentSpec, at: str) -> str:
     return f"{at}.credential" if spec.credential else f"providers.{spec.provider}.credential"
 
 
-def _priced(catalog: Catalog, catalog_id: str, region: str | None, now_ms: int | None) -> bool:
+def _priced(
+    catalog: Catalog, catalog_id: str, region: str | None, now_ms: int | None, listed_only: bool
+) -> bool:
     provider, _, model = catalog_id.partition("/")
     if now_ms is None:  # date-independent: could any entry ever price this deployment?
-        return catalog.could_price(provider, model, region)
+        return catalog.could_price(provider, model, region, listed_only=listed_only)
     try:
-        catalog.lookup(provider, model, now_ms, region)
+        catalog.lookup(provider, model, now_ms, region, listed_only=listed_only)
     except ModelNotPriced:
         return False
     return True
 
 
+class _Placement(NamedTuple):
+    """Where a route's deployments are, and whether a region-less entry may price them."""
+
+    regions: list[str | None]
+    listed_only: bool  # a route with a Vertex AI deployment (ADR-0034)
+
+
 def _price_issue(
-    catalog: Catalog, catalog_id: str, regions: list[str | None], now_ms: int | None, ctx: _Ctx
+    catalog: Catalog, catalog_id: str, where: _Placement, now_ms: int | None, ctx: _Ctx
 ) -> str | None:
-    """Why the route's deployments do not share one price (ADR-0028), or None."""
-    unpriced = [r for r in dict.fromkeys(regions) if not _priced(catalog, catalog_id, r, now_ms)]
+    """Why the route's deployments do not share one price (ADR-0028, ADR-0034), or None."""
+    regions, listed_only = where
+    unpriced = [
+        r
+        for r in dict.fromkeys(regions)
+        if not _priced(catalog, catalog_id, r, now_ms, listed_only)
+    ]
+    provider, _, model = catalog_id.partition("/")
     if unpriced:
         ctx.unpriced.append(catalog_id)
+        if listed_only:
+            return _vertex_unpriced(catalog_id, unpriced, catalog.listed_regions(provider, model))
         if len(unpriced) == len(set(regions)):
             return f"{catalog_id} has no price in the catalog{_HINT}"
         return f"{catalog_id} has no price in the catalog for {_places(unpriced)}{_HINT}"
-    provider, _, model = catalog_id.partition("/")
-    split = catalog.split_by_region(provider, model, regions, now_ms)
+    split = catalog.split_by_region(provider, model, regions, now_ms, listed_only=listed_only)
     if split is None:
         return None
     prices = ", ".join(f"{_places([r])} -> {e.price_id_in(r)}" for r, e in split.items())
     return (
         f"deployments resolve to different prices ({prices}); one route has one price, "
         "so route differently-priced Regions as separate models"
+    )
+
+
+def _vertex_unpriced(catalog_id: str, unpriced: list[str | None], listed: tuple[str, ...]) -> str:
+    """A Vertex AI route never takes a region-less (Gemini API) price (ADR-0034)."""
+    known = (
+        f"Regions listed for that id: {', '.join(listed)}" if listed else "no entry of it lists one"
+    )
+    return (
+        f"{catalog_id} has no Vertex AI price for {_places(unpriced)}: a Vertex deployment is "
+        f"priced only by an entry that lists its Region, never by the region-less Gemini API "
+        f"price ({known}){_HINT}"
     )
 
 
@@ -281,12 +311,15 @@ def _routes(cfg: Config, catalog: Catalog, now_ms: int | None, ctx: _Ctx) -> dic
     for alias, route in cfg.models.items():
         at = f"models.{alias}"
         provider, _, model_part = route.catalog_id.partition("/")
-        regions = [
-            s.region or cfg.providers.get(s.provider, Provider()).region
+        specs = [
+            (s, cfg.providers.get(s.provider, Provider()))
             for s in route.deployments
             if s.provider == provider
         ]
-        problem = _price_issue(catalog, route.catalog_id, regions or [None], now_ms, ctx)
+        regions = [s.region or prov.region for s, prov in specs]
+        listed_only = any(is_vertex(s.provider, s.auth or prov.auth) for s, prov in specs)
+        where = _Placement(regions or [None], listed_only)
+        problem = _price_issue(catalog, route.catalog_id, where, now_ms, ctx)
         if problem is not None:
             issues.append((f"{at}.catalog_id", problem))
         deployments = []
@@ -300,7 +333,7 @@ def _routes(cfg: Config, catalog: Catalog, now_ms: int | None, ctx: _Ctx) -> dic
             )
             if built is not None:
                 deployments.append(built)
-        routes[alias] = Route(alias, route.catalog_id, tuple(deployments))
+        routes[alias] = Route(alias, route.catalog_id, tuple(deployments), listed_only)
     return routes
 
 

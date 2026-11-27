@@ -37,9 +37,8 @@ def listable(settings: Settings, key: KeyPolicy, now: int) -> list[str]:
     """Priced aliases the key may use."""
     names: list[str] = []
     for alias, route in settings.routes.items():
-        slug, _, model = route.catalog_id.partition("/")
         try:
-            settings.catalog.lookup_route(slug, model, [d.region for d in route.deployments], now)
+            route.price(settings.catalog, now)
         except LookupError:
             continue
         if model_allowed(key, alias) or model_allowed(key, route.catalog_id):
