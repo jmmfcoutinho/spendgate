@@ -806,7 +806,9 @@ class _NoRedirects(urllib.request.HTTPRedirectHandler):
         headers: Message,
         newurl: str,
     ) -> urllib.request.Request | None:
-        raise urllib.error.HTTPError(req.full_url, code, "redirects are refused", headers, fp)
+        if fp is not None:
+            fp.close()  # the redirect's own body is never read
+        raise urllib.error.HTTPError(req.full_url, code, "redirects are refused", headers, None)
 
 
 def first_page_url() -> str:

@@ -463,5 +463,6 @@ def test_download_caps_pages_and_page_size(monkeypatch: pytest.MonkeyPatch) -> N
 def test_redirects_are_refused() -> None:
     handler = ap._NoRedirects()
     request = urllib.request.Request(ap.first_page_url())  # noqa: S310 - never opened
-    with pytest.raises(urllib.error.HTTPError):
+    with pytest.raises(urllib.error.HTTPError) as refused:
         handler.redirect_request(request, None, 302, "Found", {}, "https://example.com/")
+    refused.value.close()  # an HTTPError owns a file object; Python 3.14 warns if it is left open
