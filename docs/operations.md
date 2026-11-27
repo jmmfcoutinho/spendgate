@@ -123,6 +123,11 @@ rollback-safe ships at most one migration, and marks it compatible.
   replacement with the same settings; the old key keeps working for the grace period (default one
   hour, at most seven days), so you can roll the new one out first. A key kill switch on the old
   key also stops the replacement (see [kill switch](#kill-switch)).
+- **Expiry** is set, moved or cleared with `PATCH /admin/v1/keys/{key_id}` (`expires_at`, `null`
+  clears it). On a key that a rotation replaced, or one that has already expired, the expiry can
+  only be moved earlier: clearing or extending it is refused (`conflict`, 409), so a rotation done
+  because a secret leaked cannot be undone by mistake. Issue a new key, or rotate the current one,
+  instead.
 - **Session limits and admin scopes.** An admin key with `keys:write` may create and change keys,
   but setting or raising a key's session budget (`session_defaults.budget_nano`), or raising
   `max_new_sessions_per_hour` or setting it to `null`, also needs `budgets:write`; lowering them

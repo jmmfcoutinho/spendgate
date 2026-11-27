@@ -11,6 +11,16 @@ All notable changes to this project are documented here. The format follows
 - Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
   and other arm64 hosts without emulation (#123; reported, with the fix, by @joaolsg).
 
+### Fixed
+
+- `PATCH /admin/v1/keys/{key_id}` with `"expires_at": null`, or a later `expires_at`, brought back a
+  key that a rotation had replaced or that had already expired, so its old secret spent again and a
+  rotation done because a secret leaked could be undone by one call. On such a key the expiry can
+  now only move earlier; clearing or extending it is refused with `conflict` (409), and the rest of
+  that request body is not applied. Expiry on any other key can still be set, moved or cleared. A
+  key revived this way before upgrading keeps working: look for `key.update` audit rows whose
+  `expires_at` went from a time to `null` or later, and revoke those keys.
+
 ## [0.5.0] - 2026-11-27
 
 A security release. Upgrade every gateway: four advisories are fixed (below), and budget-warning
