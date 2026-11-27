@@ -227,7 +227,15 @@ def test_unpriced_model_raises_and_maps_to_the_protocol_refusal() -> None:
     refusal = caught.value.refusal()
     assert refusal.code is ErrorCode.MODEL_NOT_PRICED
     assert refusal.param == "model"
-    assert "openai/nope" in refusal.message
+    assert refusal.message.startswith("openai/nope: no price entry in force. ")
+
+
+def test_m10_the_unpriced_refusal_points_to_an_override_and_a_stand_in_never_a_default() -> None:
+    with pytest.raises(ModelNotPriced) as caught:
+        build(doc()).lookup("openai", "nope", ms("2026-02-01"))
+    message = caught.value.refusal().message
+    assert "catalog.paths" in message
+    assert "`spendgate catalog draft --like <priced id> --as openai/nope --out <file>`" in message
 
 
 def test_same_model_name_under_another_provider_is_not_priced() -> None:

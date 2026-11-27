@@ -523,7 +523,10 @@ def test_an_ours_earlier_acceptance_renders_as_such(tmp_path: Path) -> None:
 
 def test_the_shipped_allow_list_is_valid_and_has_no_ours_lower_item() -> None:
     items = lp.load_accepted(lp.ACCEPTED)
-    assert len(items) >= 11
+    # The seven reviewed ours-higher price items (the loader refuses any other relation).
+    # Microsoft's schedule now confirms every Azure retirement date the catalog carries, so no
+    # deprecation item is left (#106).
+    assert len(items) >= 7
     assert all((a.expires - a.accepted_on).days <= lp.MAX_ACCEPTANCE_DAYS for a in items)
 
 
