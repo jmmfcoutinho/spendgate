@@ -42,6 +42,9 @@ LANGUAGE_CODE = re.compile(r"[a-z]{2}")  # ISO 639-1; a model that cannot use it
 _MAX_MESSAGE = 200
 _QUOTA_CODES = frozenset({"quota_exceeded", "insufficient_credits", "payment_required"})
 _VOICE_CODES = frozenset({"voice_not_found", "invalid_uid", "voice_not_fine_tuned"})
+# Our key is wrong or lacks the text-to-speech permission: the breaker counts these (ADR-0033).
+# A voice the caller named and that does not exist (a 404 `voice_not_found`) does not.
+_KEY_CODES = frozenset({"invalid_api_key", "missing_permissions"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,4 +215,4 @@ def _map_error(resp: UpstreamResponse) -> UpstreamError:
     else:  # 401/402/403 are our key or plan; 5xx and the rest are the provider's
         mapped = ErrorCode.UPSTREAM_UNAVAILABLE
     retry = retry_after_seconds(resp.headers) if status == HTTPStatus.TOO_MANY_REQUESTS else None
-    return UpstreamError(mapped, True, status, retry, message)
+    return UpstreamError(mapped, True, status, retry, message, code in _KEY_CODES)

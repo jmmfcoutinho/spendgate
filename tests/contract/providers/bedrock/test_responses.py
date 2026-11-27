@@ -352,6 +352,27 @@ async def test_scripted_fake_errors_map_by_status() -> None:
     assert codes == [ErrorCode.UPSTREAM_THROTTLED, ErrorCode.UPSTREAM_UNAVAILABLE]
 
 
+@pytest.mark.parametrize(
+    ("status", "kind", "fault"),
+    [
+        (403, "UnrecognizedClientException", True),  # an access key AWS does not know
+        (403, "InvalidSignatureException", True),
+        (403, "ExpiredTokenException", True),
+        (403, "AccessDeniedException", True),  # IAM or model access: our grants, not the caller
+        (404, "ResourceNotFoundException", True),  # the configured model or inference profile
+        (400, "ValidationException", False),
+        (424, "ModelErrorException", False),
+        (403, "", False),  # no error type: nothing says the deployment is wrong
+    ],
+)
+def test_only_credential_iam_or_model_errors_are_deployment_faults(
+    status: int, kind: str, fault: bool
+) -> None:
+    headers = {"x-amzn-ErrorType": f"{kind}:http://internal.amazon.com/"} if kind else {}
+    err = adapter().error(UpstreamResponse(status, headers, b'{"message":"x"}'))
+    assert err.deployment_fault is fault  # ADR-0033: what the shared breaker counts
+
+
 def test_error_type_falls_back_to_the_body_type_field() -> None:
     resp = UpstreamResponse(400, {}, b'{"__type":"com.amazon#ValidationException","message":"x"}')
     assert adapter().error(resp).code is ErrorCode.INVALID_REQUEST

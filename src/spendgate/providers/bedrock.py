@@ -60,6 +60,19 @@ _JSON_TYPE: Final = {"content-type": "application/json"}
 SNAPSHOT_SECONDS: Final = 30  # well inside botocore's 10-minute mandatory refresh window
 _SIGN_AT_MOST_SECONDS: Final = 300  # older means no `prepare` ran lately: `translate` asks inline
 _REVOKED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
+# Error types that mean our signing credentials, IAM grants or configured model are wrong, so the
+# breaker counts them (ADR-0033); the caller picks neither the model nor any other resource.
+_DEPLOYMENT_FAULTS: Final = frozenset(
+    {
+        "UnrecognizedClientException",
+        "InvalidSignatureException",
+        "IncompleteSignatureException",
+        "MissingAuthenticationTokenException",
+        "ExpiredTokenException",
+        "AccessDeniedException",
+        "ResourceNotFoundException",
+    }
+)
 _CHAIN: Final = "aws"  # one credential source per adapter: one lock key
 
 
@@ -264,7 +277,8 @@ class Bedrock:
             # ServiceUnavailable, InternalServer, ModelTimeout, ModelError and any other 5xx:
             # not the caller's fault, so upstream_unavailable (protocol.md 4.2 rule 1).
             code = ErrorCode.UPSTREAM_UNAVAILABLE
-        return UpstreamError(code, True, status, retry_after_seconds(response.headers))
+        retry = retry_after_seconds(response.headers)
+        return UpstreamError(code, True, status, retry, deployment_fault=kind in _DEPLOYMENT_FAULTS)
 
 
 def _error_type(response: UpstreamResponse) -> str:

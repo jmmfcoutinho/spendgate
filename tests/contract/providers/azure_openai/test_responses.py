@@ -149,6 +149,33 @@ def test_content_filter_400_is_a_free_client_error(provider: AzureOpenAIProvider
     assert not err.not_processed({429})  # the filter ran: it is not a failover candidate
 
 
+# (status, error.code, deployment fault): Azure's own codes for a missing deployment or a denied
+# identity count towards the shared breaker, as do OpenAI's (ADR-0033); a bare 403 does not.
+DEPLOYMENT_FAULTS = [
+    (404, "DeploymentNotFound", True),
+    (403, "PermissionDenied", True),
+    (403, "AuthenticationTypeDisabled", True),
+    (401, "invalid_api_key", True),
+    (403, None, False),
+    (404, None, False),
+    (400, "content_filter", False),
+]
+
+
+@pytest.mark.parametrize(("status", "code", "fault"), DEPLOYMENT_FAULTS)
+def test_only_azure_or_openai_deployment_codes_are_deployment_faults(
+    provider: AzureOpenAIProvider, status: int, code: str | None, fault: bool
+) -> None:
+    body = json.dumps({"error": {"code": code, "message": "provider text"}}).encode()
+    assert provider.error(UpstreamResponse(status, {}, body)).deployment_fault is fault
+
+
+def test_retry_after_ms_keeps_the_rest_of_the_mapping(provider: AzureOpenAIProvider) -> None:
+    err = provider.error(answer("error_429.json", 429, {"Retry-After-Ms": "2000"}))
+    assert (err.retry_after_seconds, err.deployment_fault, err.status) == (2, False, 429)
+    assert err.message  # the provider text survives the conversion
+
+
 def test_429_retry_after_ms_is_converted_and_rounded_up(provider: AzureOpenAIProvider) -> None:
     for millis, seconds in (("7000", 7), ("7001", 8), ("250", 1), ("0", 0)):
         err = provider.error(answer("error_429.json", 429, {"Retry-After-Ms": millis}))

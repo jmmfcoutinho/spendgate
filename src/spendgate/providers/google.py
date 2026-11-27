@@ -420,7 +420,7 @@ class GoogleProvider:
         err = dig(load(response.body), "error")
         status_name = as_text(dig(err, "status"))
         # A bad API key arrives as INVALID_ARGUMENT; it is our fault, not the caller's.
-        reasons = (as_text(dig(d, "reason")) for d in as_list(dig(err, "details")))
+        reasons = tuple(as_text(dig(d, "reason")) for d in as_list(dig(err, "details")))
         if (
             response.status == HTTPStatus.TOO_MANY_REQUESTS
         ):  # RESOURCE_EXHAUSTED: nothing was processed
@@ -436,4 +436,19 @@ class GoogleProvider:
             code = ErrorCode.INVALID_REQUEST  # INVALID_ARGUMENT: the request itself was rejected
         text = as_text(dig(err, "message"))[:500]
         retry = retry_after_seconds(response.headers)
-        return UpstreamError(code, True, response.status, retry, text)
+        fault = _deployment_fault(status_name, reasons)
+        return UpstreamError(code, True, response.status, retry, text, fault)
+
+
+def _deployment_fault(status_name: str, reasons: tuple[str, ...]) -> bool:
+    """Whether the answer fails for every caller, so the breaker counts it (ADR-0033).
+
+    A bad or blocked key (an `API_KEY_*` reason, even on a 400), a denial that names its reason
+    in an `ErrorInfo` (`SERVICE_DISABLED`, `IAM_PERMISSION_DENIED`, `CONSUMER_SUSPENDED`, ...), a
+    rejected token, or a missing model: the body names no other resource (media arrive inline).
+    """
+    if any(r.startswith("API_KEY") for r in reasons):
+        return True
+    if status_name == "PERMISSION_DENIED":
+        return any(reasons)
+    return status_name in {"UNAUTHENTICATED", "NOT_FOUND"}

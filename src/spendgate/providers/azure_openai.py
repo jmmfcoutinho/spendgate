@@ -11,10 +11,12 @@ differs is here:
   `Deployment.model`; the client's alias never reaches the URL (SSRF, naming).
 * Auth. `api-key` header for API keys; `Authorization: Bearer` for Entra ID, from an injected or
   default credential (see `azure_openai_auth`), or a static token when the config gives one.
-* Errors. Azure sends `retry-after-ms`; a 400 `content_filter` is a client error (not retried).
+* Errors. Azure sends `retry-after-ms`; a 400 `content_filter` is a client error (not retried);
+  Azure's own codes for a missing deployment or a denied identity are deployment faults.
 """
 
 from collections.abc import Mapping
+from dataclasses import replace
 from urllib.parse import quote
 
 from spendgate.core.errors import ErrorCode
@@ -45,6 +47,13 @@ _CLASSIC_TAIL: Mapping[str, str] = {
     shapes.EMBEDDINGS: "embeddings",
     shapes.TRANSCRIPTIONS: "audio/transcriptions",
     shapes.SPEECH: "audio/speech",
+}
+# Azure's own `error.code` for a deployment that does not exist, an Entra identity without a role
+# on the resource, and key auth turned off on it: our configuration, whatever was sent (ADR-0033).
+_DEPLOYMENT_FAULTS = wire.DEPLOYMENT_FAULTS | {
+    "DeploymentNotFound",
+    "PermissionDenied",
+    "AuthenticationTypeDisabled",
 }
 
 
@@ -122,10 +131,10 @@ class AzureOpenAIProvider(OpenAIWire):
         A 400 with code `content_filter` already maps to `invalid_request` (a client error that
         costs nothing and is never retried); it is not an upstream fault.
         """
-        mapped = wire.map_error(response)
+        mapped = wire.map_error(response, _DEPLOYMENT_FAULTS)
         if mapped.code is not ErrorCode.UPSTREAM_THROTTLED:
             return mapped
         millis = retry_after_ms_seconds(response.headers)
         if millis is None:
             return mapped
-        return UpstreamError(mapped.code, True, mapped.status, millis, mapped.message)
+        return replace(mapped, retry_after_seconds=millis)

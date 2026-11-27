@@ -228,6 +228,12 @@ def test_errors_map_to_core_codes_and_outcomes(
     assert err.not_processed(FREE) is (status == 429)  # only 429 is free by default
 
 
+@pytest.mark.parametrize("status", [401, 403, 404, 400])
+def test_no_azure_speech_answer_is_marked_a_deployment_fault(status: int) -> None:
+    """Its bodies cannot tell our resource from this request; a 401 counts by status (ADR-0033)."""
+    assert not AzureSpeech().error(answer("error_401.json", status)).deployment_fault
+
+
 def test_retry_after_is_carried_on_a_429_only() -> None:
     err = AzureSpeech().error(answer("error_429_throttled.json", 429, {"Retry-After": "7"}))
     assert err.retry_after_seconds == 7

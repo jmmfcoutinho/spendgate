@@ -487,6 +487,26 @@ def test_our_key_billing_or_model_errors_are_upstream_unavailable(status: int) -
     assert e.outcome(ANTHROPIC_FREE_STATUSES) is Outcome.CLIENT_ERROR
 
 
+@pytest.mark.parametrize(
+    ("status", "kind", "fault"),
+    [
+        (401, "authentication_error", True),
+        (404, "not_found_error", True),  # the configured model: the body names nothing else
+        (403, "permission_error", False),  # may answer one request's feature, not the deployment
+        (400, "invalid_request_error", False),
+        (402, "billing_error", False),
+    ],
+)
+def test_only_a_bad_key_or_missing_model_is_a_deployment_fault(
+    status: int, kind: str, fault: bool
+) -> None:
+    body = json.dumps({"type": "error", "error": {"type": kind, "message": "provider text"}})
+    e = PROVIDER.error(UpstreamResponse(status, {}, body.encode()))
+    assert e.deployment_fault is fault  # ADR-0033: what the shared breaker counts
+    assert e.message == "provider text"
+    assert not PROVIDER.error(err(403)).deployment_fault  # an unknown type is not a fault
+
+
 @pytest.mark.parametrize("status", [500, 502, 503])
 def test_5xx_is_upstream_5xx_and_charged(status: int) -> None:
     e = PROVIDER.error(err(status))
