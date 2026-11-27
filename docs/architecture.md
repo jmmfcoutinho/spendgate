@@ -202,3 +202,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0027](adr/0027-admin-network.md): the admin API on its own Compose network, which only the operator service joins.
 - [ADR-0028](adr/0028-price-coverage-and-regional-prices.md): price coverage, Region-scoped catalog entries (`regions`), one price per route, and how the catalog stays current.
 - [ADR-0029](adr/0029-audio-duration-is-counted.md): audio duration is counted from the packets a decoder decodes, never read from the container header; a size floor backs the count.
+- [ADR-0032](adr/0032-bootstrap-secrets-file.md): `migrate --bootstrap` prints key secrets only to a terminal; unattended runs write them to a new 0600 `--secrets-file` or refuse before creating a key.

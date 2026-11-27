@@ -18,7 +18,7 @@ Durations carry their unit in the key name (`*_seconds`). The top-level sections
 | `models` | map of name to [ModelRoute](#modelroute) | required | Routable model names. Each alias maps to one catalog id and an ordered list of deployments; failover happens only between deployments of that id. |
 | `defaults` | [Defaults](#defaults) | see below | Policy defaults for keys and budgets that do not set their own. |
 | `fail_open` | [FailOpen](#failopen) | see below | Explicit, named opt-outs from fail-closed behaviour. Every enabled one is logged as a warning at start. |
-| `bootstrap` | [Bootstrap](#bootstrap) | see below | Scopes, budgets and keys created at start. Create-only and idempotent: an existing row is never changed by a restart. `serve` creates scopes and budgets only; keys are created by `spendgate migrate --bootstrap`, which prints each new secret once. |
+| `bootstrap` | [Bootstrap](#bootstrap) | see below | Scopes, budgets and keys created at start. Create-only and idempotent: an existing row is never changed by a restart. `serve` creates scopes and budgets only; keys are created by `spendgate migrate --bootstrap`, which prints each new secret once to a terminal or writes it to `--secrets-file` (ADR-0032). |
 | `anthropic` | [Anthropic](#anthropic) | see below | Request header allowlists for the Anthropic endpoint. |
 | `routing` | [Routing](#routing) | see below | Failover and cooldown behaviour across deployments of one model. |
 | `alerts` | [Alerts](#alerts) | all unset | Where budget warnings are sent besides the log. Unset: the `spendgate.budget` log lines only. |

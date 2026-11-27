@@ -50,7 +50,8 @@ D: dict[str, str] = {
     "Config.bootstrap": (
         "Scopes, budgets and keys created at start. Create-only and idempotent: an existing "
         "row is never changed by a restart. `serve` creates scopes and budgets only; keys are "
-        "created by `spendgate migrate --bootstrap`, which prints each new secret once."
+        "created by `spendgate migrate --bootstrap`, which prints each new secret once to a "
+        "terminal or writes it to `--secrets-file` (ADR-0032)."
     ),
     "Config.anthropic": "Request header allowlists for the Anthropic endpoint.",
     "Config.routing": "Failover and cooldown behaviour across deployments of one model.",

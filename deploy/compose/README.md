@@ -37,6 +37,7 @@ docker compose down -v              # stop and delete containers, networks and t
 `--local` talks to the ledger directly, so no admin key is needed; run the CLI only through `docker compose exec`.
 Other commands: `spendgate usage --local`, `budgets list <scope> --local`, `kill on --local --reason ...`.
 Budgets and scopes come from `bootstrap:` in the config (create-only); edit `spendgate.sqlite.yaml` and `up -d` again.
+Keys under `bootstrap.keys` are created only by `docker compose run --rm spendgate migrate --bootstrap`, which prints each secret once when run from a terminal; without one (`-T`, CI) add `--secrets-file` with a path on a mounted volume ([operations](../../docs/operations.md#keys), ADR-0032).
 
 ## Postgres
 
