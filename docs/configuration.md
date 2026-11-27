@@ -308,7 +308,7 @@ Used at `bootstrap.keys[].session_defaults`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `budget` | money string such as `"50 USD"` (optional) | unset | Cap of one session, inside the shared budgets. |
+| `budget` | money string such as `"50 USD"` (optional) | unset | Cap of one session, inside the shared budgets. It only narrows them: a key whose scope chain has no other budget is refused (`no_budget`) even when its sessions have a budget ([ADR-0030](adr/0030-session-budgets-only-narrow.md)). |
 | `max_steps` | positive integer (optional) | unset | Most requests in one session. |
 | `max_seconds` | positive integer (optional) | unset | Wall-clock limit from the first call of a session. |
 | `idle_seconds` | positive integer (optional) | unset | A session idle this long is closed and the same id starts a fresh one. |

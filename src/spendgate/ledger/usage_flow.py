@@ -1,6 +1,6 @@
 """Flows for usage reports and retention. Each retention batch is its own transaction."""
 
-from spendgate.ledger import sql
+from spendgate.ledger import sql_retention as retention
 from spendgate.ledger.common import s
 from spendgate.ledger.port import NotFoundError
 from spendgate.ledger.sql import Flow, Row, q
@@ -16,7 +16,7 @@ from spendgate.ledger.usage import (
 
 
 def _stored_boundary() -> Flow[int]:
-    rows = yield q(sql.RETENTION_GET)
+    rows = yield q(retention.RETENTION_GET)
     return int(s(rows[0], "value")) if rows else 0
 
 
@@ -52,7 +52,7 @@ def usage_flow(
     since = query.since if query.since is not None else (floor or None)
     scope_path: str | None = None
     if query.filters.scope is not None:
-        found = yield q(sql.SCOPE_REF, ref=query.filters.scope)
+        found = yield q(retention.SCOPE_REF, ref=query.filters.scope)
         if not found:
             raise NotFoundError(f"scope {query.filters.scope} does not exist")
         scope_path = s(found[0], "path")
@@ -83,22 +83,22 @@ def usage_flow(
 
 def boundary_flow(boundary: int) -> Flow[None]:
     """Recorded before any deletion, so usage refuses the window while it is being cut."""
-    yield q(sql.RETENTION_SET, boundary=str(boundary))
+    yield q(retention.RETENTION_SET, boundary=str(boundary))
 
 
 def calls_batch_flow(boundary: int, n: int) -> Flow[int]:
-    return len((yield q(sql.CALLS_PURGE, boundary=boundary, n=n)))
+    return len((yield q(retention.CALLS_PURGE, boundary=boundary, n=n)))
 
 
 def reservations_batch_flow(boundary: int, n: int) -> Flow[int]:
-    yield q(sql.RES_ITEMS_PURGE, boundary=boundary, n=n)  # items first: they reference the rows
-    return len((yield q(sql.RES_PURGE, boundary=boundary, n=n)))
+    yield q(retention.RES_ITEMS_PURGE, boundary=boundary, n=n)  # items first: they reference rows
+    return len((yield q(retention.RES_PURGE, boundary=boundary, n=n)))
 
 
 def sessions_batch_flow(boundary: int, n: int) -> Flow[int]:
     """Delete up to `n` closed sessions with their budgets, periods, grants and reservations."""
-    ids = yield q(sql.SESSIONS_OLD, boundary=boundary, n=n)
+    ids = yield q(retention.SESSIONS_OLD, boundary=boundary, n=n)
     for row in ids:
-        for statement in sql.SESSION_PURGE:
+        for statement in retention.SESSION_PURGE:
             yield q(statement, id=s(row, "id"))
     return len(ids)

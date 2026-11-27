@@ -61,6 +61,23 @@ async def test_a_kill_switch_engaged_mid_stream_stops_it_and_charges_the_full_ho
 
 
 @async_test
+async def test_m18_a_switch_on_the_key_a_stream_key_replaced_stops_the_stream(
+    tmp_path: Path,
+) -> None:
+    async with gated(tmp_path) as (s, up):
+        old = (await s.ledger.list_keys(s.scope.id))[0]
+        fresh = await s.keys.rotate_key(old.id, grace_ms=60_000, actor="t", now=NOW_MS)
+        call = await AsgiCall(s.app, CHAT, BODY, fresh.secret).start()
+        up.streams[0].put(chat_chunk("a"))
+        assert await call.chunk() == chat_chunk("a")
+        await engage(s, KillTarget.KEY, old.id)  # the old id, after the rotation
+        await beat(s)
+        assert "kill switch" in (await call.read_all()).decode()
+        await call.finish()
+        await settled_once(s, Outcome.STREAM_BROKEN, s.observer.held[0].hold.nano)
+
+
+@async_test
 async def test_a_kill_switch_stop_settles_at_the_usage_already_seen(tmp_path: Path) -> None:
     async with gated(tmp_path) as (s, up):
         call = await open_call(s)

@@ -451,3 +451,22 @@ def test_a_raising_job_leaves_the_poster_beside_it_running() -> None:
         "RuntimeError",
     )
     assert "sweeper bug" not in rig.log.getvalue()
+
+
+def test_a_handler_closed_by_logging_still_posts_its_warnings() -> None:
+    """`logging.config.dictConfig` (uvicorn runs one at start) closes every attached handler.
+
+    `Handler.close()` sets `_closed`; the poster's own flag must not share that name, or every
+    budget warning is counted as dropped from then on (fixed in 0.4.1).
+    """
+    receiver = Receiver()
+    rig = Rig(receiver)
+
+    async def go() -> None:
+        rig.alerts.close()
+        rig.emit(ALERT)
+        await post_all(rig, 1)
+
+    asyncio.run(go())
+    assert len(receiver.requests) == 1
+    assert (rig.count("delivered"), rig.count("dropped")) == (1, 0)

@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import importlib.util
+import logging
 import os
 import sys
 from collections.abc import AsyncIterator, Iterator
@@ -12,6 +13,7 @@ from typing import Literal
 
 import httpx
 import uvicorn
+from uvicorn.logging import DefaultFormatter
 
 from spendgate.cli.client import EXIT_CONFIG, EXIT_OK
 from spendgate.cli.reload import SecretReload, on_sighup
@@ -220,6 +222,7 @@ def uvicorn_config(
     At the deadline uvicorn cancels the calls still running; the pipeline settles each one as a
     cancel (M-13), so the deadline must end before the orchestrator kills the process.
     """
+    _keep_uvicorn_messages()
     return uvicorn.Config(
         app,  # type: ignore[arg-type]
         at.host,
@@ -227,7 +230,22 @@ def uvicorn_config(
         lifespan=lifespan,
         timeout_keep_alive=server.keep_alive_seconds,
         timeout_graceful_shutdown=server.graceful_shutdown_seconds,
+        log_config=None,  # uvicorn's dictConfig would close the handlers spendgate attached
+        access_log=False,  # spendgate logs each call itself; uvicorn's line has the query string
     )
+
+
+def _keep_uvicorn_messages() -> None:
+    """uvicorn's own start, stop and error lines, to stderr as its default config would send them.
+
+    Set here rather than through uvicorn's `log_config`: that one runs `logging.config.dictConfig`,
+    which closes every handler already attached, the budget webhook among them.
+    """
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(DefaultFormatter("%(levelprefix)s %(message)s"))
+    root = logging.getLogger("uvicorn")
+    root.handlers, root.propagate = [handler], False
+    root.setLevel(logging.INFO)
 
 
 async def _run(

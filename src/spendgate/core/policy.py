@@ -109,14 +109,20 @@ def model_allowed(key: KeyPolicy, model: str) -> bool:
     return key.allowed_models is None or any(fnmatchcase(model, g) for g in key.allowed_models)
 
 
-def matching_kill_switch(
+def matching_kill_switch(  # noqa: PLR0913 - every fact a switch can name
     switches: Collection[KillSwitch],
     key: KeyPolicy,
     chain_scope_ids: Collection[str],
     model: str,
     providers: Sequence[str],
+    *,
+    key_lineage: Collection[str] = (),
 ) -> KillSwitch | None:
-    """First active switch that applies; a provider switch needs every candidate killed."""
+    """First active switch that applies; a provider switch needs every candidate killed.
+
+    `key_lineage` holds the keys this key replaced by rotation: a key switch on any of them
+    applies to it too, so rotating a killed key never lifts the switch (M-18).
+    """
     killed_providers = {s.target_ref for s in switches if s.target_kind is KillTarget.PROVIDER}
     if providers and all(p in killed_providers for p in providers):
         return KillSwitch(KillTarget.PROVIDER, providers[0])
@@ -125,7 +131,7 @@ def matching_kill_switch(
         hit = {
             KillTarget.GLOBAL: True,
             KillTarget.SCOPE: ref in chain_scope_ids,
-            KillTarget.KEY: ref == key.id,
+            KillTarget.KEY: ref == key.id or ref in key_lineage,
             KillTarget.MODEL: ref == model,
             KillTarget.PROVIDER: False,
         }[switch.target_kind]

@@ -24,6 +24,7 @@ class StreamFacts:
     model: str  # catalog id
     provider: str  # the one serving it: a provider switch on it stops the stream
     session_ends_at: int | None  # epoch ms after which the session's `max_seconds` has passed
+    key_lineage: tuple[str, ...] = ()  # keys this key replaced (as at admission; never changes)
 
 
 def stop_reason(
@@ -31,7 +32,12 @@ def stop_reason(
 ) -> StopReason | None:
     """`kill_switch`, `session_time`, or None while the stream may go on."""
     if matching_kill_switch(
-        switches, facts.key, facts.chain_scope_ids, facts.model, (facts.provider,)
+        switches,
+        facts.key,
+        facts.chain_scope_ids,
+        facts.model,
+        (facts.provider,),
+        key_lineage=facts.key_lineage,
     ):
         return StopReason.KILL_SWITCH
     if facts.session_ends_at is not None and now > facts.session_ends_at:

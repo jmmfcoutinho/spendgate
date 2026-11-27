@@ -7,6 +7,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 DOC = REPO / "docs" / "how-money-is-protected.md"
 TEXT = DOC.read_text()
+# The rule ids are defined by the money-rule table in CONTRIBUTING.md section 7.
+RULES = re.findall(r"^\| (M-\d{2}) \|", (REPO / "CONTRIBUTING.md").read_text(), re.MULTILINE)
 # A full node id, or a `::name` shorthand that continues the previous file in the text.
 CITATION = re.compile(r"(tests/[\w/]+\.py)?((?:::\w+)+)")
 
@@ -48,8 +50,8 @@ def test_every_cited_test_exists() -> None:
 
 
 def test_every_money_rule_has_a_row_with_a_test() -> None:
-    for number in range(1, 16):
-        rule = f"M-{number:02d}"
+    assert len(RULES) >= 20, RULES
+    for rule in RULES:
         row = next((ln for ln in TEXT.splitlines() if ln.startswith(f"| {rule} |")), None)
         assert row is not None, f"{rule} is missing from the table"
         assert "::test_" in row or "::Test" in row, f"{rule} names no test"

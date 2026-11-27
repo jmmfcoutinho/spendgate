@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from spendgate.core.catalog import PriceEntry
-from spendgate.core.cost import Estimate, UnpricedUsage, worst_case
+from spendgate.core.cost import Estimate, UnpricedUsage, Usage, actual_cost, worst_case
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.estimate import (
     AUDIO_TOKENS_PER_SECOND,
@@ -60,6 +60,12 @@ WHISPER = make_entry(
 )
 TRANSCRIBE_TOKENS = make_entry(
     "transcription", {"audio_input_per_mtok": "6", "input_per_mtok": "2"}
+)
+# gpt-4o-transcribe on Azure: audio and prompt in, and the transcript out, all billed per token.
+TRANSCRIPT_TOKENS = make_entry(
+    "transcription",
+    {"audio_input_per_mtok": "6", "input_per_mtok": "2.5", "output_per_mtok": "10"},
+    {"max_output_tokens": 2000},
 )
 SPEECH_CHARS = make_entry("speech", {"per_1k_characters": "0.3"})
 SPEECH_TOKENS = make_entry(
@@ -449,6 +455,36 @@ def test_transcription_token_priced_model_gets_audio_tokens_and_prompt_text() ->
     assert result.audio_seconds == 10
 
 
+def test_m19_a_token_billed_transcription_holds_its_output_ceiling() -> None:
+    body = {"file": fx.wav(180.0), "max_output_tokens": 5, "max_tokens": 5}
+    result = ok(estimate(RequestKind.TRANSCRIPTION, body, entry=TRANSCRIPT_TOKENS))
+    assert result.max_output_tokens == 2000  # the catalog's ceiling, whatever the form says
+    # No transcription field bounds the transcript, so a key cap cannot lower the hold either.
+    capped = estimate(
+        RequestKind.TRANSCRIPTION, body, entry=TRANSCRIPT_TOKENS, key_max_output_tokens=10
+    )
+    assert ok(capped).max_output_tokens == 2000
+    assert resolve_output_ceiling(RequestKind.TRANSCRIPTION, body, entry=TRANSCRIPT_TOKENS) == 2000
+    # The lab case of SG-PT-04: 9,000 audio tokens in and 2,000 out never settle above the hold.
+    billed = Usage(audio_input_tokens=9000, output_tokens=2000)
+    assert worst_case(TRANSCRIPT_TOKENS, result) >= actual_cost(TRANSCRIPT_TOKENS, billed)
+    audio_only = Estimate(audio_input_tokens=result.audio_input_tokens)
+    assert worst_case(TRANSCRIPT_TOKENS, result) > worst_case(TRANSCRIPT_TOKENS, audio_only)
+    # An entry that bills no transcript tokens holds none.
+    assert ok(estimate(RequestKind.TRANSCRIPTION, body, entry=WHISPER)).max_output_tokens == 0
+
+
+def test_m19_a_token_billed_transcription_without_a_ceiling_is_refused() -> None:
+    # The catalog loader requires the ceiling, so only an unvalidated copy can lack one.
+    no_cap = TRANSCRIPT_TOKENS.model_copy(update={"limits": None})
+    body = {"file": fx.wav(1.0)}
+    for key_cap in (None, 4096):  # a key cap is no substitute: it cannot be sent upstream
+        result = estimate(
+            RequestKind.TRANSCRIPTION, body, entry=no_cap, key_max_output_tokens=key_cap
+        )
+        assert refused(result).code is ErrorCode.MODEL_NOT_PRICED
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -501,6 +537,7 @@ def test_estimates_price_without_unpriced_usage_for_every_kind() -> None:
         (RequestKind.EMBEDDING, {"input": "x"}, EMBED),
         (RequestKind.TRANSCRIPTION, {"file": fx.wav(2.0)}, WHISPER),
         (RequestKind.TRANSCRIPTION, {"file": fx.wav(2.0)}, TRANSCRIBE_TOKENS),
+        (RequestKind.TRANSCRIPTION, {"file": fx.wav(2.0)}, TRANSCRIPT_TOKENS),
         (RequestKind.SPEECH, {"input": "hi"}, SPEECH_CHARS),
         (RequestKind.SPEECH, {"input": "hi"}, SPEECH_TOKENS),
     ]

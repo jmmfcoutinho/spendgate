@@ -9,7 +9,7 @@ from dataclasses import dataclass, fields
 from decimal import ROUND_CEILING, Context, Decimal, DivisionByZero, InvalidOperation, Overflow
 from typing import Literal
 
-from spendgate.core.catalog import PriceEntry
+from spendgate.core.catalog import OUTPUT_METERS, PriceEntry
 from spendgate.core.money import Money
 
 type Side = Literal["in", "out"] | None
@@ -117,7 +117,7 @@ _RULES = (
 _BY_FIELD = {rule.field: rule for rule in _RULES}
 # Worst case bills each group's units at the dearest meter present in the entry.
 _DEAREST_INPUT = ("input_per_mtok", "cached_input_per_mtok", "cache_write_per_mtok")
-_DEAREST_OUTPUT = ("output_per_mtok", "reasoning_per_mtok", "audio_output_per_mtok")
+_DEAREST_OUTPUT = OUTPUT_METERS
 _DEAREST_AUDIO_TOKENS = ("audio_input_per_mtok", "cached_audio_input_per_mtok")
 
 

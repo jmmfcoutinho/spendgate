@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from tests.integration.harness import CHAT, MESSAGES_PATH, MODELS, async_test, open_stack
+from tests.unit.audio_builders import wav
 
 RESPONSES = "/v1/responses"
 AZURE = """\
@@ -107,3 +108,28 @@ async def _forwarded_equals_held(  # noqa: PLR0913, PLR0917 - one case row
         assert read(s.fake.requests[-1].json()) == forwarded
         first, second = s.observer.held[-2:]
         assert first.hold == second.hold
+
+
+AZURE_STT = """\
+  azure-stt:
+    catalog_id: azure_openai/gpt-4o-transcribe
+    deployments:
+      - provider: azure_openai
+        base_url: "https://azure.upstream.test"
+        credential: "env:OPENAI_KEY"
+"""
+TRANSCRIPT_NANO_USD = 2000 * 13_200  # the 2,000-token ceiling at 13.2 USD per million output
+
+
+@async_test
+async def test_m19_a_token_billed_transcription_holds_its_output_ceiling(tmp_path: Path) -> None:
+    # The bundled entry bills the transcript per token, and no transcription field can bound it.
+    async with open_stack(tmp_path, models=MODELS + AZURE_STT) as s:
+        await s.client.post(
+            "/v1/audio/transcriptions",
+            files={"file": ("a.wav", wav(2.0), "audio/wav")},
+            data={"model": "azure-stt"},
+            headers={"Authorization": f"Bearer {s.secret}"},
+        )
+        (held,) = s.observer.held
+        assert held.hold.nano > TRANSCRIPT_NANO_USD  # the audio alone is under 2,000 nano-USD

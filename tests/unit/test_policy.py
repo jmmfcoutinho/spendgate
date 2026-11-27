@@ -16,6 +16,7 @@ from spendgate.core.policy import (
     Labels,
     Plan,
     check_labels,
+    matching_kill_switch,
     model_allowed,
     model_filter_matches,
     resolve,
@@ -154,6 +155,14 @@ def test_a_provider_switch_refuses_only_when_every_candidate_is_killed() -> None
     both = [*killed, KillSwitch(KillTarget.PROVIDER, "azure_openai")]
     assert isinstance(run(kill_switches=both, providers=["openai", "azure_openai"]), Refusal)
     assert isinstance(run(kill_switches=killed), Plan)  # no candidates known: nothing to kill
+
+
+def test_m18_a_key_switch_on_a_key_this_one_replaced_applies() -> None:
+    switches = [KillSwitch(KillTarget.KEY, "key0")]
+    hit = matching_kill_switch(switches, key(), SCOPES, MODEL, (), key_lineage=("key0",))
+    assert hit == switches[0]
+    assert matching_kill_switch(switches, key(), SCOPES, MODEL, (), key_lineage=("x",)) is None
+    assert matching_kill_switch(switches, key(), SCOPES, MODEL, ()) is None
 
 
 def test_kill_switch_validation() -> None:

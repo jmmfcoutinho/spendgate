@@ -37,7 +37,10 @@ The rules that trip people up:
   `audio_output_per_mtok`.
 - **`limits.max_output_tokens` is the last-resort output ceiling.** The worst-case hold uses it when
   neither the request nor the key sets one. Without it a chat entry is invalid, because the guard
-  refuses to guess the largest possible bill.
+  refuses to guess the largest possible bill. A transcription entry with an output meter (a
+  transcript billed per token, such as gpt-4o-transcribe) needs it too, set to the model's
+  documented output limit: no transcription request field bounds the transcript, so the hold takes
+  this value whatever the key sets.
 - **The provider slug in `id` is an adapter name:** `openai`, `azure_openai`, `anthropic`,
   `bedrock`, `google`, `azure_speech` or `elevenlabs`.
 - **Currency.** If it differs from `ledger.currency`, the config needs an `fx:` rate or startup
@@ -142,7 +145,8 @@ spendgate catalog import --from-litellm <commit-sha> --out extra.yaml --provider
   stderr, naming no value. Skipped: a value that is not a finite number (NaN, a string, a
   boolean, an absurd exponent), a price of 0 on any meter, a long-context multiplier below 1, a
   chat, responses or messages model without a whole `max_output_tokens` (never a guessed or
-  rounded ceiling), and anything that would not load. The finished file is checked against the
+  rounded ceiling), and anything that would not load (such as a transcription model with an output
+  price and no `max_output_tokens`). The finished file is checked against the
   bundled catalog before it is written.
 - **Never overwrites** an existing `--out` unless you pass `--force`, which replaces it in one
   rename, so a failure leaves the old file whole.

@@ -355,6 +355,16 @@ def run(*args: object) -> int:
     return code
 
 
+def test_m19_a_token_billed_transcription_gets_its_output_ceiling_and_where_it_comes_from() -> None:
+    written = yaml.safe_load("models:\n" + rendered(items()))["models"]
+    by_id = {e["id"]: e for e in written}
+    tokens = by_id["azure_openai/global.gpt-4o-transcribe"]
+    assert tokens["limits"] == {"max_output_tokens": 2000}
+    assert "OpenAI documents for gpt-4o-transcribe" in tokens["note"]
+    assert len(tokens["note"]) <= 300  # the catalog's note limit
+    assert "limits" not in by_id["azure_openai/global.gpt-transcribe"]  # billed by the minute
+
+
 def test_write_replaces_the_block_and_the_catalog_still_loads(tmp_path: Path) -> None:
     prices = catalog_copy(tmp_path)
     assert run("--from-file", DATA, "--write", "--catalog", prices, "--checked-on", CHECKED) == 0

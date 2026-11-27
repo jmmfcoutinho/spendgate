@@ -321,6 +321,62 @@ def test_a_session_on_a_key_with_no_budget_leaves_no_session_row(rig: Rig) -> No
     assert _forbidden_reason(rig.hold(w, "A", "1", key=key, session="s1")) == "no_budget"
 
 
+# --- M-17: a session budget alone is not a budget (ADR-0030) ---------------------------------
+
+
+def _lonely_session_key(rig: Rig) -> KeyPolicy:
+    """A key on a new org with no budget, whose writer gave every session a large budget."""
+    lonely = rig.run(rig.ledger.create_scope(ScopeKind.ORG, "lonely", None, now=T0))
+    rig.run(rig.ledger.add_key_record("key-2", lonely.id, now=T0))
+    defaults = SessionDefaults(budget_nano=E("1000000"), max_new_sessions_per_hour=None)
+    return KeyPolicy("key-2", lonely.id, session_defaults=defaults)
+
+
+def test_m17_a_session_budget_alone_is_not_a_budget(rig: Rig) -> None:
+    w = _unbudgeted(rig)
+    key = _lonely_session_key(rig)
+    for n, session in enumerate(("s1", "s2", None)):
+        result = rig.hold(w, f"A{n}", "1", key=key, session=session)
+        assert _forbidden_reason(result) == "no_budget"
+        assert rig.run(rig.ledger.get_reservation(f"A{n}")) is None
+    # The refused sessions left no scope, so no session budget is left behind either.
+    lonely = rig.run(rig.ledger.find_scope("org:lonely"))
+    assert lonely is not None
+    sessions = rig.ledger.list_scopes(
+        kind=ScopeKind.SESSION, parent_id=lonely.id, after="", limit=9
+    )
+    assert rig.run(sessions) == ()
+
+
+def test_m17_a_session_budget_still_narrows_the_shared_budget(rig: Rig) -> None:
+    w = rig.world("100", session_defaults=SessionDefaults(budget_nano=E("5")))
+    assert limit_of(rig.hold(w, "A", "6", session="s1")) == "budget"  # the session is tighter
+    held = rig.hold_ok(w, "B", "4", session="s2")
+    assert {item.budget_id for item in held.items} >= {w.budget.id}  # held in the shared one too
+
+
+def test_m17_a_shared_budget_for_another_model_does_not_count(rig: Rig) -> None:
+    parent = rig.run(rig.ledger.create_scope(ScopeKind.ORG, "acme", None, now=T0))
+    rig.run(rig.ledger.create_budget(parent.id, Period.NONE, E("100"), now=T0, model_filter="x*"))
+    rig.run(rig.ledger.add_key_record("key-1", parent.id, now=T0))
+    key = KeyPolicy("key-1", parent.id, session_defaults=SessionDefaults(budget_nano=E("50")))
+    w = World(parent, rig.run(rig.ledger.list_budgets(parent.id, T0))[0].budget, key, parent)
+    assert _forbidden_reason(rig.hold(w, "A", "1", session="s1", model="gpt")) == "no_budget"
+    assert isinstance(rig.hold(w, "B", "1", session="s1", model="x1"), Held)
+
+
+def test_m17_a_key_on_a_session_scope_does_not_count_that_session_budget(rig: Rig) -> None:
+    w = rig.world("100", session_defaults=SessionDefaults(budget_nano=E("50")))
+    held = rig.hold_ok(w, "A", "1", session="s1")
+    rig.settle("A", "1")
+    rig.disable_budget(w.budget.id)  # only the session's own budget is left on its chain
+    assert held.session_scope_id is not None
+    rig.run(rig.ledger.add_key_record("key-s", held.session_scope_id, now=T0))
+    on_session = KeyPolicy("key-s", held.session_scope_id)
+    assert _forbidden_reason(rig.hold(w, "B", "1", key=on_session)) == "no_budget"
+    assert _forbidden_reason(rig.hold(w, "C", "1", session="s1")) == "no_budget"
+
+
 def test_a_disabled_budget_stops_applying_and_no_budget_left_refuses(rig: Rig) -> None:
     w = rig.world("10")
     assert isinstance(rig.hold(w, "A", "1"), Held)

@@ -20,7 +20,7 @@ from decimal import ROUND_CEILING, Decimal
 from enum import StrEnum
 
 from spendgate.core.audio import AudioError, measure
-from spendgate.core.catalog import PriceEntry
+from spendgate.core.catalog import OUTPUT_METERS, PriceEntry
 from spendgate.core.cost import Estimate
 from spendgate.core.errors import ErrorCode, Refusal
 from spendgate.core.heuristic import heuristic_tokens, utf8_bound
@@ -280,6 +280,7 @@ def resolve_output_ceiling(
     A request value may lower the ceiling but not raise it above the smaller of the key's and the
     catalog's (`request_too_large`); with no request value the smaller of those two applies; with
     none of the three the request is refused (M-09). Kinds that bill no output tokens return 0.
+    A token-billed transcript is held at the catalog's ceiling alone (M-19).
     """
     try:
         return _resolve_ceiling(kind, body, entry, key_max_output_tokens)
@@ -287,9 +288,25 @@ def resolve_output_ceiling(
         return exc.refusal
 
 
+def _transcript_ceiling(entry: PriceEntry) -> int | Refusal:
+    """0, or the model's own output limit: no transcription field bounds the transcript (M-19).
+
+    So no ceiling can be forwarded, and a key or request value would shrink only the hold.
+    """
+    if not _priced(entry, *OUTPUT_METERS):
+        return 0
+    cap = entry.limits.max_output_tokens if entry.limits is not None else None
+    if cap is None:
+        message = f"{entry.id} bills transcript tokens but sets no limits.max_output_tokens"
+        return Refusal(ErrorCode.MODEL_NOT_PRICED, message)
+    return cap
+
+
 def _resolve_ceiling(
     kind: RequestKind, body: Body, entry: PriceEntry, key_cap: int | None
 ) -> int | Refusal:
+    if kind is RequestKind.TRANSCRIPTION:
+        return _transcript_ceiling(entry)
     names = _CEILING_FIELDS.get(kind, ())
     speech_tokens = kind is RequestKind.SPEECH and entry.meters.audio_output_per_mtok is not None
     if not names and not speech_tokens:

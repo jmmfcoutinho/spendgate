@@ -1,6 +1,6 @@
 """The admission transaction (ledger-state-machine.md, "Admission"): one flow for both backends."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from spendgate.core.budgets import (
     Admission,
@@ -67,16 +67,18 @@ type _Check = tuple[Budget, int, PeriodState, Admission]  # budget, period start
 def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
     """Check kill switches, the session and every budget, then insert the hold, atomically.
 
-    Locks are taken in the documented order: session scope row, then budget rows ascending.
+    Locks are taken in the documented order: the key row and session scope row (a session call),
+    then budget rows ascending.
     Any refusal rolls back the whole hold (no step, no session row, no partial hold). The reads
     that need no lock go in one batch, the budget locks in a second, the writes with the COMMIT.
     """
     if req.worst_nano < 0:
         raise ValueError("worst_nano must not be negative")
-    exists, chain_rows, kill_rows, budget_rows = yield from sql.batch(
+    exists, chain_rows, kill_rows, lineage_rows, budget_rows = yield from sql.batch(
         q(sql.RES_EXISTS, id=req.request_id),
         q(sql.CHAIN, leaf=req.key.scope_id),
         q(sql.KILL_ACTIVE),
+        q(sql.KEY_LINEAGE, id=req.key.id),
         q(sql.CHAIN_BUDGETS, leaf=req.key.scope_id),
     )
     if exists:
@@ -85,7 +87,8 @@ def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
     for scope in chain:
         if scope.disabled_at is not None and scope.disabled_at <= req.now:
             return _forbidden("scope_disabled", f"Scope {scope.path} is disabled.", scope.path)
-    if (killed := _kill_switch(req, chain, kill_rows)) is not None:
+    lineage = tuple(s(r, "id") for r in lineage_rows if s(r, "id") != req.key.id)
+    if (killed := _kill_switch(req, chain, kill_rows, lineage)) is not None:
         return killed
     session: _Session | None = None
     if req.session is not None:
@@ -97,16 +100,26 @@ def hold_flow(ctx: Ctx, req: HoldRequest) -> Flow[Held | Refused]:
     leaf = session.scope if session else chain[0]
     scopes = {c.id: c for c in [leaf, *chain]}
     owners = _budget_owners(req, budget_rows)
+    locked = yield from _lock_budgets(req.now, owners, scopes)
+    if not any(_shared(budget, scopes) for budget, _, _ in locked):
+        # No limit at all, or only a session's own budget, which the key's writer sets: fail
+        # closed (ADR-0003, ADR-0030). A session budget narrows a shared one, never stands in.
+        yield Tx.ROLLBACK  # drop a session row created above
+        return _forbidden("no_budget", "No active budget applies to this key.", leaf.path)
     checks: list[_Check] = []
-    for budget, start, state in (yield from _lock_budgets(req.now, owners, scopes)):
+    for budget, start, state in locked:
         verdict = check_admission(budget, state, req.worst_nano, req.now, ctx.currency)
         if verdict.refusal is not None:
             return (yield from _refuse(req, verdict.refusal, list(owners), session))
         checks.append((budget, start, state, verdict))
-    if not checks:  # no active budget would mean no limit at all: fail closed (ADR-0003)
-        yield Tx.ROLLBACK  # drop a session row created above
-        return _forbidden("no_budget", "No active budget applies to this key.", leaf.path)
-    return (yield from _admit(req, leaf, session, checks))
+    held = yield from _admit(req, leaf, session, checks)
+    return replace(held, key_lineage=lineage)
+
+
+def _shared(budget: Budget, scopes: dict[str, _Scope]) -> bool:
+    """A budget on a known, non-session scope of the chain (an unknown owner never counts)."""
+    owner = scopes.get(budget.scope_id)
+    return owner is not None and owner.kind is not ScopeKind.SESSION
 
 
 def _lock_budgets(
@@ -154,9 +167,14 @@ def _chain(leaf_id: str, rows: list[Row]) -> list[_Scope]:
     ]
 
 
-def _kill_switch(req: HoldRequest, chain: list[_Scope], rows: list[Row]) -> Refused | None:
+def _kill_switch(
+    req: HoldRequest, chain: list[_Scope], rows: list[Row], lineage: tuple[str, ...]
+) -> Refused | None:
     switches = [KillSwitch(KillTarget(s(r, "target_kind")), s(r, "target_ref")) for r in rows]
-    hit = matching_kill_switch(switches, req.key, [c.id for c in chain], req.model, req.providers)
+    scope_ids = [c.id for c in chain]
+    hit = matching_kill_switch(
+        switches, req.key, scope_ids, req.model, req.providers, key_lineage=lineage
+    )
     if hit is None:
         return None
     return Refused(
@@ -203,14 +221,20 @@ def _admit_session(ctx: Ctx, req: HoldRequest, parent: _Scope) -> Flow[_Session 
     if defaults is None or req.session is None:
         raise ValueError("a session needs a key with session_defaults")
     path = session_path(parent.path, req.key.id, req.session)
-    found = yield q(sql.SCOPE_BY_PATH, path=path)
     prefix = f"{req.key.id}:"
-    count = yield q(
-        sql.SESSION_NEW_COUNT,
-        parent=parent.id,
-        plen=len(prefix),
-        prefix=prefix,
-        since=req.now - HOUR_MS,
+    # The key lock comes first: under it the count cannot go stale before this hold inserts its
+    # session, and a hold racing to create the same session finds it (Postgres; SQLite has one
+    # writer). One round trip; the statements still run in this order.
+    _, found, count = yield from sql.batch(
+        q(sql.SESSION_KEY_LOCK, id=req.key.id),
+        q(sql.SCOPE_BY_PATH, path=path),
+        q(
+            sql.SESSION_NEW_COUNT,
+            parent=parent.id,
+            plen=len(prefix),
+            prefix=prefix,
+            since=req.now - HOUR_MS,
+        ),
     )
     old = found[0] if found else None
     decision = gate_session(defaults, _state_of(old) if old else None, req.now, i(count[0], "n"))

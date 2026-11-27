@@ -50,7 +50,7 @@ Rules that make this safe:
 - **Owner aborts before it can lose the lease:** the owning instance cancels the upstream call, and settles what it has seen (or the full hold if no usable usage), when a `renew_all` fails or the lease is within one heartbeat of expiry (`lease_expires_at - now < heartbeat_seconds`, from the last successful renewal). So a call cannot keep spending long after a sweeper charged its hold; the residual is the cost of the in-flight tail, booked by late settle as overrun.
 - **Failover stays inside the hold:** failover to the next candidate happens only when `not_processed(attempt)` is true, and that attempt costs 0. Any other attempt (5xx, timeout, broken stream, client cancel after send) ends the request and settles: usage seen (final usage, for a stream), else the full hold. The charge is therefore one attempt's cost, at most `worst`.
 - **Ambiguous hold commit:** if the connection fails during `hold` COMMIT the caller treats the request as refused (`ledger_unavailable`) and best-effort `release`s that id on reconnect; if the process dies instead, the lease runs out and the sweeper charges the full hold (conservative).
-- **Lock order (deadlock freedom):** every transaction takes locks in this order: reservation row, then session scope row, then budget rows in ascending id (application sort), then that budget's `budget_periods` row and its grants (covered by the budget lock). PostgreSQL: READ COMMITTED, one `SELECT ... FOR UPDATE` per budget in a loop in ascending id order (not a multi-row `ORDER BY ... FOR UPDATE`); retry the transaction on deadlock, at most 3 times. SQLite: `BEGIN IMMEDIATE` serialises writers; the code path is identical.
+- **Lock order (deadlock freedom):** every transaction takes locks in this order: reservation row, then the key row (a hold that names a session only, `FOR NO KEY UPDATE`), then session scope row, then budget rows in ascending id (application sort), then that budget's `budget_periods` row and its grants (covered by the budget lock). The key lock is `FOR NO KEY UPDATE`, not `FOR UPDATE`, because a hold without a session inserts its reservation, and so checks the `reservations.key_id` foreign key (`FOR KEY SHARE` on the key row), while it holds its budget locks: a `FOR UPDATE` key lock would block that check and deadlock against the budget order. PostgreSQL: READ COMMITTED, one `SELECT ... FOR UPDATE` per budget in a loop in ascending id order (not a multi-row `ORDER BY ... FOR UPDATE`); retry the transaction on deadlock, at most 3 times. SQLite: `BEGIN IMMEDIATE` serialises writers; the code path is identical.
 - **Startup:** never mutates a hold. No global wipe. A restarted instance gets a new `owner_instance`; its previous holds stop being renewed and only the sweeper charges them when the lease runs out. Holds of live instances are protected by their `renew_all`.
 - **Lease:** default `ledger.lease_seconds = 60`, `ledger.heartbeat_seconds = 20`, one `renew_all` per instance (no per-stream timers). Worst-case money locked by a crash = hold x lease duration. A hung (not crashed) request is bounded by the request timeout, after which the owner settles it as `timeout`.
 - **Sweeper:** runs on every instance every `ledger.sweep_seconds` (default 30 = `lease/2`; `serve` and library mode both run it, `serve` also runs the daily retention job); correctness comes from the state guard, not from election; an advisory lock on PostgreSQL is only an optimisation. Batches of 100 ids, one transaction per reservation. It also normalises budgets whose grants expired since the last pass. Only the sweeper charges expired holds.
@@ -66,8 +66,11 @@ BEGIN                                  -- SQLite: BEGIN IMMEDIATE
     "scope_disabled", details.scope = its path); fail closed (ADR-0003)
  1. kill switches active for global / scope chain / key / provider (all candidates) / model
                                         -> ROLLBACK, kill_switch   (checks outside this tx are only a cache)
+    a key switch matches the key or any key it replaced by rotation (`replaces_key_id`, read in the
+    same batch; written once, so it never changes), so rotating a killed key keeps it killed (M-18)
  2. session (header present; key must have session_defaults, checked earlier -> invalid_request):
-    lock scope row; FIRST refuse session_limit_reached if it was closed by a limit, step_count >= max_steps,
+    lock the key row (serialises the new-session count and insert per key, M-20), then lock the
+    session scope row and count the key's sessions created in the last hour; FIRST refuse session_limit_reached if it was closed by a limit, step_count >= max_steps,
     or now - started_at > max_seconds (a session that hit any limit stays closed and keeps getting
     session_limit_reached); ONLY THEN, if idle (now - last_activity_at > idle_seconds): close it
     (closed_at = now), rename to name#<started_at>, and create a fresh row with the defaults (step_count 0,
@@ -87,10 +90,12 @@ BEGIN                                  -- SQLite: BEGIN IMMEDIATE
 COMMIT
 ```
 
- 6. (after step 4) no active budget applied to the chain (none exists, or all are disabled; a disabled
-    budget just stops applying)   -> ROLLBACK, forbidden (details.reason "no_budget"); no limit means
-    no protection, so it fails closed (ADR-0003). Checked after the loop, so a session row created in
-    step 2 is rolled back too.
+ 6. (in step 4, after the locks and before any verdict) no active budget on a non-session scope of
+    the chain applies (none exists, all are disabled, none matches the model, or only the session's
+    own budget is left; a disabled budget just stops applying) -> ROLLBACK, forbidden
+    (details.reason "no_budget"); no limit means no protection, so it fails closed (ADR-0003). A
+    session budget comes from the key's settings, so it only narrows the shared budgets and never
+    stands in for one (M-17, ADR-0030). A session row created in step 2 is rolled back too.
 
 **Session closes (scenario 9).** A refusal for a session limit writes the close
 (`closed_at` + `closed_reason`) in the same transaction, which commits only that. A steps or budget

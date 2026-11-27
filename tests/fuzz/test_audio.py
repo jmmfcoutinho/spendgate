@@ -7,8 +7,10 @@ real magic number in front.
 
 Invariants: `measure` raises only `AudioError` or returns a `Measured` whose duration is positive
 and at most `MAX_SECONDS`; it finishes in about 50 ms per MiB; an unmutated valid file with a known
-duration is never measured shorter than the truth (the guard must not under-bill); `estimate` on the
-same bytes returns only `Estimate` or `Refusal`, with audio seconds covering the measured duration.
+duration is never measured shorter than the truth (the guard must not under-bill); a valid file
+whose header fields are forged to claim less is still measured at least at the truth, or refused
+(M-16); `estimate` on the same bytes returns only `Estimate` or `Refusal`, with audio seconds
+covering the measured duration.
 """
 
 import time
@@ -25,6 +27,13 @@ from spendgate.core.errors import Refusal
 from spendgate.core.estimate import RequestKind, estimate
 from tests.fuzz.conftest import LONG, Case, run_fuzz
 from tests.unit import audio_builders as fx
+from tests.unit.test_audio_counted import (
+    forge_flac_total_samples,
+    forge_mp4_durations,
+    forge_ogg_every_granule,
+    forge_ogg_last_granule,
+    forge_wav_byte_rate,
+)
 
 # Allowed wall time: ~50 ms per MiB plus a flat allowance for interpreter noise on a busy laptop.
 _FLAT_S, _PER_MIB_S = 0.5, 0.05
@@ -38,7 +47,9 @@ class Valid:
     true_ms: Fraction  # the real duration, never to be under-measured
 
 
-def _entry(mode: str, meters: dict[str, object]) -> PriceEntry:
+def _entry(
+    mode: str, meters: dict[str, object], limits: dict[str, int] | None = None
+) -> PriceEntry:
     return PriceEntry.model_validate(
         {
             "id": "openai/fuzz-model",
@@ -48,6 +59,7 @@ def _entry(mode: str, meters: dict[str, object]) -> PriceEntry:
             "source_url": "https://example.com/p",
             "verified": False,
             "meters": meters,
+            "limits": limits,
         }
     )
 
@@ -56,6 +68,7 @@ MINUTES = _entry("transcription", {"audio_input_per_minute": "0.006"})
 TOKENS = _entry(
     "transcription",
     {"audio_input_per_mtok": "6", "input_per_mtok": "1.25", "output_per_mtok": "5"},
+    {"max_output_tokens": 2000},
 )
 
 
@@ -94,6 +107,46 @@ def valid_audio(draw: st.DrawFn) -> Valid:
         blocks = [100]
     truth = max(ticks or 0.0, float(blocks[-1]) if blocks else 0.0)
     return Valid(fx.webm(blocks, duration_ticks=ticks), "webm", Fraction(truth))
+
+
+@st.composite
+def forged_audio(draw: st.DrawFn) -> Valid:
+    """A valid file whose header fields claim less than it holds (only the labels change)."""
+    kind = draw(st.sampled_from(["flac", "mp4", "opus", "opus_all", "vorbis", "wav", "webm"]))
+    seconds = draw(st.integers(10, 600)) / 10
+    claim = draw(st.integers(0, 3))  # what the forged header says, in seconds
+    divisor = draw(st.integers(2, 5000))
+    if kind == "flac":
+        real = fx.flac(seconds, rate=8000)
+        return Valid(forge_flac_total_samples(real, claim * 8000), "flac", _truth(seconds, 8000))
+    if kind == "mp4":
+        forged = forge_mp4_durations(
+            fx.mp4(seconds), claim, timescale=draw(st.sampled_from([0, 90_000_000]))
+        )
+        return Valid(forged, "mp4", _truth(seconds, 44100))
+    if kind in ("opus", "opus_all"):
+        real = fx.ogg_opus(seconds)
+        forged = (
+            forge_ogg_last_granule(real, claim * 48000)
+            if kind == "opus"
+            else forge_ogg_every_granule(real, divisor)
+        )
+        return Valid(forged, "ogg", _truth(seconds, 48000))
+    if kind == "vorbis":
+        return Valid(
+            forge_ogg_every_granule(fx.ogg_vorbis(seconds), divisor), "ogg", _truth(seconds, 44100)
+        )
+    if kind == "wav":
+        return Valid(
+            forge_wav_byte_rate(fx.wav(seconds, 8000), divisor), "wav", _truth(seconds, 8000)
+        )
+    blocks = list(range(0, int(seconds * 1000), 10))  # 10 ms Opus packets, timecodes then zeroed
+    forged = fx.webm([0] * len(blocks), duration_ticks=float(claim * 1000) or None)
+    return Valid(forged, "webm", Fraction(len(blocks) * 10))
+
+
+def _truth(seconds: float, rate: int) -> Fraction:
+    return Fraction(int(seconds * rate), rate) * 1000
 
 
 @st.composite
@@ -198,6 +251,16 @@ def check_valid(valid: Valid) -> None:
     assert got[1] >= valid.true_ms, f"under-measured: {got[1]} ms < true {valid.true_ms} ms"
 
 
+def check_forged(forged: Valid) -> None:
+    got = _measure_checked(forged.data)
+    if got is None:
+        return  # refused: the forgery is not held at all, which is never below the truth
+    assert got[0] == forged.container
+    assert got[1] >= forged.true_ms, (
+        f"forged header lowered the measure: {got[1]} < {forged.true_ms}"
+    )
+
+
 def test_fuzz_audio() -> None:
     run_fuzz(
         "audio",
@@ -205,5 +268,6 @@ def test_fuzz_audio() -> None:
             Case("measure_raises_only_audio_error", audio_bytes, check_measure),
             Case("estimate_transcription", audio_bytes, check_estimate),
             Case("valid_file_never_under_measured", valid_audio(), check_valid),
+            Case("forged_header_never_lowers_the_measure", forged_audio(), check_forged),
         ],
     )

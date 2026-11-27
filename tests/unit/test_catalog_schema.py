@@ -176,6 +176,15 @@ MUTATIONS: dict[str, Mutation] = {
     "transcription per minute": by_mode("transcription", {"audio_input_per_minute": "1"}),
     "transcription per token": by_mode("transcription", {"audio_input_per_mtok": "1"}),
     "transcription neither": by_mode("transcription", {"input_per_mtok": "1"}),
+    "transcription output without a ceiling": by_mode(
+        "transcription", {"audio_input_per_mtok": "1", "output_per_mtok": "2"}
+    ),
+    "transcription reasoning without a ceiling": by_mode(
+        "transcription", {"audio_input_per_minute": "1", "reasoning_per_mtok": "2"}
+    ),
+    "transcription output with a ceiling": by_mode(
+        "transcription", {"audio_input_per_mtok": "1", "output_per_mtok": "2"}, keep_limits=True
+    ),
     "speech per chars": by_mode("speech", {"per_1k_characters": "1"}),
     "speech per audio token": by_mode("speech", {"audio_output_per_mtok": "1"}),
     "speech neither": by_mode("speech", {"input_per_mtok": "1"}),

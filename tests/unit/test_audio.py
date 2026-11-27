@@ -1,4 +1,4 @@
-"""Audio duration from bytes: exact per container, rounded up, never guessed (ported tests)."""
+"""Audio duration from bytes: counted per container, rounded up, never guessed (ported tests)."""
 
 import random
 import struct
@@ -48,22 +48,26 @@ def test_mp3_mostly_unparseable_is_rejected() -> None:
         measure(fx.mp3(5) + b"\x00" * 100_000)
 
 
-def test_ogg_opus_removes_pre_skip() -> None:
-    assert measure(fx.ogg_opus(4.0)).duration_ms == 4000
-    assert measure(fx.ogg_opus(4.0)).container == "ogg"
+def test_ogg_opus_counts_every_packet_the_decoder_decodes() -> None:
+    assert measure(fx.ogg_opus(4.0, pre_skip=0)).duration_ms == 4000
+    assert measure(fx.ogg_opus(4.0, pre_skip=0)).container == "ogg"
+    # The pre-skip and the end trim are the writer's numbers: every decoded packet is held.
+    assert measure(fx.ogg_opus(4.0)).duration_ms == 4020  # 201 packets of 20 ms
 
 
-def test_ogg_vorbis() -> None:
-    assert measure(fx.ogg_vorbis(5.0)).duration_ms == 5000
+def test_ogg_vorbis_holds_each_packet_at_half_the_long_block() -> None:
+    # 5 s at 44.1 kHz is 215.3 packets of 1024 samples: 216 are written and held.
+    assert measure(fx.ogg_vorbis(5.0)).duration_ms == 5016
 
 
-def test_flac_streaminfo() -> None:
+def test_flac_frames() -> None:
     assert measure(fx.flac(6.0)).duration_ms == 6000
     assert measure(fx.flac(6.0)).container == "flac"
 
 
-def test_mp4_movie_header_and_moov_first_or_last() -> None:
-    assert measure(fx.mp4(12.5)).duration_ms == 12500
+def test_mp4_aac_frames_and_moov_first_or_last() -> None:
+    # 12.5 s at 44.1 kHz is 538.3 frames of 1024 samples: 539 are written and held.
+    assert measure(fx.mp4(12.5)).duration_ms == 12516
     assert measure(fx.mp4(12.5, moov_last=False)).container == "mp4"
 
 
@@ -208,19 +212,26 @@ def test_mp4_version_one_headers_and_large_boxes() -> None:
     mvhd = _box(
         b"mvhd", b"\x01\x00\x00\x00" + struct.pack(">QQIQ", 0, 0, 1000, 7500) + b"\x00" * 80
     )
-    assert measure(_FTYP + _box(b"moov", mvhd, large=True)).duration_ms == 7500
+    moov = _box(b"moov", mvhd + fx.aac_track(10), large=True)
+    # A declared length above the counted frames raises the measure, never lowers it.
+    assert measure(_FTYP + moov + _box(b"mdat", b"\x00" * 80)).duration_ms == 7500
 
 
-def test_mp4_fragmented_needs_a_declared_total() -> None:
+def test_mp4_fragmented_counts_the_fragments() -> None:
     mvhd = _box(b"mvhd", b"\x00\x00\x00\x00" + struct.pack(">IIII", 0, 0, 1000, 0) + b"\x00" * 80)
-    mehd = _box(b"mehd", b"\x00\x00\x00\x00" + struct.pack(">I", 4000))
-    with pytest.raises(AudioError):
-        measure(_FTYP + _box(b"moov", mvhd + _box(b"mvex", b"")))
-    assert measure(_FTYP + _box(b"moov", mvhd + _box(b"mvex", mehd))).duration_ms == 4000
+    trex = _box(b"trex", b"\x00" * 4 + struct.pack(">IIIII", 1, 1, 1024, 8, 0))
+    moov = _box(b"moov", mvhd + fx.aac_track(0) + _box(b"mvex", trex))
+    tfhd = _box(b"tfhd", b"\x00\x00\x00\x00" + struct.pack(">I", 1))
+    trun = _box(b"trun", b"\x00\x00\x00\x00" + struct.pack(">I", 431))  # 431 frames: 10.0078 s
+    moof = _box(b"moof", _box(b"traf", tfhd + trun))
+    data = _FTYP + moov + moof + _box(b"mdat", b"\x00" * (8 * 431))
+    assert measure(data).duration_ms == 10008
+    with pytest.raises(AudioError):  # no fragment: nothing to decode
+        measure(_FTYP + moov)
 
 
-def test_mp4_unknown_duration_is_not_a_guess() -> None:
-    mvhd = _box(b"mvhd", b"\x00\x00\x00\x00" + struct.pack(">IIII", 0, 0, 0, 5) + b"\x00" * 80)
+def test_mp4_without_an_audio_track_is_rejected() -> None:
+    mvhd = _box(b"mvhd", b"\x00\x00\x00\x00" + struct.pack(">IIII", 0, 0, 1000, 5) + b"\x00" * 80)
     with pytest.raises(AudioError):
         measure(_FTYP + _box(b"moov", mvhd))
 
@@ -236,7 +247,7 @@ def test_ogg_without_a_sample_rate_or_final_position_is_rejected() -> None:
 def _webm_with(info: bytes, cluster_body: bytes) -> bytes:
     header = fx._ebml(b"\x1a\x45\xdf\xa3", fx._ebml(b"\x42\x82", b"webm"))
     cluster = fx._ebml(b"\x1f\x43\xb6\x75", cluster_body, unknown=True)
-    return header + fx._ebml(b"\x18\x53\x80\x67", info + cluster, unknown=True)
+    return header + fx._ebml(b"\x18\x53\x80\x67", info + fx.tracks() + cluster, unknown=True)
 
 
 def test_webm_block_duration_counts() -> None:
@@ -306,6 +317,8 @@ def test_t_aud_03_a_duration_beyond_24_hours_is_rejected_in_every_container() ->
         measure(fx.mp4(day + 10, timescale=1))
     with pytest.raises(AudioError):
         measure(fx.flac(day + 10, rate=1000))
+    with pytest.raises(AudioError):
+        measure(fx.ogg_opus(day + 10))
     # Matroska: a maximal 8-byte TimecodeScale makes any block a multi-year claim
     info = fx._ebml(b"\x15\x49\xa9\x66", fx._ebml(b"\x2a\xd7\xb1", b"\xff" * 8))
     with pytest.raises(AudioError):

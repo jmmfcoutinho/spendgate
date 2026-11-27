@@ -32,6 +32,8 @@ _MULTIPLIER = re.compile(r"(0\.[0-9]*[1-9][0-9]*|[1-9][0-9]*(\.[0-9]+)?)")
 _ID = re.compile(r"[a-z][a-z0-9_]*/[A-Za-z0-9][A-Za-z0-9._:/-]*")
 _REGION = re.compile(r"[a-z0-9-]+")
 _CHAT_MODES = ("chat", "responses", "messages")
+# Meters that bill reply tokens; the hold prices the output ceiling at the dearest of them.
+OUTPUT_METERS = ("output_per_mtok", "reasoning_per_mtok", "audio_output_per_mtok")
 
 
 def _decimal_string(pattern: re.Pattern[str]) -> BeforeValidator:
@@ -216,15 +218,22 @@ class PriceEntry(_Strict):
                 raise ValueError(f"{self.mode} needs limits.max_output_tokens")
         elif self.mode == "embedding" and m.input_per_mtok is None:
             raise ValueError("embedding needs input_per_mtok")
-        elif self.mode == "transcription" and (
-            m.audio_input_per_minute is None and m.audio_input_per_mtok is None
-        ):
-            raise ValueError("transcription needs audio_input_per_minute or audio_input_per_mtok")
+        elif self.mode == "transcription":
+            self._transcription_rules()
         elif self.mode == "speech" and (
             m.per_1k_characters is None and m.audio_output_per_mtok is None
         ):
             raise ValueError("speech needs per_1k_characters or audio_output_per_mtok")
         return self
+
+    def _transcription_rules(self) -> None:
+        m = self.meters
+        if m.audio_input_per_minute is None and m.audio_input_per_mtok is None:
+            raise ValueError("transcription needs audio_input_per_minute or audio_input_per_mtok")
+        # No request field bounds a transcript, so its hold rests on this limit alone (M-19).
+        billed = any(getattr(m, name) is not None for name in OUTPUT_METERS)
+        if billed and (self.limits is None or self.limits.max_output_tokens is None):
+            raise ValueError("transcription with an output meter needs limits.max_output_tokens")
 
 
 class _Settlement(_Strict):

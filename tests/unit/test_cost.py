@@ -70,6 +70,7 @@ models:
       audio_input_per_mtok: "7.92"
       input_per_mtok: "3.30"
       output_per_mtok: "13.20"
+    limits: { max_output_tokens: 2000 }
   - id: elevenlabs/eleven_flash_v2_5
     mode: speech
     currency: USD

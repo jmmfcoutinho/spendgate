@@ -134,6 +134,17 @@
           "then": { "properties": { "meters": { "anyOf": [{ "required": ["audio_input_per_minute"] }, { "required": ["audio_input_per_mtok"] }] } } }
         },
         {
+          "description": "A transcription that bills output tokens is held at limits.max_output_tokens: no request field bounds the transcript (M-19).",
+          "if": {
+            "required": ["mode", "meters"],
+            "properties": {
+              "mode": { "const": "transcription" },
+              "meters": { "anyOf": [{ "required": ["output_per_mtok"] }, { "required": ["reasoning_per_mtok"] }, { "required": ["audio_output_per_mtok"] }] }
+            }
+          },
+          "then": { "required": ["limits"], "properties": { "limits": { "required": ["max_output_tokens"] } } }
+        },
+        {
           "if": { "properties": { "mode": { "const": "speech" } } },
           "then": { "properties": { "meters": { "anyOf": [{ "required": ["per_1k_characters"] }, { "required": ["audio_output_per_mtok"] }] } } }
         }

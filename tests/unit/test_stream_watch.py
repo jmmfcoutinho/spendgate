@@ -39,3 +39,11 @@ def test_session_time_stops_a_stream_only_after_the_deadline_passes() -> None:
 def test_a_kill_switch_wins_over_the_session_clock() -> None:
     timed = StreamFacts(FACTS.key, FACTS.chain_scope_ids, FACTS.model, "openai", 0)
     assert stop_reason(timed, [KillSwitch(KillTarget.GLOBAL)], now=9) is StopReason.KILL_SWITCH
+
+
+def test_m18_a_key_switch_on_a_key_the_stream_key_replaced_stops_it() -> None:
+    rotated = StreamFacts(
+        FACTS.key, FACTS.chain_scope_ids, FACTS.model, "openai", None, key_lineage=("key-0",)
+    )
+    assert stop_reason(rotated, [KillSwitch(KillTarget.KEY, "key-0")], 0) is StopReason.KILL_SWITCH
+    assert stop_reason(FACTS, [KillSwitch(KillTarget.KEY, "key-0")], now=0) is None

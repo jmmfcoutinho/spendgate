@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from starlette.responses import Response
 
+from spendgate.config.schema import DEFAULT_NEW_SESSIONS_PER_HOUR
 from spendgate.core.budgets import ScopeKind
 from spendgate.core.errors import ErrorCode
 from spendgate.core.policy import KeyPolicy
@@ -25,7 +26,7 @@ from spendgate.gateway.admin_models import (
     ScopeUpdateIn,
     SessionDefaultsIn,
 )
-from spendgate.ledger.key_types import KeyKind, KeyRecord, KeySpec
+from spendgate.ledger.key_types import AdminScope, KeyKind, KeyRecord, KeySpec
 from spendgate.ledger.port import NotFoundError, ScopeRow
 
 _MS = 1_000
@@ -125,10 +126,43 @@ def _sessions(body: SessionDefaultsIn | None, required: bool) -> SessionDefaults
     return SessionDefaults(**body.model_dump(), required=required)
 
 
+def _session_room_grows(
+    before: SessionDefaults | None, after: SessionDefaults | None
+) -> str | None:
+    """The field by which `after` lets sessions spend more than `before`, or None.
+
+    That is a session budget set or raised, or `max_new_sessions_per_hour` lifted or raised. A key
+    without session defaults counts as the defaults a new key gets: no session budget, 60 an hour.
+    """
+    if after is None:
+        return None
+    old_budget = before.budget_nano if before else None
+    old_rate = before.max_new_sessions_per_hour if before else DEFAULT_NEW_SESSIONS_PER_HOUR
+    new_budget, new_rate = after.budget_nano, after.max_new_sessions_per_hour
+    if new_budget is not None and (old_budget is None or new_budget > old_budget):
+        return "session_defaults.budget_nano"
+    if old_rate is not None and (new_rate is None or new_rate > old_rate):
+        return "session_defaults.max_new_sessions_per_hour"
+    return None
+
+
+def _check_session_room(
+    call: Call, before: SessionDefaults | None, after: SessionDefaults | None
+) -> None:
+    """`keys:write` alone may only narrow what sessions can spend; more needs `budgets:write`
+    as well (ADR-0030), so the key-issuing role cannot hand out spend room."""
+    if AdminScope.BUDGETS_WRITE in call.principal.admin_scopes:
+        return
+    if (field := _session_room_grows(before, after)) is not None:
+        raise ApiError(ErrorCode.FORBIDDEN, "This key may not do that.", field)
+
+
 async def create_key(call: Call) -> Response:
     body = await call.body(KeyCreateIn)
     scope = await need_scope(call, body.scope_id)
     limits = body.limits or KeyLimitsIn()
+    sessions = _sessions(body.session_defaults, body.session_required)
+    _check_session_room(call, None, sessions)
     spec = KeySpec(
         scope.id,
         body.name or "key",
@@ -139,7 +173,7 @@ async def create_key(call: Call) -> Response:
         limits.rpm,
         limits.tpm,
         limits.max_concurrent,
-        _sessions(body.session_defaults, body.session_required),
+        sessions,
         expires_at=body.expires_at,
     )
     made = await call.ctx.keys.create_key(spec, actor=call.actor, now=call.now)
@@ -211,8 +245,10 @@ async def update_key(call: Call) -> Response:
     given = body.model_fields_set
     record = current
     if given & {"name", "allowed_models", "limits", "session_defaults", "session_required"}:
+        policy = _patched_policy(current.policy, body)
+        _check_session_room(call, current.policy.session_defaults, policy.session_defaults)
         record = await call.ctx.keys.set_key_policy(
-            _patched_policy(current.policy, body),
+            policy,
             name=body.name,
             actor=call.actor,
             now=call.now,

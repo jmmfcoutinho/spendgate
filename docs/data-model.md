@@ -297,7 +297,7 @@ match both spellings.
 
 | Topic | SQLite | PostgreSQL |
 |---|---|---|
-| Write serialisation | `BEGIN IMMEDIATE` (one writer, WAL) | `BEGIN` + one `SELECT ... FOR UPDATE` per budget row in ascending id order, READ COMMITTED |
+| Write serialisation | `BEGIN IMMEDIATE` (one writer, WAL) | `BEGIN` + one `SELECT ... FOR UPDATE` per budget row in ascending id order, READ COMMITTED; a hold that names a session first takes `SELECT ... FOR NO KEY UPDATE` on its key row, so new sessions of one key are counted and created one at a time |
 | Foreign keys | `PRAGMA foreign_keys=ON` per connection | always on |
 | `BIGINT` | alias of 64-bit `INTEGER` | `int8` |
 | Audit immutability | the two triggers in the DDL (`RAISE(ABORT)`) | equivalent `BEFORE UPDATE OR DELETE` trigger raising an exception, plus `REVOKE UPDATE, DELETE` for the app role (migration file) |

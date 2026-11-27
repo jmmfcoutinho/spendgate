@@ -117,6 +117,23 @@ class Model:
     retires: str | None = None  # retirement schedule date, the catalog `deprecation_date`
     long_context: bool = False  # Azure sells short- and long-context meters for it
     retired_types: tuple[str, ...] = ()  # deployment types Microsoft has already retired
+    limits_note: str | None = None  # where `max_output` comes from when not Microsoft's page
+
+
+# A token-billed transcript is held at its output limit (M-19). Microsoft's models page was not
+# checked for these, so they carry the limit OpenAI documents for the same model.
+_TRANSCRIPT_TOKENS = 2000
+
+
+def _transcribe(name: str, retires: str) -> Model:
+    note = (
+        f"max_output_tokens: the {_TRANSCRIPT_TOKENS} OpenAI documents for {name}, not verified"
+        " on Microsoft's models page."
+    )
+    tokens = _TRANSCRIPT_TOKENS
+    return Model(
+        name, "transcription", "transcribe_tokens", tokens, None, retires, limits_note=note
+    )
 
 
 def _text(  # noqa: PLR0913 - one table row
@@ -175,9 +192,9 @@ MODELS: tuple[Model, ...] = (
     Model("text-embedding-3-small", "embedding", "embedding", retires="2028-02-09"),
     Model("text-embedding-ada-002", "embedding", "embedding", retires="2028-02-09"),
     Model("gpt-transcribe", "transcription", "transcribe_minutes", retires="2028-02-01"),
-    Model("gpt-4o-transcribe", "transcription", "transcribe_tokens", retires="2027-02-26"),
-    Model("gpt-4o-mini-transcribe", "transcription", "transcribe_tokens", retires="2027-06-15"),
-    Model("gpt-4o-transcribe-diarize", "transcription", "transcribe_tokens", retires="2027-04-15"),
+    _transcribe("gpt-4o-transcribe", "2027-02-26"),
+    _transcribe("gpt-4o-mini-transcribe", "2027-06-15"),
+    _transcribe("gpt-4o-transcribe-diarize", "2027-04-15"),
     Model("tts", "speech", "speech_characters", retires="2026-12-15"),
     Model("tts-hd", "speech", "speech_characters", retires="2026-12-15"),
 )
@@ -669,7 +686,8 @@ HEADER_TEXT = (
     " Priority,"
     " Flex, provisioned, fine-tuned, Realtime, image and audio chat meters are not imported. Long"
     " context: OpenAI's threshold (272K input; Microsoft's models page says Azure uses OpenAI's),"
-    " multipliers from Azure's long-context meters. Limits: Microsoft Foundry models page;"
+    " multipliers from Azure's long-context meters. Limits: Microsoft Foundry models page"
+    " (token-billed transcription: OpenAI's documented output limit, see each note);"
     f" deprecation_date: the model retirement schedule (both read {READ_ON})."
 )
 HEADER = tuple(f"  # {line}" for line in textwrap.wrap(HEADER_TEXT, width=112))
@@ -684,6 +702,8 @@ def entry_lines(entry: Entry, checked_on: date) -> list[str]:
         note = (
             f"Azure Retail Prices API, {label}: the same price in all {entry.of_regions} Regions."
         )
+    if model.limits_note is not None:
+        note = f"{note} {model.limits_note}"
     lines = [
         f"  - id: {catalog_id(entry)}",
         f"    mode: {model.mode}",
@@ -704,7 +724,9 @@ def entry_lines(entry: Entry, checked_on: date) -> list[str]:
             f'input_multiplier: "{long[0]}", output_multiplier: "{long[1]}" }}'
         )
     if model.max_output is not None:
-        limits = f"max_output_tokens: {model.max_output}, context_window: {model.context}"
+        limits = f"max_output_tokens: {model.max_output}"
+        if model.context is not None:
+            limits += f", context_window: {model.context}"
         lines.append(f"    limits: {{ {limits} }}")
     if model.retires is not None:
         lines.append(f'    deprecation_date: "{model.retires}"')

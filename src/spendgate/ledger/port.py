@@ -146,6 +146,7 @@ class Held:
     warnings: tuple[SoftWarning, ...] = ()
     alerts: tuple[BudgetAlert, ...] = ()  # soft-threshold crossings this hold made, once per period
     rooms: tuple[BudgetRoom, ...] = ()  # each held budget after this hold
+    key_lineage: tuple[str, ...] = ()  # keys the held key replaced: their kill switches apply
 
 
 @dataclass(frozen=True, slots=True)

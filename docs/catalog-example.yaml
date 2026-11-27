@@ -127,7 +127,9 @@ models:
     note: "Data-zone meter 1.122 USD/h."
     meters: { audio_input_per_minute: "0.0187" }
   # Per-token audio (usage reports audio-in, text-in, text-out). audio_input_per_minute is the
-  # fallback when the reply carries no usage and the reservation basis; it is also a rate.
+  # fallback when the reply carries no usage and the reservation basis; it is also a rate. The
+  # transcript is billed per output token and no request field bounds it, so an output meter needs
+  # limits.max_output_tokens, the model's own limit, which the hold takes in full (M-19).
   - id: azure_openai/gpt-4o-transcribe
     mode: transcription
     currency: USD
@@ -140,6 +142,7 @@ models:
       audio_input_per_mtok: "7.92"
       input_per_mtok: "3.30"
       output_per_mtok: "13.20"
+    limits: { max_output_tokens: 2000 }
   - id: azure_openai/gpt-4o-mini-transcribe
     mode: transcription
     currency: USD
@@ -152,6 +155,7 @@ models:
       audio_input_per_mtok: "3.96"
       input_per_mtok: "1.65"
       output_per_mtok: "6.60"
+    limits: { max_output_tokens: 2000 }
   - id: azure_speech/azure-speech
     mode: transcription
     currency: USD

@@ -7,6 +7,7 @@ import time
 from datetime import UTC, datetime
 from decimal import Decimal
 from importlib import resources
+from pathlib import Path
 
 import pytest
 import yaml
@@ -98,6 +99,37 @@ def test_bundled_prices_cover_only_known_providers_and_every_chat_entry_has_a_ce
         assert e.provider in PROVIDERS
         if e.mode in ("chat", "responses", "messages"):
             assert e.limits is not None and e.limits.max_output_tokens
+
+
+OUTPUT_METERS = ("output_per_mtok", "reasoning_per_mtok", "audio_output_per_mtok")
+EXAMPLE = Path(__file__).parents[2] / "docs" / "catalog-example.yaml"
+
+
+@pytest.mark.parametrize("text", [bundled_text(), EXAMPLE.read_text(encoding="utf-8")])
+def test_m19_every_transcription_entry_with_an_output_meter_has_a_ceiling(text: str) -> None:
+    catalog = parse([yaml.safe_load(text)], SHA, ledger_currency="USD")
+    token_billed = [
+        e
+        for e in catalog.entries()
+        if e.mode == "transcription" and any(getattr(e.meters, m) for m in OUTPUT_METERS)
+    ]
+    assert token_billed  # the gpt-4o-transcribe family bills its transcript per token
+    for e in token_billed:
+        assert e.limits is not None and e.limits.max_output_tokens, e.id
+
+
+@pytest.mark.parametrize("meter", OUTPUT_METERS)
+def test_m19_a_transcription_with_an_output_meter_needs_a_ceiling(meter: str) -> None:
+    meters = {"audio_input_per_mtok": "6", meter: "10"}
+    with pytest.raises(CatalogError, match=r"output meter needs limits\.max_output_tokens"):
+        build(doc(entry(mode="transcription", meters=meters, limits=None)))
+    with pytest.raises(CatalogError, match=r"output meter needs limits\.max_output_tokens"):
+        build(doc(entry(mode="transcription", meters=meters, limits={"context_window": 9})))
+    held = build(doc(entry(mode="transcription", meters=meters)))
+    (only,) = held.entries()
+    assert only.limits is not None and only.limits.max_output_tokens == 1000
+    minutes = build(doc(entry(mode="transcription", meters={"audio_input_per_minute": "1"})))
+    assert len(minutes.entries()) == 1  # no output meter: no ceiling needed
 
 
 # The most one image can bill, per provider, from each provider's vision docs (read 2026-11-22).

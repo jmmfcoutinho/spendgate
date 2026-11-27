@@ -201,3 +201,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0026](adr/0026-elevenlabs-language-code.md): ElevenLabs speech accepts a validated ISO 639-1 `language_code`.
 - [ADR-0027](adr/0027-admin-network.md): the admin API on its own Compose network, which only the operator service joins.
 - [ADR-0028](adr/0028-price-coverage-and-regional-prices.md): price coverage, Region-scoped catalog entries (`regions`), one price per route, and how the catalog stays current.
+- [ADR-0029](adr/0029-audio-duration-is-counted.md): audio duration is counted from the packets a decoder decodes, never read from the container header; a size floor backs the count.

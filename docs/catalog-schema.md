@@ -42,7 +42,7 @@ uvx check-jsonschema --schemafile src/spendgate/catalog/schema.json docs/catalog
 | | `price_multiplier` | decimal > 0, default `"1"` | no | Applied to every meter, for example Data Zone over Global |
 | Meters | `meters` | object, at least one | yes | See below; all members optional, subject to mode rules |
 | Long context | `long_context` | `threshold_input_tokens`, `input_multiplier`, `output_multiplier` | no | Per model, never global |
-| Limits | `limits.max_output_tokens` | int | **yes** for chat, responses, messages | Last link of the output-ceiling precedence (request, key, catalog; none means refuse, protocol 2.1); used by worst-case estimation. The Alpha/Terra/Sol seed uses the guard's `MAX_OUTPUT_TOKENS_LIMIT` (64000) as the documented ceiling, `verified: false` |
+| Limits | `limits.max_output_tokens` | int | **yes** for chat, responses, messages, and for a transcription with an output meter (`output_per_mtok`, `reasoning_per_mtok` or `audio_output_per_mtok`) | Last link of the output-ceiling precedence (request, key, catalog; none means refuse, protocol 2.1); used by worst-case estimation. A token-billed transcription is held at this value alone: no transcription request field bounds the transcript, so it must be the model's documented output limit ([ADR-0031](adr/0031-transcription-output-ceiling.md), M-19). The Alpha/Terra/Sol seed uses the guard's `MAX_OUTPUT_TOKENS_LIMIT` (64000) as the documented ceiling, `verified: false` |
 | | `limits.context_window` | int | no | Request validation |
 | | `limits.max_image_tokens` | int | no | Input tokens the hold assumes for each image part: the most the model bills for one image at any detail level a client can request, plus a margin. Unset means the conservative default of 61,000 (the largest per-image cost a provider documents, 48,169, plus 25 percent). Set it only to lower the hold, citing the provider page and the date it was read in the entry's `note` or a comment above the entry (M-14). `tests/unit/test_catalog.py` keeps a per-provider minimum table that every bundled entry must meet |
 | Lifecycle | `deprecation_date` | date | no | First day the model is refused (set it to the provider's shutdown date) |
@@ -71,7 +71,8 @@ audio counters are separate), so no token is billed twice. An unknown audio/text
 job to resolve to the dearer meter.
 
 Mode rules (enforced by the schema): chat/responses/messages need `input_per_mtok` and `output_per_mtok`;
-embedding needs `input_per_mtok`; transcription needs `audio_input_per_minute` or `audio_input_per_mtok`;
+embedding needs `input_per_mtok`; transcription needs `audio_input_per_minute` or `audio_input_per_mtok`,
+and `limits.max_output_tokens` when it has an output meter (the transcript is billed per token, M-19);
 speech needs `per_1k_characters` or `audio_output_per_mtok`. A transcription model with both minute
 and token meters (gpt-4o-transcribe) uses tokens when the reply reports usage and the minute rate for
 the reservation and when usage is missing.

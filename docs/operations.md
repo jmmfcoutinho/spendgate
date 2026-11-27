@@ -121,7 +121,14 @@ rollback-safe ships at most one migration, and marks it compatible.
   that copy holds the secret too: delete it there, or rotate the key.
 - **Rotate** with no downtime: `spendgate keys rotate KEY_ID --grace-seconds 3600`. It issues a
   replacement with the same settings; the old key keeps working for the grace period (default one
-  hour, at most seven days), so you can roll the new one out first.
+  hour, at most seven days), so you can roll the new one out first. A key kill switch on the old
+  key also stops the replacement (see [kill switch](#kill-switch)).
+- **Session limits and admin scopes.** An admin key with `keys:write` may create and change keys,
+  but setting or raising a key's session budget (`session_defaults.budget_nano`), or raising
+  `max_new_sessions_per_hour` or setting it to `null`, also needs `budgets:write`; lowering them
+  does not. A session budget never replaces a real budget: put a budget on the key's scope or an
+  ancestor, or every call on the key is refused `no_budget`
+  ([ADR-0030](adr/0030-session-budgets-only-narrow.md)).
 - **Revoke** now: `spendgate keys revoke KEY_ID`. List with `spendgate keys list`; secrets are
   never shown.
 - **Provider keys** live in the proxy's environment or secret files (`env:` and `file:` references).
@@ -145,6 +152,11 @@ spendgate kill off SWITCH_ID
 
 A provider-level switch refuses only when every candidate deployment of the model is killed, so
 other deployments keep serving.
+
+A key switch also stops every key that replaces that key by rotation, so rotating a killed key
+does not lift it; lifting the one switch lifts it for the whole chain. It stops credentials, not a
+scope: an admin with `keys:write` can still create a new key on the same scope. To stop a scope
+whatever key it uses, kill the scope.
 
 A kill switch, the global one included, never changes `/readyz`. The switch lives in the shared
 ledger, so an unready answer would take every replica out of the load balancer at once and clients
@@ -578,7 +590,9 @@ call and for events such as `sweep_failed`. Only an allowlist of fields can appe
 budget-warning fields below (`budget_id`, `scope_kind`, `period`, `period_start`, `spent`, `cap`),
 and `reloaded` and `changed` for [secret reloads](#rotating-secrets). Prompts, response bodies,
 headers and secrets are never logged: a field not on the list is dropped, and strings shaped like
-keys are dropped too.
+keys are dropped too. `spendgate serve` writes no HTTP access log: the call line replaces it, and an
+access log would record each request target with its query string, where some clients put a key.
+uvicorn's own start, stop and error lines stay, as plain text on stderr.
 Refused requests write a log line but no call row. `fail_open` opt-outs are logged as warnings at
 start.
 

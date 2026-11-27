@@ -338,7 +338,11 @@ D: dict[str, str] = {
         "`PATCH /admin/v1/keys/{key_id}` for existing keys (`migrate --bootstrap` warns when "
         "an existing key differs)."
     ),
-    "SessionDefaultsSpec.budget": "Cap of one session, inside the shared budgets.",
+    "SessionDefaultsSpec.budget": (
+        "Cap of one session, inside the shared budgets. It only narrows them: a key whose scope "
+        "chain has no other budget is refused (`no_budget`) even when its sessions have a budget "
+        "([ADR-0030](adr/0030-session-budgets-only-narrow.md))."
+    ),
     "SessionDefaultsSpec.max_steps": "Most requests in one session.",
     "SessionDefaultsSpec.max_seconds": "Wall-clock limit from the first call of a session.",
     "SessionDefaultsSpec.idle_seconds": (

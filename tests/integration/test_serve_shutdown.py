@@ -1,6 +1,7 @@
 """`serve` hands each listener's address, keep-alive and drain deadline to uvicorn (ADR-0015)."""
 
 import asyncio
+import logging
 import signal
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from spendgate.cli.runtime import open_runtime
 from spendgate.config import ConfigError, Settings, load
 from spendgate.config.schema import Server
 from spendgate.core.outcomes import Outcome, ReservationState
+from spendgate.pipeline.alerts import BUDGET_LOGGER
 from tests.fakes import Script
 from tests.integration.harness import (
     CATALOG_OVERRIDE,
@@ -71,6 +73,35 @@ async def test_server_keep_alive_and_graceful_shutdown_reach_both_uvicorn_listen
     for config in (data, admin):
         assert (config.timeout_keep_alive, config.timeout_graceful_shutdown) == (91, 17)
     assert (data.lifespan, admin.lifespan) == ("on", "off")
+
+
+class _Watched(logging.Handler):
+    """Records whether anything closed it, as `logging.config.dictConfig` closes every handler."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.was_closed = False
+
+    def close(self) -> None:
+        self.was_closed = True
+        super().close()
+
+
+@async_test
+async def test_serve_leaves_spendgate_logging_alone_and_writes_no_access_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """T-LOG-05: uvicorn must not reconfigure logging; that closed the budget webhook at start.
+
+    Its access log is off too: it wrote each request target, query string included.
+    """
+    watched, budget = _Watched(), logging.getLogger(BUDGET_LOGGER)
+    monkeypatch.setattr(budget, "handlers", [watched])
+    extra = 'admin: {listen: "127.0.0.1:9090"}'
+    built = await _configs_built(tmp_path, monkeypatch, extra)
+    assert len(built) == 2 and not watched.was_closed
+    assert all(c.log_config is None and c.access_log is False for c in built)
+    assert logging.getLogger("uvicorn").handlers  # uvicorn's own start and error lines remain
 
 
 @async_test

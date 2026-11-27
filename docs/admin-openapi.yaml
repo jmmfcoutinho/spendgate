@@ -154,7 +154,11 @@ paths:
       operationId: createKey
       x-required-scope: keys:write
       summary: Create a virtual key
-      description: The full `sg-<prefix>-<secret>` value is returned once, in `secret`; only its hash is stored.
+      description: >-
+        The full `sg-<prefix>-<secret>` value is returned once, in `secret`; only its hash is stored.
+        Setting `session_defaults.budget_nano`, or `max_new_sessions_per_hour` above 60 or to `null`,
+        also needs `budgets:write`; without it the answer is `forbidden` (403) with `param` naming the
+        field (ADR-0030).
       requestBody:
         required: true
         content:
@@ -186,6 +190,12 @@ paths:
       operationId: updateKey
       x-required-scope: keys:write
       summary: Change allowed models, limits, session defaults or expiry
+      description: >-
+        Setting or raising `session_defaults.budget_nano`, or raising `max_new_sessions_per_hour` or
+        setting it to `null`, also needs `budgets:write` (`forbidden` with `param` naming the field
+        otherwise; ADR-0030). The change is compared with the stored value; a key without session
+        defaults counts as no session budget and 60 new sessions an hour. Lowering needs only
+        `keys:write`.
       requestBody:
         required: true
         content:
@@ -219,6 +229,9 @@ paths:
       operationId: rotateKey
       x-required-scope: keys:write
       summary: Issue a replacement key with the same settings; the old key stays valid for a grace period
+      description: >-
+        A `key` kill switch on the old key also applies to the replacement, and to every later
+        replacement of it (ADR-0030); lifting that one switch lifts it for all of them.
       requestBody:
         content:
           application/json:
@@ -365,7 +378,7 @@ paths:
       operationId: engageKillSwitch
       x-required-scope: budgets:write
       summary: Engage a kill switch (global, scope, key, provider or model)
-      description: Targets `global`, `scope`, `key`, `provider`, `model`; `target_ref` is omitted for global, a scope ULID or path, a key id, a provider slug or a catalog model id. New calls fail with `kill_switch` (checked in the admission transaction); in-flight streams end at the next event.
+      description: Targets `global`, `scope`, `key`, `provider`, `model`; `target_ref` is omitted for global, a scope ULID or path, a key id, a provider slug or a catalog model id. A `key` switch also covers every key that replaces that key by rotation (ADR-0030). New calls fail with `kill_switch` (checked in the admission transaction); in-flight streams end at the next event.
       requestBody:
         required: true
         content:
@@ -568,7 +581,9 @@ components:
         limits are not enforced, except `max_new_sessions_per_hour`, which is 60 when absent from a
         request body; send `null` to remove that bound. A key in a response always carries
         `max_new_sessions_per_hour` (`null` when unbounded), so sending back what a GET returned
-        keeps the stored value.
+        keeps the stored value. `budget_nano` only narrows: a call is admitted only when a budget on
+        a non-session scope of the key's chain applies, else `forbidden` with `details.reason`
+        `no_budget` (ADR-0030).
       additionalProperties: false
       properties:
         budget_nano: {type: integer, minimum: 0}

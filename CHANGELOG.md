@@ -6,11 +6,84 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-27
+
+A security release. Upgrade every gateway: four advisories are fixed (below), and budget-warning
+webhooks are delivered again.
+
+**Upgrading from 0.4.0:** no migration is needed, but four things can change what a running gateway
+does.
+
+- **Every key needs a real budget on its scope chain.** A session's own budget no longer counts as
+  one. If a key's only limit was `session_defaults` `budget_nano`, every call on it, with or without
+  `X-Spendgate-Session`, is now refused `forbidden` (`no_budget`). Before upgrading, add a budget on
+  the key's scope or an ancestor (`spendgate budgets set <scope> --cap ...`); session budgets keep
+  narrowing it (ADR-0030).
+- **Session budgets need `budgets:write`.** An admin key with `keys:write` but not `budgets:write`
+  can no longer create keys with a session budget or a looser new-session bound, nor raise them;
+  lowering still needs only `keys:write`. Rotating a killed key now yields a killed key: lift the
+  switch first if you meant to hand out a working replacement (ADR-0030).
+- **Some audio uploads are refused.** Transcription files are measured by counting their audio
+  (ADR-0029). MP4 audio other than AAC, WAV other than PCM, float, A-law or mu-law, WebM/Matroska
+  audio other than Opus or Vorbis, and files whose headers disagree with their contents are refused
+  `invalid_request` (`param` `file`) instead of measured.
+- **Token-billed transcription entries need an output ceiling.** A custom catalog entry with `mode:
+  transcription` and an output meter (`output_per_mtok`, `reasoning_per_mtok` or
+  `audio_output_per_mtok`) needs `limits.max_output_tokens`, or the catalog does not load. Holds for
+  these models grow by that limit at the output price (ADR-0031).
+
 ### Security
 
+- Transcription holds could be far below the provider's bill (GHSA-746r-67rq-v763). For FLAC,
+  MP4/M4A, Ogg, WAV and WebM uploads the duration was read from fields the file declares about
+  itself, which the caller controls, while the provider bills the audio it decodes. A file whose
+  header understated its length was held at a small fraction of its cost, so calls could be admitted
+  on budgets that could not pay for them; the full charge was booked afterwards as overrun. The
+  duration is now counted from the audio itself (packets, frames, sample tables, PCM bytes), a
+  declared length can only raise it, and a size check refuses files holding more audio than their
+  counted length can carry (ADR-0029, money rule M-16). Affects every release since 0.1.0. Until
+  upgraded, do not allow transcription models on keys used by untrusted callers.
+- A session budget no longer counts as a budget (GHSA-wwcc-q273-7g4j). Admission admitted a call
+  when the only budget on its key's scope chain was the session's own budget, which comes from the
+  key's `session_defaults` and could be set with `keys:write` alone. An admin key with only
+  `keys:write` could therefore create a scope with no budget and a key whose sessions had a large
+  budget, and spend without limit by naming new sessions. A call is now admitted only when a budget
+  on a non-session scope of the key's chain applies; otherwise it is refused `forbidden` with
+  `details.reason` `no_budget`. Setting or raising `session_defaults.budget_nano`, or raising
+  `max_new_sessions_per_hour` or setting it to `null`, now also needs `budgets:write` (M-17,
+  ADR-0030).
+- Rotating a key no longer lifts its key kill switch (GHSA-wwcc-q273-7g4j). A `key` kill switch now
+  applies to the key and to every key that replaces it by rotation, open streams included; lifting it
+  lifts it for all of them. A key switch stops a credential, not a scope: a `keys:write` holder can
+  still create a new key on the same scope, which a `scope` switch stops (M-18, ADR-0030).
+- Token-billed transcription (Azure OpenAI gpt-4o-transcribe, gpt-4o-mini-transcribe,
+  gpt-4o-transcribe-diarize) now holds its transcript (GHSA-hcm8-vrj6-w6jx). The hold covered only
+  the audio and the prompt, so every call could settle above it by up to the model's output limit.
+  The hold now takes the entry's `limits.max_output_tokens` in full, whatever the key sets, because
+  no transcription request field bounds the transcript; the bundled entries carry OpenAI's 2,000
+  tokens (M-19, ADR-0031).
+- `max_new_sessions_per_hour` is enforced under concurrency on PostgreSQL (GHSA-773v-hmv2-87vp).
+  Concurrent calls opening new sessions on one key could each pass the hourly count and create more
+  sessions than allowed. New-session admission now locks the key row before counting. SQLite was not
+  affected (M-20, T-SESS-10).
+- `spendgate serve` writes no HTTP access log. uvicorn's access log recorded each request target with
+  its query string, where some clients put a key; each call's own JSON line replaces it, and
+  uvicorn's start, stop and error lines stay on stderr (T-LOG-05).
+- Container image: glibc (`libc6`, `libc-bin`) is upgraded to Debian's fix for CVE-2026-18374,
+  CVE-2026-19499, CVE-2026-19542 and CVE-2026-5435, which the pinned `python:3.13-slim` digest
+  predates.
 - The daily price watch reads the Google Pricing API key from the `price-watch` environment, which only
   `main` may use, instead of a repository secret: a workflow changed on another branch can no longer
   read it, even when started by hand (#109).
+
+### Fixed
+
+- Budget-warning webhooks are delivered again. Since 0.2.0, `spendgate serve` counted every warning
+  as `spendgate_alert_webhooks_total{result="dropped"}` and posted none: uvicorn reconfigured logging
+  at start, which closed the webhook handler, and the handler took that as its own "stopped" flag.
+  The flag has its own name, and `serve` no longer lets uvicorn reconfigure logging. If you alert on
+  `dropped`, as `docs/operations.md` recommends, you saw this; the ledger and `spendgate status` were
+  always right.
 
 ## [0.4.0] - 2026-11-27
 

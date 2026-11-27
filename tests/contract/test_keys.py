@@ -15,13 +15,14 @@ import pytest
 
 from spendgate.core.budgets import ScopeKind
 from spendgate.core.errors import ErrorCode, Refusal
-from spendgate.core.policy import KeyPolicy
+from spendgate.core.policy import KeyPolicy, KillSwitch, KillTarget
 from spendgate.core.sessions import SessionDefaults
 from spendgate.ledger.key_types import AdminScope, KeyKind, KeySpec, NewKey, Principal
 from spendgate.ledger.keys import KeyService
 from spendgate.ledger.port import ConflictError, Held, NotFoundError
 from spendgate.ledger.sql import Value
 from tests.contract.rig import T0, E, Rig
+from tests.contract.test_ledger import refusal_of
 
 PEPPER = b"test-pepper-0123456789abcdef"
 TTL_MS = 5_000
@@ -183,6 +184,52 @@ def test_a_revoked_key_cannot_be_rotated(rig: Rig) -> None:
     rig.run(svc.revoke_key(made.record.id, actor="admin", now=T0))
     with pytest.raises(ConflictError):
         rig.run(svc.rotate_key(made.record.id, grace_ms=GRACE_MS, actor="admin", now=T0))
+
+
+# --- M-18: a rotated key inherits its key kill switch (ADR-0030) -----------------------------
+
+
+def test_m18_a_rotated_key_inherits_its_key_kill_switch(rig: Rig) -> None:
+    svc = service(rig)
+    world = rig.world("100")
+    made = api_key(rig, svc, world.scope.id)
+    switch = KillSwitch(KillTarget.KEY, made.record.id)
+    switch_id = rig.run(rig.ledger.engage_kill_switch(switch, actor="a", reason="r", now=T0))
+    fresh = rig.run(svc.rotate_key(made.record.id, grace_ms=GRACE_MS, actor="k", now=T0))
+    again = rig.run(svc.rotate_key(fresh.record.id, grace_ms=GRACE_MS, actor="k", now=T0))
+    for n, key in enumerate((made, fresh, again)):  # the whole chain, however long
+        policy = principal(rig.run(svc.verify_api(key.secret, T0))).policy
+        assert refusal_of(rig.hold(world, f"k{n}", "1", key=policy)) is ErrorCode.KILL_SWITCH
+    rig.run(rig.ledger.lift_kill_switch(switch_id, actor="a", now=T0))  # lifts it for the chain
+    for n, key in enumerate((made, fresh, again)):
+        policy = principal(rig.run(svc.verify_api(key.secret, T0))).policy
+        held = rig.hold(world, f"ok{n}", "1", key=policy)
+        assert isinstance(held, Held), held
+
+
+def test_m18_a_hold_reports_the_keys_its_key_replaced(rig: Rig) -> None:
+    """The lineage the admission read rides on the hold, so a stream's watch can apply it."""
+    svc = service(rig)
+    world = rig.world("100")
+    made = api_key(rig, svc, world.scope.id)
+    fresh = rig.run(svc.rotate_key(made.record.id, grace_ms=GRACE_MS, actor="k", now=T0))
+    again = rig.run(svc.rotate_key(fresh.record.id, grace_ms=GRACE_MS, actor="k", now=T0))
+    held = rig.hold(world, "r1", "1", key=again.record.policy)
+    assert isinstance(held, Held)
+    assert set(held.key_lineage) == {made.record.id, fresh.record.id}
+    first = rig.hold(world, "r2", "1", key=made.record.policy)
+    assert isinstance(first, Held) and first.key_lineage == ()
+
+
+def test_m18_a_kill_switch_on_a_sibling_key_does_not_apply(rig: Rig) -> None:
+    svc = service(rig)
+    world = rig.world("100")
+    made = api_key(rig, svc, world.scope.id)
+    other = api_key(rig, svc, world.scope.id)
+    switch = KillSwitch(KillTarget.KEY, other.record.id)
+    rig.run(rig.ledger.engage_kill_switch(switch, actor="a", reason="r", now=T0))
+    fresh = rig.run(svc.rotate_key(made.record.id, grace_ms=GRACE_MS, actor="k", now=T0))
+    assert isinstance(rig.hold(world, "r1", "1", key=fresh.record.policy), Held)
 
 
 # --- policy ----------------------------------------------------------------------------------

@@ -314,8 +314,8 @@ class Pipeline:
             ends = await session_ends_at(self._ledger, held)
         except Exception:
             return None
-        route = call.prepared.route
-        return StreamFacts(call.principal.policy, chain, route.catalog_id, "", ends)
+        model = call.prepared.route.catalog_id
+        return StreamFacts(call.principal.policy, chain, model, "", ends, held.key_lineage)
 
     # --- step 10: records, headers --------------------------------------------------------------
 
