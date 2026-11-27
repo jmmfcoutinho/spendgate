@@ -102,6 +102,13 @@ affected.
   classify, and `--check` (exit 1 on drift) is ready for the daily price-watch job. The hand-written
   bare ids (`azure_openai/gpt-6-luna` and the others) are unchanged. See "Azure OpenAI: which catalog
   id" in docs/catalog-how-to.md.
+- A daily price watch for maintainers (ADR-0028 point 6): `.github/workflows/price-watch.yml` runs the
+  Bedrock, Azure OpenAI and Vertex AI importers on fresh provider data every day and, when their
+  generated catalog blocks change, opens or updates one pull request (`prices/daily-watch`) listing the
+  ids each importer added, changed or removed, with the LiteLLM diff summary. It never merges; an
+  importer that refuses its data fails the run and nothing is proposed. The proxy still fetches no
+  prices at runtime. `scripts/price_watch.py` and `make price-watch` do the same by hand. See "How
+  prices stay current" in docs/catalog-how-to.md.
 
 ### Changed
 

@@ -191,7 +191,8 @@ stores. Entries that deliberately hold an upper bound (the highest regional mete
 
 **Weekly check.** [`.github/workflows/prices.yml`](../.github/workflows/prices.yml) runs `diff`
 against LiteLLM's latest `main` commit every Monday, fails when prices disagree and uploads the
-report as an artifact.
+report as an artifact. The daily price watch (section 12) puts the same diff's summary in its pull
+request, without failing on it.
 
 **The script's `override` command** writes the same kind of file from the script's pinned commit;
 operators use `spendgate catalog import` instead, which needs no checkout of this repository.
@@ -485,3 +486,36 @@ models:
   compares the Gemini API service's SKUs with the region-less entries and only reports.
   `tests/unit/test_vertex_prices.py` runs it on a recorded subset and checks that every non-global
   price is 1.1x the global one.
+
+## 12. How prices stay current
+
+Nothing in spendgate fetches a price at runtime. The bundled catalog changes only through a reviewed
+pull request and a release ([ADR-0028](adr/0028-price-coverage-and-regional-prices.md) point 6):
+
+- **Daily price watch.** [`.github/workflows/price-watch.yml`](../.github/workflows/price-watch.yml)
+  runs every day on `main` (and by hand from the Actions tab). It downloads the AWS Price List, the
+  Azure Retail Prices and the Google Cloud Pricing API SKUs, runs each importer's `--check`, and
+  `--write` only where a generated block is out of date. When the catalog then differs from `main`'s,
+  it force-pushes one bot branch, `prices/daily-watch`, rebuilt from `main` with one commit, and opens
+  or updates the one pull request from it, titled `prices: daily price watch YYYY-MM-DD`. Its
+  description lists, per importer, the ids added, changed or removed, the diff stat and the LiteLLM
+  cross-check summary of the regenerated catalog. When nothing changed, the run is green and
+  pushes nothing. It never merges.
+- **A red run** means an importer refused its data (a meter it cannot classify, a new model without
+  reviewed limits, a source format change) or a download failed, and nothing was proposed: read the
+  failing step, then fix the importer or its reviewed table (sections 7, 10 and 11) in a normal pull
+  request.
+- **Reviewing its pull request.** Treat it like a contributor's price change: open each provider's
+  page for the ids listed and compare the prices (a new id also needs its limits read from the model
+  card). The diff is larger than the price change: a block that changed gets today's `checked_on` on
+  every entry. Read the LiteLLM summary, and the full report in the run's `price-watch` artifact, as
+  a second opinion, not a verdict (section 6). CI is started on the branch by the workflow, so the
+  pull request shows `CI gate` on its head commit. Squash-merge it only after checking; a merged
+  price change ships in a patch release ([releasing.md](releasing.md)). The next run rebuilds the
+  branch from the new `main`, so leave edits to the branch to a separate pull request.
+- **By hand.** `make price-watch` does the same in a new temporary directory and prints the pull
+  request text (it needs the network and the Pricing API key; `LITELLM_SHA=<commit>` adds the LiteLLM
+  diff); review `git diff src/spendgate/catalog/prices.yaml` afterwards.
+- **Weekly LiteLLM check.** [`.github/workflows/prices.yml`](../.github/workflows/prices.yml) still
+  compares the whole catalog, hand-written entries included, with LiteLLM's latest commit every Monday
+  and fails on a disagreement (section 6). The daily job only reports that diff.
