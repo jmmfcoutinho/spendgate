@@ -3,7 +3,8 @@
 import json
 import struct
 import zlib
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
+from functools import cache
 from importlib import resources
 
 import httpx
@@ -53,6 +54,7 @@ async def send(fake: FakeUpstream, up: UpstreamRequest) -> httpx.Response:
         return await client.post(up.url, content=up.body, headers=dict(up.headers))
 
 
+@cache  # parsed once: the bundled catalog is large and read-only here
 def catalog() -> Catalog:
     text = (resources.files("spendgate.catalog") / "prices.yaml").read_text(encoding="utf-8")
     return parse([yaml.safe_load(text)], "0" * 64, ledger_currency="USD")
@@ -212,15 +214,19 @@ def test_a_stream_cut_inside_a_frame_is_an_error_on_close() -> None:
 # --- usage and cost --------------------------------------------------------------------------
 
 
-def bedrock_catalog_ids() -> list[str]:
-    """Every bundled Bedrock model id: each geographic, global and in-Region profile (#100)."""
+def bedrock_catalog_ids() -> list[tuple[str, str | None]]:
+    """Every bundled Bedrock entry: each geographic, global and in-Region profile (#100, #105),
+    with a Region it prices (None for a region-less entry)."""
     text = (resources.files("spendgate.catalog") / "prices.yaml").read_text(encoding="utf-8")
-    ids = [e["id"] for e in yaml.safe_load(text)["models"] if e["id"].startswith("bedrock/")]
-    return sorted(i.removeprefix("bedrock/") for i in ids)
+    entries = [e for e in yaml.safe_load(text)["models"] if e["id"].startswith("bedrock/")]
+    pairs = {(e["id"].removeprefix("bedrock/"), (e.get("regions") or [None])[0]) for e in entries}
+    return sorted(pairs, key=lambda p: (p[0], p[1] or ""))
 
 
-@pytest.mark.parametrize("model", bedrock_catalog_ids())
-async def test_usage_prices_through_the_bundled_bedrock_catalog_entries(model: str) -> None:
+@pytest.mark.parametrize(("model", "region"), bedrock_catalog_ids())
+async def test_usage_prices_through_the_bundled_bedrock_catalog_entries(
+    model: str, region: str | None
+) -> None:
     fake = FakeUpstream(Script(usage=USAGE))
     up = adapter().translate(request({"messages": [USER]}), deployment(model))
     raw = await send(fake, up)
@@ -231,14 +237,17 @@ async def test_usage_prices_through_the_bundled_bedrock_catalog_entries(model: s
         200,
         100,
     )
-    entry = catalog().lookup("bedrock", model, NOW_MS)
+    entry = catalog().lookup("bedrock", model, NOW_MS, region)
     cost = actual_cost(entry, usage)
     m = entry.meters
+    assert m.input_per_mtok is not None and m.output_per_mtok is not None
+    cached = m.cached_input_per_mtok or m.input_per_mtok  # an absent meter bills at input
+    write = m.cache_write_per_mtok or m.input_per_mtok
     expected = (
-        Decimal(1000) * m.input_per_mtok + Decimal(200) * m.cached_input_per_mtok  # type: ignore[operator]
-        + Decimal(100) * m.cache_write_per_mtok + Decimal(500) * m.output_per_mtok  # type: ignore[operator]
+        Decimal(1000) * m.input_per_mtok + Decimal(200) * cached
+        + Decimal(100) * write + Decimal(500) * m.output_per_mtok
     ) / 1_000_000  # fmt: skip
-    assert cost.nano == int(expected * 10**9)  # exact for these prices: no rounding involved
+    assert cost.nano == int((expected * 10**9).to_integral_value(rounding=ROUND_CEILING))
 
 
 def test_usage_through_the_relay_equals_non_stream_usage() -> None:

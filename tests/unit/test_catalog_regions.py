@@ -182,9 +182,11 @@ def test_a_route_split_is_found_on_the_date_a_region_scoped_entry_starts() -> No
     assert catalog.split_by_region("azure_openai", "gpt-x", ["eastus", None], None) is None
 
 
-def test_only_the_generated_azure_openai_entries_of_the_bundled_catalog_are_region_scoped() -> None:
+def test_the_bundled_catalog_scopes_entries_to_regions_only_where_an_importer_wrote_them() -> None:
     catalog = parse([yaml.safe_load(bundled_text())], SHA, ledger_currency="USD")
     scoped = {e.id for e in catalog.entries() if e.regions is not None}
-    assert scoped  # Azure prices many deployments differently per Region (#106)
+    assert scoped  # Bedrock and Azure price many profiles and deployments per Region
+    assert {i.partition("/")[0] for i in scoped} <= {"bedrock", "azure_openai", "google"}
+    azure = {i for i in scoped if i.startswith("azure_openai/")}
     generated = ("azure_openai/global.", "azure_openai/datazone.", "azure_openai/regional.")
-    assert all(i.startswith(generated) for i in scoped)
+    assert all(i.startswith(generated) for i in azure)  # the hand-written bare ids stay region-less

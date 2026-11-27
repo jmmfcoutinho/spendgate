@@ -1,0 +1,500 @@
+{
+ "formatVersion": "v1.0",
+ "offerCode": "AmazonBedrock",
+ "products": {
+  "76NFU8EY675Z8W6S": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-NovaPro-output-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "76NFU8EY675Z8W6S"
+  },
+  "AUB3MX63W5XZB5QR": {
+   "attributes": {
+    "inferenceType": "Input tokens",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "service_tier": "standard",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-mantle-input-tokens-standard"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "AUB3MX63W5XZB5QR"
+  },
+  "CGNEF3K7ZYNUQ4AZ": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens flex",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-NovaPro-input-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "CGNEF3K7ZYNUQ4AZ"
+  },
+  "EA4Y3PYRHK4WEWCV": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-output-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "EA4Y3PYRHK4WEWCV"
+  },
+  "EQRP4BPX8A3U4XX2": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Prompt cache read input tokens flex",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-NovaPro-cache-read-input-token-count-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "EQRP4BPX8A3U4XX2"
+  },
+  "HJSC646XWXFZFK44": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-NovaPro-input-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "HJSC646XWXFZFK44"
+  },
+  "N2TXBYXVK4E73ABX": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Prompt cache write input tokens flex",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-NovaPro-cache-write-input-token-count-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "N2TXBYXVK4E73ABX"
+  },
+  "NAEDPBP6KVTGKXT9": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens flex",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-input-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "NAEDPBP6KVTGKXT9"
+  },
+  "QF4V34NVAWYBRB7X": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens flex",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-NovaPro-output-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "QF4V34NVAWYBRB7X"
+  },
+  "UUABHA5Z9XKJ286T": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "output tokens batch",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-output-tokens-batch"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "UUABHA5Z9XKJ286T"
+  },
+  "V4GPWK9NS8E9DCG7": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens flex",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-output-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "V4GPWK9NS8E9DCG7"
+  },
+  "VW6GM3AUJ65GPJ8G": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-input-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "VW6GM3AUJ65GPJ8G"
+  },
+  "ZU4HTQDSAJNESQHT": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "input tokens batch",
+    "location": "EU (London)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "eu-west-2",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "EUW2-deepseek.v3.2-input-tokens-batch"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "ZU4HTQDSAJNESQHT"
+  }
+ },
+ "publicationDate": "2026-11-25T18:40:41Z",
+ "terms": {
+  "OnDemand": {
+   "76NFU8EY675Z8W6S": {
+    "76NFU8EY675Z8W6S.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "76NFU8EY675Z8W6S.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00452 per 1K tokens for EUW2-NovaPro-output-tokens in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0045200000"
+       },
+       "rateCode": "76NFU8EY675Z8W6S.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "76NFU8EY675Z8W6S",
+     "termAttributes": {}
+    }
+   },
+   "AUB3MX63W5XZB5QR": {
+    "AUB3MX63W5XZB5QR.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "AUB3MX63W5XZB5QR.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.000961 per 1K token for deepseek.v3.2-mantle-input-tokens-standard in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0009610000"
+       },
+       "rateCode": "AUB3MX63W5XZB5QR.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "AUB3MX63W5XZB5QR",
+     "termAttributes": {}
+    }
+   },
+   "CGNEF3K7ZYNUQ4AZ": {
+    "CGNEF3K7ZYNUQ4AZ.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "CGNEF3K7ZYNUQ4AZ.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.000565 per 1K tokens for EUW2-NovaPro-input-tokens-flex in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0005650000"
+       },
+       "rateCode": "CGNEF3K7ZYNUQ4AZ.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "CGNEF3K7ZYNUQ4AZ",
+     "termAttributes": {}
+    }
+   },
+   "EA4Y3PYRHK4WEWCV": {
+    "EA4Y3PYRHK4WEWCV.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "EA4Y3PYRHK4WEWCV.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0028675 per 1K output tokens for DeepSeek v3.2 in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0028675000"
+       },
+       "rateCode": "EA4Y3PYRHK4WEWCV.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "EA4Y3PYRHK4WEWCV",
+     "termAttributes": {}
+    }
+   },
+   "EQRP4BPX8A3U4XX2": {
+    "EQRP4BPX8A3U4XX2.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "EQRP4BPX8A3U4XX2.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00014125 per 1K tokens for EUW2-NovaPro-cache-read-input-token-count-flex in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0001412500"
+       },
+       "rateCode": "EQRP4BPX8A3U4XX2.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "EQRP4BPX8A3U4XX2",
+     "termAttributes": {}
+    }
+   },
+   "HJSC646XWXFZFK44": {
+    "HJSC646XWXFZFK44.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "HJSC646XWXFZFK44.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00113 per 1K tokens for EUW2-NovaPro-input-tokens in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0011300000"
+       },
+       "rateCode": "HJSC646XWXFZFK44.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "HJSC646XWXFZFK44",
+     "termAttributes": {}
+    }
+   },
+   "N2TXBYXVK4E73ABX": {
+    "N2TXBYXVK4E73ABX.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "N2TXBYXVK4E73ABX.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00 per 1K tokens for EUW2-NovaPro-cache-write-input-token-count-flex in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0000000000"
+       },
+       "rateCode": "N2TXBYXVK4E73ABX.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "N2TXBYXVK4E73ABX",
+     "termAttributes": {}
+    }
+   },
+   "NAEDPBP6KVTGKXT9": {
+    "NAEDPBP6KVTGKXT9.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "NAEDPBP6KVTGKXT9.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0004805 per 1K input tokens flex for DeepSeek v3.2 in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0004805000"
+       },
+       "rateCode": "NAEDPBP6KVTGKXT9.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "NAEDPBP6KVTGKXT9",
+     "termAttributes": {}
+    }
+   },
+   "QF4V34NVAWYBRB7X": {
+    "QF4V34NVAWYBRB7X.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "QF4V34NVAWYBRB7X.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00226 per 1K tokens for EUW2-NovaPro-output-tokens-flex in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0022600000"
+       },
+       "rateCode": "QF4V34NVAWYBRB7X.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "QF4V34NVAWYBRB7X",
+     "termAttributes": {}
+    }
+   },
+   "UUABHA5Z9XKJ286T": {
+    "UUABHA5Z9XKJ286T.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "UUABHA5Z9XKJ286T.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00143375 per 1K output tokens batch for DeepSeek v3.2 in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0014337500"
+       },
+       "rateCode": "UUABHA5Z9XKJ286T.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "UUABHA5Z9XKJ286T",
+     "termAttributes": {}
+    }
+   },
+   "V4GPWK9NS8E9DCG7": {
+    "V4GPWK9NS8E9DCG7.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "V4GPWK9NS8E9DCG7.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00143375 per 1K output tokens flex for DeepSeek v3.2 in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0014337500"
+       },
+       "rateCode": "V4GPWK9NS8E9DCG7.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "V4GPWK9NS8E9DCG7",
+     "termAttributes": {}
+    }
+   },
+   "VW6GM3AUJ65GPJ8G": {
+    "VW6GM3AUJ65GPJ8G.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "VW6GM3AUJ65GPJ8G.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.000961 per 1K input tokens for DeepSeek v3.2 in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0009610000"
+       },
+       "rateCode": "VW6GM3AUJ65GPJ8G.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "VW6GM3AUJ65GPJ8G",
+     "termAttributes": {}
+    }
+   },
+   "ZU4HTQDSAJNESQHT": {
+    "ZU4HTQDSAJNESQHT.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "ZU4HTQDSAJNESQHT.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0004805 per 1K input tokens batch for DeepSeek v3.2 in EU (London)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0004805000"
+       },
+       "rateCode": "ZU4HTQDSAJNESQHT.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "ZU4HTQDSAJNESQHT",
+     "termAttributes": {}
+    }
+   }
+  }
+ },
+ "version": "20261125184041"
+}

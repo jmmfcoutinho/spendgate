@@ -1,0 +1,574 @@
+{
+ "formatVersion": "v1.0",
+ "offerCode": "AmazonBedrock",
+ "products": {
+  "4GSM2HNMJEMXJEDM": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Prompt cache read input tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-cache-read-input-token-count"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "4GSM2HNMJEMXJEDM"
+  },
+  "4XQEQTQ2EBETPCJ2": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "output tokens batch",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-output-tokens-batch"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "4XQEQTQ2EBETPCJ2"
+  },
+  "6FESYXAGW47XP5WK": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "input tokens batch",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-input-tokens-batch"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "6FESYXAGW47XP5WK"
+  },
+  "7UEY8P5TCFJJBMH2": {
+   "attributes": {
+    "inferenceType": "Input tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "service_tier": "standard",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-mantle-input-tokens-standard"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "7UEY8P5TCFJJBMH2"
+  },
+  "8X836UXRHN5Q5T2H": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-input-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "8X836UXRHN5Q5T2H"
+  },
+  "A9397E2R94JS7RK5": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens flex",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-output-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "A9397E2R94JS7RK5"
+  },
+  "ARFVY95XGU794VBG": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-output-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "ARFVY95XGU794VBG"
+  },
+  "CX77WYA7AVXKWCSE": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Prompt cache write input tokens flex",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-cache-write-input-token-count-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "CX77WYA7AVXKWCSE"
+  },
+  "DZQZT2WQVGNDDE2J": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Prompt cache read input tokens flex",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-cache-read-input-token-count-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "DZQZT2WQVGNDDE2J"
+  },
+  "GKSCNNJ6M7WBX7C3": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-input-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "GKSCNNJ6M7WBX7C3"
+  },
+  "H8Z5GNK9KWF8XNV4": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens flex",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-input-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "H8Z5GNK9KWF8XNV4"
+  },
+  "KXUENRNPAKP78CD6": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-output-tokens"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "KXUENRNPAKP78CD6"
+  },
+  "PUZN23F2U55E57VV": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Input tokens flex",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-input-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "PUZN23F2U55E57VV"
+  },
+  "RHX588JC3DME4KZ5": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Output tokens flex",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "DeepSeek v3.2",
+    "operation": "",
+    "provider": "DeepSeek",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-deepseek.v3.2-output-tokens-flex"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "RHX588JC3DME4KZ5"
+  },
+  "XQ27CMF66QP5ZU2W": {
+   "attributes": {
+    "feature": "On-demand Inference",
+    "inferenceType": "Prompt cache write input tokens",
+    "location": "US East (N. Virginia)",
+    "locationType": "AWS Region",
+    "model": "Nova Pro",
+    "operation": "",
+    "regionCode": "us-east-1",
+    "servicecode": "AmazonBedrock",
+    "servicename": "Amazon Bedrock",
+    "usagetype": "USE1-NovaPro-cache-write-input-token-count"
+   },
+   "productFamily": "Amazon Bedrock",
+   "sku": "XQ27CMF66QP5ZU2W"
+  }
+ },
+ "publicationDate": "2026-11-25T18:40:41Z",
+ "terms": {
+  "OnDemand": {
+   "4GSM2HNMJEMXJEDM": {
+    "4GSM2HNMJEMXJEDM.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "4GSM2HNMJEMXJEDM.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0002 per 1K cache read input tokens of Nova Pro in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0002000000"
+       },
+       "rateCode": "4GSM2HNMJEMXJEDM.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "4GSM2HNMJEMXJEDM",
+     "termAttributes": {}
+    }
+   },
+   "4XQEQTQ2EBETPCJ2": {
+    "4XQEQTQ2EBETPCJ2.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "4XQEQTQ2EBETPCJ2.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.000925 per 1K output tokens batch for DeepSeek v3.2 in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0009250000"
+       },
+       "rateCode": "4XQEQTQ2EBETPCJ2.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "4XQEQTQ2EBETPCJ2",
+     "termAttributes": {}
+    }
+   },
+   "6FESYXAGW47XP5WK": {
+    "6FESYXAGW47XP5WK.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "6FESYXAGW47XP5WK.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00031 per 1K input tokens batch for DeepSeek v3.2 in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0003100000"
+       },
+       "rateCode": "6FESYXAGW47XP5WK.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "6FESYXAGW47XP5WK",
+     "termAttributes": {}
+    }
+   },
+   "7UEY8P5TCFJJBMH2": {
+    "7UEY8P5TCFJJBMH2.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "7UEY8P5TCFJJBMH2.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00062 per 1K token for deepseek.v3.2-mantle-input-tokens-standard in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0006200000"
+       },
+       "rateCode": "7UEY8P5TCFJJBMH2.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "7UEY8P5TCFJJBMH2",
+     "termAttributes": {}
+    }
+   },
+   "8X836UXRHN5Q5T2H": {
+    "8X836UXRHN5Q5T2H.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "8X836UXRHN5Q5T2H.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$ 0.0008 per 1K tokens for Nova Pro-input-tokens in us-east-1 (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0008000000"
+       },
+       "rateCode": "8X836UXRHN5Q5T2H.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "8X836UXRHN5Q5T2H",
+     "termAttributes": {}
+    }
+   },
+   "A9397E2R94JS7RK5": {
+    "A9397E2R94JS7RK5.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "A9397E2R94JS7RK5.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0016 per 1K tokens for USE1-NovaPro-output-tokens-flex in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0016000000"
+       },
+       "rateCode": "A9397E2R94JS7RK5.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "A9397E2R94JS7RK5",
+     "termAttributes": {}
+    }
+   },
+   "ARFVY95XGU794VBG": {
+    "ARFVY95XGU794VBG.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "ARFVY95XGU794VBG.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$ 0.0032 per 1K tokens for Nova Pro-output-tokens in us-east-1 (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0032000000"
+       },
+       "rateCode": "ARFVY95XGU794VBG.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "ARFVY95XGU794VBG",
+     "termAttributes": {}
+    }
+   },
+   "CX77WYA7AVXKWCSE": {
+    "CX77WYA7AVXKWCSE.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "CX77WYA7AVXKWCSE.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00 per 1K tokens for USE1-NovaPro-cache-write-input-token-count-flex in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0000000000"
+       },
+       "rateCode": "CX77WYA7AVXKWCSE.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "CX77WYA7AVXKWCSE",
+     "termAttributes": {}
+    }
+   },
+   "DZQZT2WQVGNDDE2J": {
+    "DZQZT2WQVGNDDE2J.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "DZQZT2WQVGNDDE2J.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0001 per 1K tokens for USE1-NovaPro-cache-read-input-token-count-flex in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0001000000"
+       },
+       "rateCode": "DZQZT2WQVGNDDE2J.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "DZQZT2WQVGNDDE2J",
+     "termAttributes": {}
+    }
+   },
+   "GKSCNNJ6M7WBX7C3": {
+    "GKSCNNJ6M7WBX7C3.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "GKSCNNJ6M7WBX7C3.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00062 per 1K input tokens for DeepSeek v3.2 in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0006200000"
+       },
+       "rateCode": "GKSCNNJ6M7WBX7C3.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "GKSCNNJ6M7WBX7C3",
+     "termAttributes": {}
+    }
+   },
+   "H8Z5GNK9KWF8XNV4": {
+    "H8Z5GNK9KWF8XNV4.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "H8Z5GNK9KWF8XNV4.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00031 per 1K input tokens flex for DeepSeek v3.2 in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0003100000"
+       },
+       "rateCode": "H8Z5GNK9KWF8XNV4.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "H8Z5GNK9KWF8XNV4",
+     "termAttributes": {}
+    }
+   },
+   "KXUENRNPAKP78CD6": {
+    "KXUENRNPAKP78CD6.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "KXUENRNPAKP78CD6.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00185 per 1K output tokens for DeepSeek v3.2 in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0018500000"
+       },
+       "rateCode": "KXUENRNPAKP78CD6.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "KXUENRNPAKP78CD6",
+     "termAttributes": {}
+    }
+   },
+   "PUZN23F2U55E57VV": {
+    "PUZN23F2U55E57VV.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "PUZN23F2U55E57VV.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.0004 per 1K tokens for USE1-NovaPro-input-tokens-flex in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0004000000"
+       },
+       "rateCode": "PUZN23F2U55E57VV.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "PUZN23F2U55E57VV",
+     "termAttributes": {}
+    }
+   },
+   "RHX588JC3DME4KZ5": {
+    "RHX588JC3DME4KZ5.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "RHX588JC3DME4KZ5.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.000925 per 1K output tokens flex for DeepSeek v3.2 in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0009250000"
+       },
+       "rateCode": "RHX588JC3DME4KZ5.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "RHX588JC3DME4KZ5",
+     "termAttributes": {}
+    }
+   },
+   "XQ27CMF66QP5ZU2W": {
+    "XQ27CMF66QP5ZU2W.JRTCKXETXF": {
+     "effectiveDate": "2026-11-01T00:00:00Z",
+     "offerTermCode": "JRTCKXETXF",
+     "priceDimensions": {
+      "XQ27CMF66QP5ZU2W.JRTCKXETXF.6YS6EN2CT7": {
+       "appliesTo": [],
+       "beginRange": "0",
+       "description": "$0.00 per 1K tokens for USE1-NovaPro-cache-write-input-token-count in US East (N. Virginia)",
+       "endRange": "Inf",
+       "pricePerUnit": {
+        "USD": "0.0000000000"
+       },
+       "rateCode": "XQ27CMF66QP5ZU2W.JRTCKXETXF.6YS6EN2CT7",
+       "unit": "1K tokens"
+      }
+     },
+     "sku": "XQ27CMF66QP5ZU2W",
+     "termAttributes": {}
+    }
+   }
+  }
+ },
+ "version": "20261125184041"
+}

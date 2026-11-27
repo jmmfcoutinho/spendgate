@@ -1,0 +1,39 @@
+# Model table for tests/unit/test_bedrock_prices.py (same format as scripts/bedrock_models.yaml).
+# The Price List files beside it are a trimmed recording of the real offers (version
+# 20261123095841 / 20261125184041, read 2026-11-26): a few products and their on-demand terms.
+models:
+  - id: anthropic.claude-haiku-5-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Haiku 5.5"]
+    card: anthropic-claude-haiku-5-5
+    keep_bare: "Kept for the test."
+    geo:
+      us: [us-east-1]
+      eu: [eu-west-1, eu-west-2]
+    global: [eu-west-1, eu-west-2, us-east-1]
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+    long_context: { threshold_input_tokens: 100000 }
+  - id: anthropic.claude-sonnet-4-5-20250929-v1:0
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Sonnet 4.5"]
+    card: anthropic-claude-sonnet-4-5
+    geo:
+      us: [us-east-1]
+    global: [eu-west-1, us-east-1]
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2027-04-08"
+  - id: deepseek.v3.2
+    price: [AmazonBedrock, DeepSeek, "DeepSeek v3.2"]
+    card: deepseek-deepseek-v3-2
+    in_region: [eu-west-1, eu-west-2, us-east-1]  # eu-west-1 has no price in the recording
+    limits: { max_output_tokens: 8000, context_window: 164000 }
+  - id: amazon.nova-pro-v1:0
+    price: [AmazonBedrock, "", "Nova Pro"]
+    card: amazon-nova-pro
+    in_region: [eu-west-2, us-east-1]
+    limits: { max_output_tokens: 10000, context_window: 300000 }
+
+skip:
+  - price: [AmazonBedrock, Cohere, "Embed v4"]
+    reason: "Embeddings, not chat"
+
+not_models:
+  - { offer: AmazonBedrock, usage: "Guardrail.*", reason: "Guardrails" }
