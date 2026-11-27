@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
+  and other arm64 hosts without emulation (#123).
+
 ## [0.5.0] - 2026-11-27
 
 A security release. Upgrade every gateway: four advisories are fixed (below), and budget-warning
