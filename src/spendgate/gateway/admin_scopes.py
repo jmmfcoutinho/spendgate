@@ -244,20 +244,24 @@ async def update_key(call: Call) -> Response:
     body = await call.body(KeyUpdateIn)
     given = body.model_fields_set
     record = current
+    policy = None
     if given & {"name", "allowed_models", "limits", "session_defaults", "session_required"}:
         policy = _patched_policy(current.policy, body)
         _check_session_room(call, current.policy.session_defaults, policy.session_defaults)
+    # Expiry first: a key a rotation replaced, or one already expired, refuses a later expiry
+    # (`conflict`), and then nothing else in the body is applied either.
+    if "expires_at" in given:
+        record = await call.ctx.ledger.set_key_expiry(
+            current.id, body.expires_at, actor=call.actor, now=call.now
+        )
+        call.ctx.keys.invalidate(current.id)
+    if policy is not None:
         record = await call.ctx.keys.set_key_policy(
             policy,
             name=body.name,
             actor=call.actor,
             now=call.now,
         )
-    if "expires_at" in given:
-        record = await call.ctx.ledger.set_key_expiry(
-            current.id, body.expires_at, actor=call.actor, now=call.now
-        )
-        call.ctx.keys.invalidate(current.id)
     return respond(key_json(record))
 
 

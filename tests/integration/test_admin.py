@@ -189,6 +189,26 @@ async def test_key_update_replaces_what_is_sent_and_keeps_the_rest(tmp_path: Pat
 
 
 @async_test
+async def test_patch_cannot_revive_a_rotated_out_or_expired_key(tmp_path: Path) -> None:
+    async with open_admin(tmp_path) as a:
+        made = await a.ok("POST", f"{BASE}/keys", 201, json={"scope_id": PATH, "name": "old"})
+        url = f"{BASE}/keys/{made['id']}"
+        await a.ok("POST", f"{url}/rotate", 201, json={"grace_seconds": 0})  # expired now
+        assert await chat_as(a, str(made["secret"])) == 401
+        for body in ({"expires_at": None}, {"name": "x", "expires_at": "2031-01-01T00:00:00Z"}):
+            err = await a.error("PATCH", url, 409, json=body)
+            assert err["code"] == "conflict" and "expired" in str(err["message"])
+        got = await a.ok("GET", url)
+        assert got["name"] == "old" and got["expires_at"] is not None  # nothing was applied
+        assert await chat_as(a, str(made["secret"])) == 401
+        live = await a.ok("POST", f"{BASE}/keys", 201, json={"scope_id": PATH})
+        await a.ok("POST", f"{BASE}/keys/{live['id']}/rotate", 201, json={"grace_seconds": 60})
+        err = await a.error("PATCH", f"{BASE}/keys/{live['id']}", 409, json={"expires_at": None})
+        assert "replaced by rotation" in str(err["message"])
+        assert await chat_as(a, str(live["secret"])) == 200  # the grace period is unchanged
+
+
+@async_test
 async def test_admin_keys_are_not_manageable_through_the_api(tmp_path: Path) -> None:
     async with open_admin(tmp_path) as a:
         await a.error("GET", f"{BASE}/keys/{a.key_id}", 404)
