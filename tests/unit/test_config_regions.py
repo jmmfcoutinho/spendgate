@@ -128,7 +128,7 @@ def test_a_region_no_entry_prices_is_unpriced_and_named(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="for region eastus"):
         load(path, env=ENV)  # date-independent: no entry could ever price eastus
     only_eastus = check_config(write(tmp_path, "eastus", prices=scoped_only), env=ENV)
-    assert any(e.endswith("has no price in the catalog") for e in only_eastus.errors)
+    assert any("has no price in the catalog (price it" in e for e in only_eastus.errors)
 
 
 # --- a deployment Region the catalog never lists: a warning, not an error -----------------------

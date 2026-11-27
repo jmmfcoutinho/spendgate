@@ -48,6 +48,14 @@ affected.
   `serve` and library mode warn about a deployment Region that no entry of its Region-scoped id
   lists, naming the Regions the catalog does list, so a misspelt Region is visible at start.
   `docs/catalog-how-to.md` section 8 shows how to write one (ADR-0028, #103).
+- `spendgate catalog draft --like <catalog id> --as <catalog id> [--multiplier <m>] [--regions <slug,...>]
+  [--region <slug>] [--config <file>] --out <file> [--force]` prices a model the catalog lacks like one
+  it has, of the same provider: it copies the entry in force today (and any scheduled price after it),
+  multiplies every meter by `m` (a decimal of at least 1, default 1; exact, never rounded) and writes an
+  override entry marked `verified: false` whose note names the copied entry. `--regions` scopes the
+  stand-in to those Regions (`regions:`); `--region` picks which price of a Region-scoped `--like` is
+  copied. Like `catalog import`, it never overwrites `--out` without `--force` and loads the result
+  before writing. `docs/catalog-how-to.md` section 9 (ADR-0028, #104).
 
 ### Changed
 
@@ -58,6 +66,9 @@ affected.
 - Catalog overrides now merge by `id`, `effective_from` and `regions`: an override with a different set of
   `regions` adds an entry instead of replacing the region-less one, and one whose Regions overlap another
   entry of the same id and date is a load error.
+- The `model_not_priced` refusal and the `check-config` error for an unpriced route now say how to
+  price the model: an override file in `catalog.paths`, or a stand-in from `spendgate catalog draft`.
+  The code, status and the leading `<provider>/<model>: <reason>` of the message are unchanged (#104).
 
 ## [0.3.1] - 2026-11-26
 

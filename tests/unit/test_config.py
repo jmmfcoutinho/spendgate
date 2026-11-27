@@ -257,7 +257,9 @@ def test_resolved_secret_is_not_in_reprs_or_errors(tmp_path: Path) -> None:
 
 def test_unpriced_routed_model_is_an_error_and_listed(tmp_path: Path) -> None:
     path = write(tmp_path, BASE.replace("gpt-6-luna", "gpt-0-nothing"))
-    assert "models.m.catalog_id" in failure(path)
+    message = failure(path)
+    assert "models.m.catalog_id" in message
+    assert "catalog.paths" in message and "spendgate catalog draft" in message  # how to price it
     report = check_config(path, env=ENV)
     assert not report.ok and report.unpriced == ("openai/gpt-0-nothing",)
 
