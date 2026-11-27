@@ -1,0 +1,18 @@
+{
+ "formatVersion": "v1.0",
+ "publicationDate": "2026-11-23T09:58:41Z",
+ "regions": {
+  "eu-west-1": {
+   "currentVersionUrl": "/offers/v1.0/aws/AmazonBedrockFoundationModels/20261123095841/eu-west-1/index.json",
+   "regionCode": "eu-west-1"
+  },
+  "eu-west-2": {
+   "currentVersionUrl": "/offers/v1.0/aws/AmazonBedrockFoundationModels/20261123095841/eu-west-2/index.json",
+   "regionCode": "eu-west-2"
+  },
+  "us-east-1": {
+   "currentVersionUrl": "/offers/v1.0/aws/AmazonBedrockFoundationModels/20261123095841/us-east-1/index.json",
+   "regionCode": "us-east-1"
+  }
+ }
+}

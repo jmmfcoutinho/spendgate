@@ -73,17 +73,23 @@ def test_bundled_prices_parse_in_under_50_ms() -> None:
     assert catalog.sha256 == sha
 
 
-def test_bundled_catalog_loads_and_parses_within_50_ms_end_to_end() -> None:
+def test_bundled_catalog_parses_within_50_ms_and_loads_within_200_ms_end_to_end() -> None:
     text = bundled_text()
-    # Best of 5: measures our code, not a busy CI runner's scheduling noise.
-    timings = []
+    # Best of 5: measures our code, not a busy CI runner's scheduling noise. Our own parse keeps
+    # the tight bound; reading the YAML grows with the catalog (hundreds of generated entries per
+    # provider since ADR-0028) and is paid once at start, so end to end has a looser one.
+    parsed, total = [], []
     for _ in range(5):
         started = time.perf_counter()
-        # The C loader, as the config loader uses it (the pure-Python one alone is ~40 ms on CI).
+        # The C loader, as the config loader uses it (the pure-Python one is several times slower).
         doc = yaml.load(text, Loader=getattr(yaml, "CSafeLoader", yaml.SafeLoader))  # noqa: S506
+        loaded = time.perf_counter()
         parse([doc], SHA, ledger_currency="USD")
-        timings.append(time.perf_counter() - started)
-    assert min(timings) < 0.05
+        done = time.perf_counter()
+        parsed.append(done - loaded)
+        total.append(done - started)
+    assert min(parsed) < 0.05
+    assert min(total) < 0.2
 
 
 def test_bundled_prices_cover_only_known_providers_and_every_chat_entry_has_a_ceiling() -> None:
@@ -221,7 +227,15 @@ def test_unpriced_model_raises_and_maps_to_the_protocol_refusal() -> None:
     refusal = caught.value.refusal()
     assert refusal.code is ErrorCode.MODEL_NOT_PRICED
     assert refusal.param == "model"
-    assert "openai/nope" in refusal.message
+    assert refusal.message.startswith("openai/nope: no price entry in force. ")
+
+
+def test_m10_the_unpriced_refusal_points_to_an_override_and_a_stand_in_never_a_default() -> None:
+    with pytest.raises(ModelNotPriced) as caught:
+        build(doc()).lookup("openai", "nope", ms("2026-02-01"))
+    message = caught.value.refusal().message
+    assert "catalog.paths" in message
+    assert "`spendgate catalog draft --like <priced id> --as openai/nope --out <file>`" in message
 
 
 def test_same_model_name_under_another_provider_is_not_priced() -> None:

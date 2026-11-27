@@ -4,7 +4,8 @@ Prices are data. A new model, or a new price for an existing one, is a YAML edit
 The format is described in [catalog-schema.md](catalog-schema.md) and enforced by
 [`src/spendgate/catalog/schema.json`](../src/spendgate/catalog/schema.json). This page is the
 short path. A model that has no price in force is refused with `model_not_priced`, so a missing
-entry is safe, never free.
+entry is safe, never free; [section 9](#9-when-a-model-has-no-price) says how to price it, or to
+stand it in with `spendgate catalog draft` until its price is known.
 
 ## 1. Write the entry
 
@@ -195,13 +196,14 @@ report as an artifact.
 **The script's `override` command** writes the same kind of file from the script's pinned commit;
 operators use `spendgate catalog import` instead, which needs no checkout of this repository.
 
-## 7. AWS Bedrock: which catalog id to use in your geography
+## 7. AWS Bedrock: which catalog id to use, and how the entries are made
 
-On Bedrock the current Claude models are called through **inference profiles**: the model id is prefixed
-with a geography (`eu.anthropic.claude-haiku-5-5`) or `global.`. In many Regions there is no in-Region
-on-demand Claude at all (eu-west-1, for example), so the bare id would not work there. The bundled catalog
-prices each profile AWS offers on bedrock-runtime under its own id, so name the model by the profile you
-call and leave the deployment's `model` unset:
+On Bedrock most models are called through **inference profiles**: the model id is prefixed with a
+geography (`eu.anthropic.claude-haiku-5-5`) or `global.`. Some are served **in-Region** under the bare id
+(`mistral.mistral-large-3-675b-instruct`), and some both ways. The bundled catalog prices each id AWS's model
+cards list on bedrock-runtime, for every text model the Converse adapter can serve, so name the model by the id
+you call and leave the deployment's `model` unset. Always set the deployment's `region` (the Region in
+`base_url`): many Bedrock prices depend on it.
 
 ```yaml
 providers:
@@ -212,26 +214,52 @@ models:
     deployments: [{ provider: bedrock }]
 ```
 
-| Model | Geographic profiles (standard price) | `global.` (about 10% less) | Bare id, in-Region |
-|---|---|---|---|
-| Claude Haiku 5.5 | `us.` `ca.` `eu.` `au.` `jp.` | yes | none (the older `anthropic.claude-haiku-5-5` entry carries the standard price) |
-| Claude Sonnet 5.5 | `us.` `ca.` `eu.` `au.` | yes | none |
-| Claude Opus 5.5 | `us.` `eu.` `au.` `jp.` | yes | `anthropic.claude-opus-5-5` (eu-west-2 only) |
-| Claude Fable 5.2 | `us.` | yes | none |
+What is bundled (AWS Price List and model cards read 2026-11-26; "in-Region" = the bare id):
 
-- **Pick the profile of the Region in `base_url`:** `eu.` for the EU Regions, `jp.` for Tokyo and Osaka,
-  `au.` for Sydney and Melbourne, `ca.` for Canada, `us.` for the US (it also accepts the Canadian Regions
-  as source). AWS bills a geographic profile at the standard price of the Region you call from. That price
-  is the same in every commercial Region, which is why one entry per geography is exact.
-- **`global.`** can route to any commercial Region and costs about 10% less. Use it only if your data may
-  leave your geography.
-- **Not priced:** AWS GovCloud (us-gov-*) has no inference profile on bedrock-runtime and costs 1.2x, and
-  so do older Claude models and other model families. Add an override file (section 1) for them. Pointing a
-  catalog id at a different model with a deployment `model:` is possible, but then that entry's price is
-  what gets charged.
-- **Updating:** the entries come from the AWS Price List bulk API (offer `AmazonBedrockFoundationModels`,
-  `region_index.json` and the per-Region files). `tests/unit/test_bedrock_catalog.py` checks that every
-  standard price is 1.1x its global price and that the profile set per model matches AWS's model cards.
+| Family | Models | Ids |
+|---|---|---|
+| Anthropic Claude 5.x | Fable 5, 5.1, 5.2; Mythos 5.1, 5.2; Haiku 5.5; Sonnet 5, 5.5; Opus 5, 5.5 | `us.` and `global.` for all; Haiku 5.5 also `ca.` `eu.` `au.` `jp.`; Sonnet 5.5 `ca.` `eu.` `au.`; Opus 5.5 `eu.` `au.` `jp.` and in-Region (eu-west-2); Sonnet 5 and Opus 5 `eu.` `au.` `in.` |
+| Anthropic Claude 4.x | Haiku 4.5, Sonnet 4.5, 4.6, Opus 4.1, 4.5, 4.6, 4.7, 4.8 | `us.` (all), `eu.`, `au.`, `jp.`, `in.` and `global.` as each card lists |
+| Amazon Nova | Nova 2 Lite, Nova Pro, Lite, Micro | `us.` `eu.` (`apac.` `ca.` `jp.` `global.` where offered), in-Region |
+| Meta Llama | Llama 3 8B, 70B; 3.1 8B, 70B; 3.3 70B; 4 Scout, Maverick | in-Region and `us.` |
+| Mistral AI | Mistral 7B, Large (2402), Large 3, Small (2402), Mixtral 8x7B, Ministral 3B, 8B, 14B, Magistral Small, Devstral 2, Pixtral Large | in-Region; Pixtral `us.` `eu.` |
+| OpenAI | GPT-5.4, 5.5, 5.6 Luna, Sol, Terra; GPT-6 Astra, Luna, Sol; 6.1 Sol, Terra; 6.2 Astra, Sol | `us.`, `global.` (not 5.4, 5.5, 6.1 Sol: see below), `in.` for 5.6 Luna and Terra |
+| OpenAI open weights | gpt-oss 20B, 120B, gpt-oss-safeguard 20B, 120B | in-Region, `us-gov.` for gpt-oss |
+| Others | DeepSeek R1, V3.1, V3.2; Gemma 3 4B, 12B, 27B; MiniMax M2, M2.1, M2.5; Kimi K2 Thinking, K2.5; Nemotron Nano 9B v2, 12B v2 VL, Nano 3 30B, Super 3 120B; Qwen3 32B, 235B, Coder 30B, 480B, Coder Next, Next 80B, VL 235B; Writer Palmyra X4, X5, Vision 7B; GLM 4.7, 4.7 Flash, 5 | in-Region (DeepSeek R1, Palmyra X4 and X5: `us.`; Nemotron: also `us-gov.`) |
+
+- **The price follows the Region you call from.** A geographic profile and an in-Region id cost the Standard price
+  of the source Region; `global.` costs its global price (for Claude about 10% less than the geographic ones,
+  and it may route to any commercial Region: use it only if your data may leave your geography). Where all source
+  Regions have the same price the entry has no `regions`; otherwise there is one Region-scoped entry per price
+  (section 8), so a route spanning two of them must be split. A source Region where AWS lists no price has no
+  entry, and calls from there are refused (`model_not_priced`), for example `global.anthropic.claude-sonnet-5-5`
+  from ap-northeast-1. The `us.` profile also accepts the Canadian Regions as source.
+- **Not priced, and why** (each listed in `scripts/bedrock_models.yaml`): models whose card names no maximum output
+  tokens (GPT-5.6 Cyber, Daybreak Blue, Voxtral, Kimi K3, Grok 4.6), models priced only on the bedrock-mantle
+  endpoint (Grok 4.7, Kimi K3), no Converse (embeddings, image, video, speech, Gemma 4, Pegasus), no model card
+  (Nova 2 Pro and Omni, Nova Premier, Claude 3.x and older, Titan Text) and models at or past end of life (Llama 3.1
+  405B and 3.2, Command R, Jamba 1.5, Claude Sonnet 4 and 3 Haiku). Ids a card lists but the Price List prices in
+  no source Region are left out too: `global.openai.gpt-5.4`, `global.openai.gpt-5.5` and the `us-gov.` OpenAI GPT
+  profiles; `global.openai.gpt-6.1-sol`'s card lists no source Regions. Flex, Priority, batch, latency-optimized and
+  Ultrafast prices are not encoded: the adapter never asks for them. Add an override file (section 1) for anything
+  else; pointing a catalog id at a different model with a deployment `model:` charges that entry's price.
+- **Updating.** The entries live between the `>>> generated by scripts/bedrock_prices.py` markers in
+  `prices.yaml`; do not edit them by hand. They come from the AWS Price List bulk API (offers
+  `AmazonBedrockFoundationModels` and `AmazonBedrock`, `region_index.json` and every Region file) and from
+  `scripts/bedrock_models.yaml`, the reviewed table of what the price list does not say (ids, profiles and their
+  source Regions, limits, long-context thresholds, retirement dates, from AWS's model cards):
+
+  ```bash
+  uv run python scripts/bedrock_prices.py --download /tmp/aws-prices    # a new, empty directory
+  uv run python scripts/bedrock_prices.py --from-dir /tmp/aws-prices --write
+  uv run python scripts/bedrock_prices.py --from-dir /tmp/aws-prices --check   # exit 1 when out of date
+  ```
+
+  It downloads only over https from `pricing.us-east-1.amazonaws.com`, follows no redirect and caps each file at
+  32 MiB. It stops (exit 2) on any usage type it cannot map, on a model the table neither maps nor skips, and on
+  prices the catalog cannot express, rather than skipping them silently: a new model means a reviewed change to the
+  table, read from its model card. `tests/unit/test_bedrock_catalog.py` holds the Claude 5.x entries to AWS's
+  structure (every standard price 1.1x the global one) and the profile set per model to the model cards.
 
 ## 8. Prices that differ by Region
 
@@ -291,7 +319,118 @@ models:
   example-us: {catalog_id: azure_openai/example-model, deployments: [{provider: azure_openai, region: eastus}]}
 ```
 
-## 9. Vertex AI
+## 9. When a model has no price
+
+A model with no price in force is never guessed, never free: `check-config` and `serve` refuse a
+route to it, and a call is refused with `model_not_priced` before any provider contact. The
+message names the model and the two ways to price it:
+
+- **The provider's price, in an override file** (sections 1 to 3). This is the real fix.
+- **A stand-in until then: `spendgate catalog draft`.** It copies the price of a model the catalog
+  already prices, of the same provider, onto the new id
+  ([ADR-0028](adr/0028-price-coverage-and-regional-prices.md)):
+
+```bash
+# Price a new Anthropic model like Claude Haiku 5.5, 25% dearer, until its own price is known.
+spendgate catalog draft --like anthropic/claude-haiku-5-5 --as anthropic/claude-new-model \
+  --multiplier 1.25 --out stand-in.yaml
+
+# Copy from your own override files too, not only the bundled catalog.
+spendgate catalog draft --like openai/my-model --as openai/my-model-2 --config spendgate.yaml --out stand-in.yaml
+
+# A stand-in for two Regions only (section 8), copied from the price my-model has in swedencentral.
+spendgate catalog draft --like azure_openai/my-model --as azure_openai/my-model-2 --config spendgate.yaml \
+  --region swedencentral --regions swedencentral,westeurope --multiplier 1.1 --out stand-in-eu.yaml
+```
+
+- **What is copied.** The `--like` entry in force today (UTC): every price meter times
+  `--multiplier`, exactly (a product that would need rounding is refused), plus `mode`,
+  `currency`, `price_multiplier`, `long_context` and `limits` as they are, and its `source_url`.
+  `region`, `regions`, `deployment_type` and `deprecation_date` belong to the copied model and
+  are left out. If the `--like` model has a scheduled price (an entry with a later
+  `effective_from`), the draft follows it with one entry per date.
+- **`--regions a,b`** scopes the stand-in to those Regions (section 8): it writes `regions:`,
+  sorted and without repeats, and the note says `for Regions a, b`. Every other Region, and a
+  deployment without a `region`, keeps whatever price the id already has, or none. A slug is
+  lower-case letters, digits and `-`, as the schema requires. A Region that another entry of the
+  same id and `effective_from` already lists is refused (exit 3), because lookup must find one
+  entry per Region; an entry with exactly the same Regions is replaced, as any override is.
+- **`--region <slug>`** chooses which price of a Region-scoped `--like` is copied: the one a
+  deployment in that Region would pay, scheduled changes in that Region included, and the note
+  names it (`…@2026-11-01~swedencentral`). Without it, the region-less price is copied; a
+  `--like` priced only for some Regions is refused, and the error lists them. `--region` picks the
+  source only: the stand-in is scoped by `--regions` alone.
+- **The entry is `verified: false`**, with `effective_from` and `checked_on` today and a `note`
+  such as `Stand-in: priced like anthropic/claude-haiku-5-5@2026-11-13 x 1.25; replace with the
+  provider's price`. The start-up warning (section 2) lists it, and every call row records its
+  price id, so a charge made with a stand-in is never mistaken for a checked one.
+- **`--multiplier`** (default 1) is a plain decimal of at least 1: a stand-in can cost more than
+  the model it copies, never less. Pick it from what you know of the new model's price; when in
+  doubt, higher.
+- **Refused:** a `--like` with no price in force (an unknown id, or one not yet in force, or
+  none in that `--region`), two ids of different providers, a malformed id or Region slug, a
+  multiplier below 1 or not a decimal, and an existing `--out` without `--force` (which replaces
+  the file in one rename).
+- **`--as` may already be priced.** Then the stand-in supersedes that price from today (in each
+  of `--regions`, if given), and the command warns on stderr; `check-config` warns too when the
+  price it replaces was verified.
+- **Reads:** the bundled catalog, plus the override files in `catalog.paths` when `--config` is
+  given (no secret is read). Exit codes: 0 written; 2 bad command line, an unknown `--like` or the
+  file exists; 3 the configuration cannot be read or the draft would not load.
+
+Load the file with `catalog.paths` (section 3) and run `spendgate check-config`. Replace the entry
+with the provider's own price as soon as it is published.
+
+## 10. Azure OpenAI: which catalog id to use for your deployment
+
+Azure OpenAI charges by deployment type (Global Standard, Data Zone Standard, Regional Standard)
+and, for many models, by Region too. The bundled catalog has one id per deployment type, generated
+from the Azure Retail Prices API by [`scripts/azure_prices.py`](../scripts/azure_prices.py):
+
+| Deployment type in Azure | Catalog id | Typical price |
+|---|---|---|
+| Global Standard | `azure_openai/global.<model>` | the base price, the same in every Region for almost all models |
+| Data Zone Standard | `azure_openai/datazone.<model>` | typically 10% to 20% above Global, depending on the zone |
+| Regional Standard | `azure_openai/regional.<model>` | Region-dependent; only some older models |
+
+`<model>` is Azure's model name (`gpt-6-luna`, `gpt-4.1-mini`, `text-embedding-3-small`), with the
+version appended where Azure prices versions apart (`gpt-4o-2024-11-20`,
+`gpt-chat-latest-2026-10-07`). Name the model by the deployment type you created, set the
+deployment's `model` to your Azure deployment name (the default would send `datazone.gpt-6-luna`)
+and its `region` to the Azure Region of the resource:
+
+```yaml
+providers:
+  azure_openai: { credential: env:AZURE_OPENAI_API_KEY, api_version: "2025-04-01-preview" }
+models:
+  luna:
+    catalog_id: azure_openai/datazone.gpt-6-luna   # a Data Zone Standard deployment
+    deployments:
+      - { provider: azure_openai, base_url: https://eu-north.example.openai.azure.com, model: luna-prod, region: swedencentral }
+      - { provider: azure_openai, base_url: https://eu-west.example.openai.azure.com, model: luna-prod, region: westeurope }
+```
+
+- **Where Azure charges different prices in different Regions** (most Data Zone and Regional
+  deployments), each price is its own entry scoped to the Regions that pay it (section 8), and there is
+  no entry without `regions`. A deployment without a `region`, or in a Region Azure does not list for
+  that model and deployment type, is refused with `model_not_priced` rather than charged another
+  Region's price. The two Regions above share the EU Data Zone price, so they can share a route; a US
+  deployment of the same model needs its own route (section 8, one route, one price).
+- **Where the price is the same in every Region** (Global Standard, almost always) there is one entry
+  without `regions`, which prices any Region.
+- **The bare ids** (`azure_openai/gpt-6-luna` and the other hand-written ones) stay as they were:
+  Global meters times the highest Data Zone uplift, a conservative upper bound for any deployment type.
+- **Not priced:** Batch, Priority processing, Flex, provisioned (PTU), fine-tuned, Realtime, image and
+  audio chat models, the 12-hour cache write, models Microsoft has retired or does not list on its
+  models page, and `gpt-5.6-sol` while OpenAI's own price for it is promotional. A Region that lacks a meter the model has elsewhere (a cache-write or long-context price)
+  is left out. The script prints each one when it runs. Use an override file (section 1) for them.
+- **Updating** (maintainers): `uv run python scripts/azure_prices.py --download azure.json --check`
+  exits 1 when the price list no longer matches the catalog; `--from-file azure.json --write` rewrites
+  the generated block. The script stops on a meter name it cannot classify rather than guess.
+  `tests/unit/test_azure_prices.py` and `tests/unit/test_azure_openai_catalog.py` test it on recorded
+  API items.
+
+## 11. Vertex AI
 
 On Vertex AI (the `google` adapter with `auth: bearer_token`) Google prices the Gemini models
 differently from the Gemini API, and differently on the global endpoint and on the others. The

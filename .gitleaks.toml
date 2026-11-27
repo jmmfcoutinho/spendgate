@@ -19,3 +19,12 @@ description = "fake keys in leak tests"
 targetRules = ["generic-api-key"]
 paths = ['''(^|/)tests/perimeter/test_leaks\.py$''', '''(^|/)tests/unit/test_observability\.py$''']
 regexes = ['''sg-abcdef123456-''', '''sg-live-abcdef1234567890SECRET''']  # pragma: allowlist secret
+
+# Rule: generic-api-key. Scope: the Azure price importer's tests and recorded data.
+# Reason: Azure meter names such as "gpt-4o-transcribe-aud-inp-rgnl Tokens" are followed by the
+# model name they map to, which the rule reads as a token; only model names are allowed.
+[[allowlists]]
+description = "Azure meter names and model ids in price importer tests"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)tests/unit/test_azure_prices\.py$''', '''(^|/)tests/data/azure_retail/''']
+regexes = ['''^gpt-[a-z0-9.-]+$''']

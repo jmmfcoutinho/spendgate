@@ -39,13 +39,16 @@ highest Data Zone uplift). Meters are compared before the multiplier, against Li
 key. The multiplier is then checked as a ceiling: our meter times the multiplier must not be below
 the dearest Data Zone price LiteLLM lists for the model. Anthropic and Bedrock cache writes are
 compared with the 1-hour cache-write price, which is what our catalog stores (never the cheaper
-5-minute one).
+5-minute one). An id with Region-scoped entries (ADR-0028) has one price per Region group, while
+LiteLLM has one per id: the group that agrees with LiteLLM is compared, else the cheapest, so a
+price of ours below LiteLLM's still fails.
 
 Accepted differences. `scripts/price_diff_accepted.yaml` is a reviewed allow-list: a price that is
 HIGHER than LiteLLM's on purpose (an upper bound, a regional meter) can be accepted per id and
 meter, with a reason, who accepted it and an expiry of at most 90 days. A price LOWER than
 LiteLLM's is never accepted. LiteLLM-only deprecation dates Microsoft or another provider does not
-confirm are listed there as "unconfirmed". Expired items fail again.
+confirm are listed there as "unconfirmed", and a LiteLLM long-context rate the provider does not
+bill as "not_offered". Expired items fail again.
 
 Exit codes: 0 nothing to flag; 1 a price we carry differs by more than the threshold, or LiteLLM
 lists a deprecation date for a model we carry that we do not (within the horizon); 2 usage or
@@ -196,15 +199,16 @@ def _date(value: object) -> date:
 
 
 def load_ours(path: Path) -> list[Ours]:
-    """Our region-less entries. A Region-scoped entry (`regions`, ADR-0028) prices provider
-    Regions LiteLLM's rows do not describe: the `google` ones are Vertex AI prices, while LiteLLM's
-    `gemini` rows are the Gemini API. Their importers' tests hold them to the provider's source."""
+    """Our entries, except Region-scoped `google/` ones (`regions`, ADR-0028): those are Vertex AI
+    prices, while LiteLLM's `gemini` rows are the Gemini API, so comparing them would be wrong;
+    the Vertex importer's tests hold them to Google's source. Region-scoped Bedrock and Azure
+    entries are compared, by the group that agrees with LiteLLM, else the cheapest."""
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         entries = []
         for raw in doc["models"]:
-            if raw.get("regions"):
-                continue
+            if raw.get("regions") and str(raw["id"]).startswith("google/"):
+                continue  # Vertex AI, not the Gemini API LiteLLM describes
             lc = raw.get("long_context")
             entries.append(
                 Ours(
@@ -272,7 +276,8 @@ class Report:
         return [f for f in self.findings if f.failing]
 
 
-def _in_force(entries: Iterable[Ours], today: date) -> tuple[list[Ours], list[Ours]]:
+def _in_force(entries: Iterable[Ours], today: date) -> tuple[list[list[Ours]], list[Ours]]:
+    """Per id, the entries in force today (several when they are Region-scoped), and the rest."""
     by_id: dict[str, list[Ours]] = defaultdict(list)
     for e in entries:
         by_id[e.id].append(e)
@@ -280,12 +285,29 @@ def _in_force(entries: Iterable[Ours], today: date) -> tuple[list[Ours], list[Ou
     for group in by_id.values():
         group.sort(key=lambda e: e.effective_from, reverse=True)
         live = [e for e in group if e.effective_from <= today]
-        if live:
-            current.append(live[0])
-            other += [e for e in group if e is not live[0]]
-        else:
-            other += group
+        newest = [e for e in live if e.effective_from == live[0].effective_from] if live else []
+        if newest:
+            current.append(newest)
+        other += [e for e in group if all(e is not n for n in newest)]
     return current, other
+
+
+def _closest(
+    alternatives: Sequence[Ours], theirs: Mapped, conv: Mapping[str, Decimal], thr: Decimal
+) -> Ours:
+    """The entry to compare when an id has Region-scoped prices (ADR-0028).
+
+    LiteLLM has one price per id, for some Region. If one of our Region prices agrees with it,
+    that one is compared; otherwise the cheapest, so a price of ours below LiteLLM's still fails.
+    """
+    for ours in alternatives:
+        if not any(f.failing for f in _compare_price(ours, theirs, conv, thr)[0]):
+            return ours
+    big = Decimal("Infinity")
+    return min(
+        alternatives,
+        key=lambda e: (e.meters.get("input_per_mtok", big), e.meters.get("output_per_mtok", big)),
+    )
 
 
 def _compare_price(
@@ -454,19 +476,23 @@ MAX_ACCEPTANCE_DAYS = 90
 # unconfirmed: only LiteLLM has a date. ours_earlier: our date comes from the provider's own
 # schedule and is earlier than LiteLLM's, so the catalog refuses the model sooner (fail closed).
 DEPRECATION_STATUSES = frozenset({"unconfirmed", "ours_earlier"})
+# not_offered: LiteLLM lists a long-context rate the provider does not bill: its own price list
+# has no long-context price, and its model card caps the context at the threshold or below.
+LONG_CONTEXT_STATUSES = frozenset({"not_offered"})
 OURS_EARLIER_LABEL = "[ours earlier] "
 
 
 @dataclass(frozen=True, slots=True)
 class Acceptance:
     id: str
-    what: frozenset[str]  # meters (prices) or {"deprecation_date"}
+    what: frozenset[str]  # meters (prices), {"deprecation_date"} or {"long_context"}
     litellm_date: date | None  # deprecations only: the exact date being accepted
     reason: str
     accepted_by: str
     accepted_on: date
     expires: date
-    status: str = ""  # deprecations only: "unconfirmed" or "ours_earlier"
+    status: str = ""  # deprecations: "unconfirmed" or "ours_earlier"; long contexts: "not_offered"
+    litellm_threshold: int | None = None  # long contexts only: LiteLLM's exact threshold
 
     def label(self) -> str:
         who = f"accepted by {self.accepted_by} on {self.accepted_on}, expires {self.expires}"
@@ -474,14 +500,25 @@ class Acceptance:
         return f"{prefix}{self.reason} ({who})"
 
 
-def _acceptance(raw: object, relation_needed: bool) -> Acceptance:
+def _status(raw: Mapping[str, Any], entry_id: str, allowed: frozenset[str]) -> str:
+    status = str(raw["status"])
+    if status not in allowed:
+        raise InputError(
+            f"accepted list: {entry_id}: status must be one of " + ", ".join(sorted(allowed))
+        )
+    return status
+
+
+def _acceptance(raw: object, kind: str) -> Acceptance:
+    """One allow-list item; `kind` is "difference", "deprecation" or "long_context"."""
     if not isinstance(raw, dict):
         raise InputError("accepted list: every item must be a mapping")
+    lit, threshold, status = None, None, ""
     try:
         entry_id = str(raw["id"])
         reason, by = str(raw["reason"]).strip(), str(raw["accepted_by"]).strip()
         on, expires = _date(raw["accepted_on"]), _date(raw["expires"])
-        if relation_needed:
+        if kind == "difference":
             if raw["relation"] != "ours_higher":
                 raise InputError(
                     f"accepted list: {entry_id}: relation must be ours_higher "
@@ -492,15 +529,13 @@ def _acceptance(raw: object, relation_needed: bool) -> Acceptance:
                 raise InputError(
                     f"accepted list: {entry_id}: meters must be a list of known meters"
                 )
-            what, lit = frozenset(meters), None
-        else:
+            what = frozenset(meters)
+        elif kind == "deprecation":
             what, lit = frozenset({"deprecation_date"}), _date(raw["litellm_date"])
-            status = str(raw["status"])
-            if status not in DEPRECATION_STATUSES:
-                raise InputError(
-                    f"accepted list: {entry_id}: status must be one of "
-                    + ", ".join(sorted(DEPRECATION_STATUSES))
-                )
+            status = _status(raw, entry_id, DEPRECATION_STATUSES)
+        else:
+            what, threshold = frozenset({"long_context"}), int(raw["litellm_threshold"])
+            status = _status(raw, entry_id, LONG_CONTEXT_STATUSES)
     except (KeyError, TypeError, ValueError) as exc:
         raise InputError(f"accepted list: bad item ({type(exc).__name__}: {exc})") from None
     if not reason or not by:
@@ -510,7 +545,7 @@ def _acceptance(raw: object, relation_needed: bool) -> Acceptance:
             f"accepted list: {entry_id}: expires must be after accepted_on and at most "
             f"{MAX_ACCEPTANCE_DAYS} days later"
         )
-    return Acceptance(entry_id, what, lit, reason, by, on, expires, status if lit else "")
+    return Acceptance(entry_id, what, lit, reason, by, on, expires, status, threshold)
 
 
 def load_accepted(path: Path) -> list[Acceptance]:
@@ -523,9 +558,12 @@ def load_accepted(path: Path) -> list[Acceptance]:
         raise InputError(f"cannot read {path} ({type(exc).__name__})") from None
     if not isinstance(doc, dict):
         raise InputError(f"{path}: must be a mapping")
-    return [_acceptance(r, True) for r in doc.get("differences") or []] + [
-        _acceptance(r, False) for r in doc.get("deprecations") or []
-    ]
+    sections = (
+        ("differences", "difference"),
+        ("deprecations", "deprecation"),
+        ("long_contexts", "long_context"),
+    )
+    return [_acceptance(r, kind) for key, kind in sections for r in doc.get(key) or []]
 
 
 def _earlier(ours: str, theirs: str) -> bool:
@@ -545,6 +583,11 @@ def _cover(f: Finding, accepted: Sequence[Acceptance], today: date, used: set[in
                 continue
             if a.status == "ours_earlier" and not _earlier(f.ours, f.theirs):
                 continue  # only a date of ours that refuses sooner can be accepted
+        elif f.kind == "long_context":
+            # Only "we carry none, LiteLLM lists one at exactly this threshold"; a rule of
+            # ours that differs from LiteLLM's is never accepted.
+            if f.ours != "none" or not f.theirs.startswith(f">{a.litellm_threshold} tokens:"):
+                continue
         elif f.pct is None or f.pct >= 0 or f.theirs == "-":
             continue  # ours is lower (or not comparable): only ours_higher can be accepted
         used.add(i)
@@ -581,7 +624,8 @@ def diff_catalogs(  # noqa: PLR0913
     current, other = _in_force(entries, today)
     report.skipped = sorted(f"{e.id}@{e.effective_from}" for e in other)
     carried = {e.id for e in entries}
-    for ours in sorted(current, key=lambda e: e.id):
+    for alternatives in sorted(current, key=lambda g: g[0].id):
+        ours = alternatives[0]
         variants = found.get(ours.id, {})
         theirs = base_entry(variants)
         if theirs is None:
@@ -595,6 +639,8 @@ def diff_catalogs(  # noqa: PLR0913
             )
             continue
         conv = convert_meters(ours.id.partition("/")[0], theirs.spec)
+        if len(alternatives) > 1:
+            ours = _closest(alternatives, theirs, conv, threshold)
         findings, inexact = _compare_price(ours, theirs, conv, threshold)
         findings += _compare_long_context(ours, theirs, threshold)
         findings += _compare_ceiling(ours, theirs.key, variants.get("zone", []), threshold)

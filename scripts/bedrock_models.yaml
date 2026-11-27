@@ -1,0 +1,815 @@
+# Reviewed input of scripts/bedrock_prices.py: what the AWS Price List does not say.
+#
+# Read from AWS's model cards on 2026-11-26 (https://docs.aws.amazon.com/bedrock/latest/userguide/
+# model-card-<card>.md, the bedrock-runtime tables only):
+#   id          the model id Converse takes (`modelId`), without a profile prefix
+#   price       [offer, provider, model] as the Price List names the model (attributes.provider and
+#               attributes.model; "" when the Price List gives no provider)
+#   in_region   Regions where the bare id is served in-Region (only where the card both marks the
+#               Region In-Region and gives an in-Region endpoint)
+#   geo         each geographic inference profile prefix and its source Regions
+#   global      source Regions of the global profile
+#   limits      max_output_tokens (required) and context_window from the card ("128K" = 128000, the
+#               lower reading); max_image_tokens 6000 for Claude only (see prices.yaml)
+#   long_context.threshold_input_tokens  only where the card documents it
+#   deprecation_date  the card's EOL date for a Legacy model
+#   keep_bare   a bare id with no in-Region use that stays priced, and why
+# A model the Price List names must be under `models` or `skip` (with the reason it is left out);
+# the script refuses any other. Change this file by re-reading the card, never by guessing.
+
+region_sets:  # YAML anchors for the long Region lists the model cards repeat
+  commercial_33: &commercial_33 [af-south-1, ap-east-2, ap-northeast-1, ap-northeast-2, ap-northeast-3, ap-south-1, ap-south-2, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, ap-southeast-5, ap-southeast-6, ap-southeast-7, ca-central-1, ca-west-1, eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3, il-central-1, me-central-1, me-south-1, mx-central-1, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2]
+  global_31: &global_31 [af-south-1, ap-east-2, ap-northeast-1, ap-northeast-2, ap-northeast-3, ap-south-1, ap-south-2, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, ap-southeast-5, ap-southeast-6, ap-southeast-7, ca-central-1, ca-west-1, eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3, il-central-1, mx-central-1, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2]
+  global_32: &global_32 [af-south-1, ap-east-2, ap-northeast-1, ap-northeast-2, ap-northeast-3, ap-south-1, ap-south-2, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, ap-southeast-5, ap-southeast-6, ap-southeast-7, ca-central-1, ca-west-1, eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3, il-central-1, me-central-1, me-south-1, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2]
+
+models:
+  - id: anthropic.claude-fable-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Fable 5"]
+    card: anthropic-claude-fable-5
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-fable-5-1
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Fable 5.1"]
+    card: anthropic-claude-fable-5-1
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-fable-5-2
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Fable 5.2"]
+    card: anthropic-claude-fable-5-2
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-haiku-4-5-20251001-v1:0
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Haiku 4.5"]
+    card: anthropic-claude-haiku-4-5
+    geo:
+      au: [ap-southeast-2, ap-southeast-4, ap-southeast-6]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      in: [ap-south-1, ap-south-2]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+  - id: anthropic.claude-haiku-5-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Haiku 5.5"]
+    card: anthropic-claude-haiku-5-5
+    keep_bare: "Priced since the 2026-11-13 seed; AWS lists no in-Region use, kept so configurations that name it keep a price."
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      ca: [ca-central-1, ca-west-1]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+    long_context: { threshold_input_tokens: 100000 }
+  - id: anthropic.claude-mythos-5-1
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Mythos 5.1"]
+    card: anthropic-claude-mythos-5-1
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-mythos-5-2
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Mythos 5.2"]
+    card: anthropic-claude-mythos-5-2
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-opus-4-1-20250805-v1:0
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 4.1"]
+    card: anthropic-claude-opus-4-1
+    geo:
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 32000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2027-01-08"
+  - id: anthropic.claude-opus-4-5-20251101-v1:0
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 4.5"]
+    card: anthropic-claude-opus-4-5
+    geo:
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      us: [ca-central-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2027-05-23"
+  - id: anthropic.claude-opus-4-6-v1
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 4.6"]
+    card: anthropic-claude-opus-4-6
+    geo:
+      au: [ap-southeast-2, ap-southeast-4, ap-southeast-6]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-opus-4-7
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 4.7"]
+    card: anthropic-claude-opus-4-7
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-opus-4-8
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 4.8"]
+    card: anthropic-claude-opus-4-8
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-opus-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 5"]
+    card: anthropic-claude-opus-5
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      in: [ap-south-1, ap-south-2]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-opus-5-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Opus 5.5"]
+    card: anthropic-claude-opus-5-5
+    in_region: [eu-west-2]
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-sonnet-4-5-20250929-v1:0
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Sonnet 4.5"]
+    card: anthropic-claude-sonnet-4-5
+    geo:
+      au: [ap-southeast-2, ap-southeast-4, ap-southeast-6]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, us-east-1, us-east-2, us-gov-east-1, us-gov-west-1, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 64000, context_window: 200000, max_image_tokens: 6000 }
+    deprecation_date: "2027-04-08"
+  - id: anthropic.claude-sonnet-4-6
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Sonnet 4.6"]
+    card: anthropic-claude-sonnet-4-6
+    geo:
+      au: [ap-southeast-2, ap-southeast-4, ap-southeast-6]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      jp: [ap-northeast-1, ap-northeast-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 64000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-sonnet-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Sonnet 5"]
+    card: anthropic-claude-sonnet-5
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      in: [ap-south-1, ap-south-2]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: anthropic.claude-sonnet-5-5
+    price: [AmazonBedrockFoundationModels, Anthropic, "Claude Sonnet 5.5"]
+    card: anthropic-claude-sonnet-5-5
+    geo:
+      au: [ap-southeast-2, ap-southeast-4]
+      ca: [ca-central-1, ca-west-1]
+      eu: [eu-central-1, eu-central-2, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1000000, max_image_tokens: 6000 }
+  - id: openai.gpt-5.4
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-5.4"]
+    card: openai-gpt-54
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-5.5
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-5.5"]
+    card: openai-gpt-55
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *commercial_33
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-5.6-luna
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-5.6 Luna"]
+    card: openai-gpt-56-luna
+    geo:
+      in: [ap-south-1, ap-south-2]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    global: *global_32
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-5.6-sol
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-5.6 Sol"]
+    card: openai-gpt-56-sol
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *global_32
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-5.6-terra
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-5.6 Terra"]
+    card: openai-gpt-56-terra
+    geo:
+      in: [ap-south-1, ap-south-2]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    global: *global_32
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6-astra
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6 Astra"]
+    card: openai-gpt-6-astra
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: [ap-northeast-1, ap-northeast-2, ap-northeast-3, ap-south-1, ap-southeast-1, ap-southeast-2, ca-central-1, ca-west-1, eu-central-1, eu-north-1, eu-west-1, eu-west-2, eu-west-3, sa-east-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6-luna
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6 Luna"]
+    card: openai-gpt-6-luna
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *global_31
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6-sol
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6 Sol"]
+    card: openai-gpt-6-sol
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *global_31
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6.1-sol
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6.1 Sol"]
+    card: openai-gpt-6-1-sol
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 131072, context_window: 1000000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6.1-terra
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6.1 Terra"]
+    card: openai-gpt-6-1-terra
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *global_31
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6.2-astra
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6.2 Astra"]
+    card: openai-gpt-6-2-astra
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *global_31
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: openai.gpt-6.2-sol
+    price: [AmazonBedrockFoundationModels, OpenAI, "OpenAI GPT-6.2 Sol"]
+    card: openai-gpt-6-2-sol
+    geo:
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: *global_31
+    limits: { max_output_tokens: 128000, context_window: 1050000 }
+    long_context: { threshold_input_tokens: 272000 }  # card: more than 272K input tokens
+  - id: writer.palmyra-x4-v1:0
+    price: [AmazonBedrockFoundationModels, Writer, "Palmyra X4"]
+    card: writer-palmyra-x4
+    geo:
+      us: [us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-09"
+  - id: writer.palmyra-x5-v1:0
+    price: [AmazonBedrockFoundationModels, Writer, "Palmyra X5"]
+    card: writer-palmyra-x5
+    geo:
+      us: [us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-21"
+  - id: deepseek.v3-v1:0
+    price: [AmazonBedrock, DeepSeek, "DeepSeek V3.1"]
+    card: deepseek-deepseek-v3-1
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-north-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: deepseek.v3.2
+    price: [AmazonBedrock, DeepSeek, "DeepSeek v3.2"]
+    card: deepseek-deepseek-v3-2
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-north-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 164000 }
+  - id: deepseek.r1-v1:0
+    price: [AmazonBedrock, DeepSeek, "R1"]
+    card: deepseek-deepseek-r1
+    geo:
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: google.gemma-3-12b-it
+    price: [AmazonBedrock, Google, "Gemma 3 12B"]
+    card: google-gemma-3-12b-it
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: google.gemma-3-27b-it
+    price: [AmazonBedrock, Google, "Gemma 3 27B"]
+    card: google-gemma-3-27b-pt
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: google.gemma-3-4b-it
+    price: [AmazonBedrock, Google, "Gemma 3 4B"]
+    card: google-gemma-3-4b-it
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: moonshot.kimi-k2-thinking
+    price: [AmazonBedrock, Kimi AI, "Kimi K2 Thinking"]
+    card: moonshot-ai-kimi-k2-thinking
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-north-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 256000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama3-70b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 3 70B"]
+    card: meta-llama-3-70b-instruct
+    in_region: [ap-south-1, ca-central-1, eu-west-2, us-east-1, us-gov-west-1, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 8000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama3-8b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 3 8B"]
+    card: meta-llama-3-8b-instruct
+    in_region: [ap-south-1, ca-central-1, eu-west-2, us-east-1, us-gov-west-1, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 8000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama3-1-70b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 3.1 70B"]
+    card: meta-llama-3-1-70b-instruct
+    in_region: [us-west-2]
+    geo:
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama3-1-8b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 3.1 8B"]
+    card: meta-llama-3-1-8b-instruct
+    in_region: [us-west-2]
+    geo:
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama3-3-70b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 3.3 70B"]
+    card: meta-llama-3-3-70b-instruct
+    in_region: [us-east-2]
+    geo:
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama4-maverick-17b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 4 Maverick 17B"]
+    card: meta-llama-4-maverick-17b-instruct
+    geo:
+      us: [us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 1000000 }
+    deprecation_date: "2027-03-30"
+  - id: meta.llama4-scout-17b-instruct-v1:0
+    price: [AmazonBedrock, Meta, "Llama 4 Scout 17B"]
+    card: meta-llama-4-scout-17b-instruct
+    geo:
+      us: [us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 10000000 }
+    deprecation_date: "2027-03-30"
+  - id: minimax.minimax-m2.5
+    price: [AmazonBedrock, Minimax AI, "MiniMax M2.5"]
+    card: minimax-minimax-m2-5
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 196000 }
+  - id: minimax.minimax-m2
+    price: [AmazonBedrock, Minimax AI, "Minimax M2"]
+    card: minimax-minimax-m2
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 1000000 }
+    deprecation_date: "2027-03-30"
+  - id: minimax.minimax-m2.1
+    price: [AmazonBedrock, Minimax AI, "Minimax M2.1"]
+    card: minimax-minimax-m2-1
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 196000 }
+    deprecation_date: "2027-03-30"
+  - id: mistral.devstral-2-123b
+    price: [AmazonBedrock, Mistral AI, "Devstral"]
+    card: mistral-ai-devstral-2-123b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 32000, context_window: 256000 }
+    deprecation_date: "2027-03-30"
+  - id: mistral.magistral-small-2509
+    price: [AmazonBedrock, Mistral, "Magistral Small 1.2"]
+    card: mistral-ai-magistral-small-2509
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 40000, context_window: 128000 }
+  - id: mistral.ministral-3-14b-instruct
+    price: [AmazonBedrock, Mistral, "Ministral 14B 3.0"]
+    card: mistral-ai-ministral-14b-3-0
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+  - id: mistral.ministral-3-3b-instruct
+    price: [AmazonBedrock, Mistral, "Ministral 3B 3.0"]
+    card: mistral-ai-ministral-3b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+  - id: mistral.ministral-3-8b-instruct
+    price: [AmazonBedrock, Mistral, "Ministral 8B 3.0"]
+    card: mistral-ai-ministral-3-8b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+  - id: mistral.mistral-7b-instruct-v0:2
+    price: [AmazonBedrock, Mistral, "Mistral 7B"]
+    card: mistral-ai-mistral-7b-instruct
+    in_region: [ap-south-1, ap-southeast-2, ca-central-1, eu-west-1, eu-west-2, eu-west-3, sa-east-1, us-east-1, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 32000 }
+    deprecation_date: "2027-03-30"
+  - id: mistral.mistral-large-3-675b-instruct
+    price: [AmazonBedrock, Mistral, "Mistral Large 3"]
+    card: mistral-ai-mistral-large-3
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 32000, context_window: 256000 }
+  - id: mistral.mistral-large-2402-v1:0
+    price: [AmazonBedrock, Mistral, "Mistral Large"]
+    card: mistral-ai-mistral-large
+    in_region: [ap-south-1, ap-southeast-2, ca-central-1, eu-west-1, eu-west-2, eu-west-3, sa-east-1, us-east-1, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 32000 }
+  - id: mistral.mistral-small-2402-v1:0
+    price: [AmazonBedrock, Mistral, "Mistral Small"]
+    card: mistral-ai-mistral-small
+    in_region: [us-east-1]
+    limits: { max_output_tokens: 4000, context_window: 32000 }
+  - id: mistral.mixtral-8x7b-instruct-v0:1
+    price: [AmazonBedrock, Mistral, "Mixtral 8x7B"]
+    card: mistral-ai-mixtral-8x7b-instruct
+    in_region: [ap-south-1, ap-southeast-2, ca-central-1, eu-west-1, eu-west-2, eu-west-3, sa-east-1, us-east-1, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 32000 }
+    deprecation_date: "2027-03-30"
+  - id: mistral.pixtral-large-2502-v1:0
+    price: [AmazonBedrock, Mistral, "Pixtral Large 25.02"]
+    card: mistral-ai-pixtral-large
+    geo:
+      eu: [eu-central-1, eu-north-1, eu-west-1, eu-west-3]
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 128000 }
+  - id: moonshotai.kimi-k2.5
+    price: [AmazonBedrock, Moonshot AI, "Kimi K2.5"]
+    card: moonshot-ai-kimi-k2-5
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-north-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 256000 }
+  - id: nvidia.nemotron-super-3-120b
+    price: [AmazonBedrock, Nvidia, "NVIDIA Nemotron 3 Super 120B A12B"]
+    card: nvidia-nemotron-super-3-120b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    limits: { max_output_tokens: 32000, context_window: 256000 }
+  - id: nvidia.nemotron-nano-12b-v2
+    price: [AmazonBedrock, Nvidia, "NVIDIA Nemotron Nano 2 VL"]
+    card: nvidia-nvidia-nemotron-nano-12b-v2-vl-bf16
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: nvidia.nemotron-nano-9b-v2
+    price: [AmazonBedrock, Nvidia, "NVIDIA Nemotron Nano 2"]
+    card: nvidia-nvidia-nemotron-nano-9b-v2
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    limits: { max_output_tokens: 8000, context_window: 128000 }
+    deprecation_date: "2027-03-30"
+  - id: nvidia.nemotron-nano-3-30b
+    price: [AmazonBedrock, Nvidia, "Nemotron Nano 3 30B"]
+    card: nvidia-nemotron-nano-3-30b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    limits: { max_output_tokens: 8000, context_window: 256000 }
+  - id: openai.gpt-oss-safeguard-120b
+    price: [AmazonBedrock, OpenAI, "GPT OSS Safeguard 120B"]
+    card: openai-gpt-oss-safeguard-120b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 128000 }
+  - id: openai.gpt-oss-safeguard-20b
+    price: [AmazonBedrock, OpenAI, "GPT OSS Safeguard 20B"]
+    card: openai-gpt-oss-safeguard-20b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 128000 }
+  - id: openai.gpt-oss-120b-1:0
+    price: [AmazonBedrock, OpenAI, "gpt-oss-120b"]
+    card: openai-gpt-oss-120b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    limits: { max_output_tokens: 16000, context_window: 128000 }
+  - id: openai.gpt-oss-20b-1:0
+    price: [AmazonBedrock, OpenAI, "gpt-oss-20b"]
+    card: openai-gpt-oss-20b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      us-gov: [us-gov-east-1, us-gov-west-1]
+    limits: { max_output_tokens: 16000, context_window: 128000 }
+  - id: qwen.qwen3-235b-a22b-2507-v1:0
+    price: [AmazonBedrock, Qwen, "Qwen3 235B A22B 2507"]
+    card: qwen-qwen3-235b-a22b-2507
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, ap-southeast-3, eu-central-1, eu-north-1, eu-south-1, eu-west-2, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 256000 }
+  - id: qwen.qwen3-32b-v1:0
+    price: [AmazonBedrock, Qwen, "Qwen3 32B"]
+    card: qwen-qwen3-32b
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, ap-southeast-3, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 32000 }
+  - id: qwen.qwen3-coder-30b-a3b-v1:0
+    price: [AmazonBedrock, Qwen, "Qwen3 Coder 30B A3B"]
+    card: qwen-qwen3-coder-30b-a3b-instruct
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, ap-southeast-3, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 256000 }
+    deprecation_date: "2027-03-30"
+  - id: qwen.qwen3-coder-480b-a35b-v1:0
+    price: [AmazonBedrock, Qwen, "Qwen3 Coder 480B A35B"]
+    card: qwen-qwen3-coder-480b-a35b-instruct
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, ap-southeast-3, eu-north-1, eu-west-2, us-east-2, us-west-2]
+    limits: { max_output_tokens: 16000, context_window: 256000 }
+    deprecation_date: "2027-03-30"
+  - id: qwen.qwen3-coder-next
+    price: [AmazonBedrock, Qwen, "Qwen3 Coder Next"]
+    card: qwen-qwen3-coder-next
+    in_region: [ap-southeast-2, eu-west-2, us-east-1]
+    limits: { max_output_tokens: 16000, context_window: 256000 }
+  - id: qwen.qwen3-next-80b-a3b
+    price: [AmazonBedrock, Qwen, "qwen3-next-80b-a3b"]
+    card: qwen-qwen3-next-80b-a3b
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 256000 }
+  - id: qwen.qwen3-vl-235b-a22b
+    price: [AmazonBedrock, Qwen, "Qwen3 VL 235B A22B"]
+    card: qwen-qwen3-vl-235b-a22b
+    in_region: [ap-northeast-1, ap-south-1, ap-southeast-2, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 8000, context_window: 256000 }
+  - id: writer.palmyra-vision-7b
+    price: [AmazonBedrock, Writer, "Writer Palmyra Vision 7B"]
+    card: writer-palmyra-vision-7b
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 4000, context_window: 4000 }
+  - id: zai.glm-4.7-flash
+    price: [AmazonBedrock, Z AI, "GLM 4.7 Flash"]
+    card: zai-glm-4-7-flash
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-central-1, eu-north-1, eu-south-1, eu-west-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 128000, context_window: 203000 }
+    deprecation_date: "2027-03-30"
+  - id: zai.glm-4.7
+    price: [AmazonBedrock, Z AI, "GLM 4.7"]
+    card: zai-glm-4-7
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-north-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 128000, context_window: 203000 }
+    deprecation_date: "2027-03-30"
+  - id: zai.glm-5
+    price: [AmazonBedrock, Z AI, "GLM 5"]
+    card: zai-glm-5
+    in_region: [ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, eu-north-1, eu-west-2, sa-east-1, us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 128000, context_window: 200000 }
+  - id: amazon.nova-2-lite-v1:0
+    price: [AmazonBedrock, "", "Nova 2.0 Lite"]
+    card: amazon-nova-2-lite
+    geo:
+      eu: [eu-central-1, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-3]
+      jp: [ap-northeast-1]
+      us: [ca-central-1, ca-west-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    global: [ap-east-2, ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, ap-southeast-5, ap-southeast-6, ap-southeast-7, ca-central-1, ca-west-1, eu-central-1, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3, il-central-1, me-central-1, us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 64000, context_window: 1000000 }
+  - id: amazon.nova-lite-v1:0
+    price: [AmazonBedrock, "", "Nova Lite"]
+    card: amazon-nova-lite
+    in_region: [ap-northeast-1, ap-southeast-2, ap-southeast-3, eu-north-1, eu-west-2, me-central-1, us-east-1, us-east-2, us-gov-west-1, us-west-2]
+    geo:
+      apac: [ap-east-2, ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, ap-southeast-5, ap-southeast-7]
+      ca: [ca-central-1, ca-west-1]
+      eu: [eu-central-1, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-3, il-central-1]
+      us: [us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 10000, context_window: 300000 }
+  - id: amazon.nova-micro-v1:0
+    price: [AmazonBedrock, "", "Nova Micro"]
+    card: amazon-nova-micro
+    in_region: [ap-southeast-2, eu-west-2, us-east-1, us-gov-west-1]
+    geo:
+      eu: [eu-central-1, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-3, il-central-1]
+      us: [us-east-1, us-east-2, us-west-2]
+    limits: { max_output_tokens: 10000, context_window: 128000 }
+  - id: amazon.nova-pro-v1:0
+    price: [AmazonBedrock, "", "Nova Pro"]
+    card: amazon-nova-pro
+    in_region: [ap-southeast-2, ap-southeast-3, eu-west-2, me-central-1, us-east-1, us-gov-west-1]
+    geo:
+      apac: [ap-east-2, ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ap-southeast-3, ap-southeast-4, ap-southeast-5, ap-southeast-7, me-central-1]
+      eu: [eu-central-1, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-3, il-central-1]
+      us: [us-east-1, us-east-2, us-west-1, us-west-2]
+    limits: { max_output_tokens: 10000, context_window: 300000 }
+
+skip:
+  - price: [AmazonBedrockFoundationModels, "AI21 Labs", "Jamba 1.5 Large"]
+    reason: "End of life on Bedrock 2026-11-26 (model card)"
+  - price: [AmazonBedrockFoundationModels, "AI21 Labs", "Jamba 1.5 Mini"]
+    reason: "End of life on Bedrock 2026-11-26 (model card)"
+  - price: [AmazonBedrockFoundationModels, "AI21 Labs", "Jamba-Instruct"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "AI21 Labs", "Jurassic Mid"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "AI21 Labs", "Jurassic Ultra"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 2.0"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3 Haiku"]
+    reason: "End of life 2026-09-10; the last Region (ca-central-1) ends 2026-11-27 (model card)"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3 Opus"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3 Sonnet"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3.5 Haiku"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3.5 Sonnet"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3.5 Sonnet v2"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude 3.7 Sonnet"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude Instant"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude Mythos 5"]
+    reason: "Model card lists bedrock-mantle only (no Converse on bedrock-runtime)"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude Mythos Preview"]
+    reason: "No AWS model card: not generally offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude Opus 4"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Anthropic", "Claude Sonnet 4"]
+    reason: "End of life 2026-10-14 (model card)"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Command"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Command-Light"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Command R"]
+    reason: "End of life 2026-08-19 (model card)"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Command R+"]
+    reason: "End of life 2026-08-19 (model card)"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Embed English"]
+    reason: "Embeddings, not chat"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Embed Multilingual"]
+    reason: "Embeddings, not chat"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Embed v4"]
+    reason: "Embeddings, not chat"
+  - price: [AmazonBedrockFoundationModels, "Cohere", "Rerank 3.5"]
+    reason: "Rerank, not chat"
+  - price: [AmazonBedrockFoundationModels, "Luma AI", "Ray v2"]
+    reason: "Video generation"
+  - price: [AmazonBedrockFoundationModels, "Meta", "Llama2-13B"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "Meta", "Llama2-70B"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrockFoundationModels, "OpenAI", "OpenAI GPT-Daybreak-5.6-Sol"]
+    reason: "Model card gives no maximum output tokens"
+  - price: [AmazonBedrockFoundationModels, "OpenAI", "OpenAI GPT-Daybreak-Red-5.6-Sol"]
+    reason: "Model card gives no maximum output tokens"
+  - price: [AmazonBedrockFoundationModels, "Stability AI", "SD3.5LargeV1"]
+    reason: "Image generation"
+  - price: [AmazonBedrockFoundationModels, "Stability AI", "SD3LargeV1"]
+    reason: "Image generation"
+  - price: [AmazonBedrockFoundationModels, "Stability AI", "SI-Core-V1"]
+    reason: "Image generation"
+  - price: [AmazonBedrockFoundationModels, "Stability AI", "SI-Ultra-V1"]
+    reason: "Image generation"
+  - price: [AmazonBedrockFoundationModels, "Stability AI", "Stability AI Image Services"]
+    reason: "Image editing"
+  - price: [AmazonBedrockFoundationModels, "TwelveLabs", "Marengo Embed 2.7"]
+    reason: "Video embeddings"
+  - price: [AmazonBedrockFoundationModels, "TwelveLabs", "Marengo Embed 3.0"]
+    reason: "Video embeddings"
+  - price: [AmazonBedrockFoundationModels, "TwelveLabs", "Pegasus 1.2"]
+    reason: "Video understanding; no Converse (model card)"
+  - price: [AmazonBedrockFoundationModels, "TwelveLabs", "TwelveLabs Pegasus 1.5"]
+    reason: "Video understanding; no Converse (model card)"
+  - price: [AmazonBedrock, "Anthropic", "Claude 2.0"]
+    reason: "Anthropic prices are read from AmazonBedrockFoundationModels; no model card"
+  - price: [AmazonBedrock, "Anthropic", "Claude 2.1"]
+    reason: "Anthropic prices are read from AmazonBedrockFoundationModels; no model card"
+  - price: [AmazonBedrock, "Anthropic", "Claude 3 Haiku"]
+    reason: "Anthropic prices are read from AmazonBedrockFoundationModels; end of life"
+  - price: [AmazonBedrock, "Anthropic", "Claude 3 Sonnet"]
+    reason: "Anthropic prices are read from AmazonBedrockFoundationModels; no model card"
+  - price: [AmazonBedrock, "Anthropic", "Claude Instant"]
+    reason: "Anthropic prices are read from AmazonBedrockFoundationModels; no model card"
+  - price: [AmazonBedrock, "Google", "google.gemma-4-26b-a4b"]
+    reason: "Model card lists bedrock-mantle only (no Converse)"
+  - price: [AmazonBedrock, "Google", "google.gemma-4-31b"]
+    reason: "Model card lists bedrock-mantle only (no Converse)"
+  - price: [AmazonBedrock, "Google", "google.gemma-4-e2b"]
+    reason: "Model card lists bedrock-mantle only (no Converse)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.1 405B"]
+    reason: "End of life 2026-07-07 (model card)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.1 405B Latency Optimized"]
+    reason: "End of life 2026-07-07; latency-optimized inference"
+  - price: [AmazonBedrock, "Meta", "Llama 3.1 70B Latency Optimized"]
+    reason: "Latency-optimized inference (the adapter never asks for it)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.2 11B"]
+    reason: "End of life 2026-07-07 (model card)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.2 1B"]
+    reason: "End of life 2026-07-07 (model card)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.2 3B"]
+    reason: "End of life 2026-07-07 (model card)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.2 90B"]
+    reason: "End of life 2026-07-07 (model card)"
+  - price: [AmazonBedrock, "Meta", "Llama 3.3 70B Custom"]
+    reason: "A custom (fine-tuned) model's price"
+  - price: [AmazonBedrock, "Mistral", "Mistral Large 2407"]
+    reason: "No AWS model card: no longer offered"
+  - price: [AmazonBedrock, "Mistral", "Voxtral Mini 1.0"]
+    reason: "Model card gives no maximum output tokens (audio model)"
+  - price: [AmazonBedrock, "Mistral", "Voxtral Small 1.0"]
+    reason: "Model card gives no maximum output tokens (audio model)"
+  - price: [AmazonBedrock, "Moonshot AI", "Kimi K2 Thinking"]
+    reason: "bedrock-mantle prices only; bedrock-runtime is priced under Kimi AI"
+  - price: [AmazonBedrock, "Moonshot AI", "Kimi K3"]
+    reason: "Prices only for bedrock-mantle; model card gives no maximum output tokens"
+  - price: [AmazonBedrock, "Qwen", "Qwen3 Next 80B A3B"]
+    reason: "Flex, Priority and bedrock-mantle prices only; Standard is under qwen3-next-80b-a3b"
+  - price: [AmazonBedrock, "xAI", "Grok 4.7"]
+    reason: "Prices only for bedrock-mantle; output limit is 524,288 minus input (no fixed maximum)"
+  - price: [AmazonBedrock, "", "Nova 2.0 Omni"]
+    reason: "No AWS model card (Converse support, ids and limits not documented)"
+  - price: [AmazonBedrock, "", "Nova 2.0 Pro"]
+    reason: "No AWS model card (Converse support, ids and limits not documented)"
+  - price: [AmazonBedrock, "", "Nova 2.5 Sonic"]
+    reason: "Speech-to-speech; no Converse (model card)"
+  - price: [AmazonBedrock, "", "Nova Canvas"]
+    reason: "Image generation"
+  - price: [AmazonBedrock, "", "Nova MME"]
+    reason: "Embeddings, not chat"
+  - price: [AmazonBedrock, "", "Nova Premier"]
+    reason: "No AWS model card (ids and limits not documented)"
+  - price: [AmazonBedrock, "", "Nova Pro Latency Optimized"]
+    reason: "Latency-optimized inference (the adapter never asks for it)"
+  - price: [AmazonBedrock, "", "Nova Reel"]
+    reason: "Video generation"
+  - price: [AmazonBedrock, "", "Nova Sonic"]
+    reason: "Speech-to-speech; no model card"
+  - price: [AmazonBedrock, "", "Nova Sonic 2.0"]
+    reason: "Speech-to-speech; no Converse (model card)"
+  - price: [AmazonBedrock, "", "Llama 3.1 70B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "Llama 3.1 8B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "Llama 3.2 11B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "Llama 3.2 1B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "Llama 3.2 3B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "Llama 3.2 90B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "Llama 3.3 70B"]
+    reason: "Fine-tuning price rows without a provider"
+  - price: [AmazonBedrock, "", "openai.gpt-5.4"]
+    reason: "bedrock-mantle prices only (bedrock-runtime is priced under OpenAI GPT-5.4)"
+  - price: [AmazonBedrock, "", "openai.gpt-5.6-luna"]
+    reason: "bedrock-mantle prices only"
+  - price: [AmazonBedrock, "", "openai.gpt-5.6-terra"]
+    reason: "bedrock-mantle prices only"
+  - price: [AmazonBedrock, "", "xai.grok-4.3"]
+    reason: "bedrock-mantle only (model card)"
+  - price: [AmazonBedrock, "", "xai.grok-4.6"]
+    reason: "Prices only for bedrock-mantle; model card gives no maximum output tokens"
+
+not_models:  # Price List rows without a model attribute: nothing the adapter calls
+  - { offer: AmazonBedrock, usage: "Guardrail.*", reason: "Guardrails" }
+  - { offer: AmazonBedrock, usage: "DataAutomation-.*", reason: "Data Automation" }
+  - { offer: AmazonBedrock, usage: "BedrockFlows-.*", reason: "Flows" }
+  - { offer: AmazonBedrock, usage: "APO-.*", reason: "Prompt optimization" }
+  - { offer: AmazonBedrock, usage: "AmazonRerank-.*", reason: "Rerank" }
+  - { offer: AmazonBedrock, usage: "Bedrock-Web-Search", reason: "Web search tool" }
+  - { offer: AmazonBedrock, usage: "GenerateSQL-.*", reason: "Structured data retrieval" }
+  - { offer: AmazonBedrock, usage: "Prompt-Routing-.*", reason: "Prompt routing" }
+  - { offer: AmazonBedrock, usage: "NovaMultiModalEmbeddings-.*", reason: "Embeddings" }
+  - { offer: AmazonBedrock, usage: "Titan(Embedding|ImageGenerator).*", reason: "Titan embeddings and image generation" }
+  - { offer: AmazonBedrock, usage: "TitanText.*", reason: "Titan Text: no AWS model card, no longer offered" }
+  - { offer: AmazonBedrock, usage: ".+-CustomModelImport-.+", reason: "Custom Model Import" }
+  - { offer: AmazonBedrock, usage: "US-IAD", reason: "API-call meter of no model" }
