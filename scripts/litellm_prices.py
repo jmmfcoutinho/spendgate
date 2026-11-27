@@ -199,10 +199,16 @@ def _date(value: object) -> date:
 
 
 def load_ours(path: Path) -> list[Ours]:
+    """Our entries, except Region-scoped `google/` ones (`regions`, ADR-0028): those are Vertex AI
+    prices, while LiteLLM's `gemini` rows are the Gemini API, so comparing them would be wrong;
+    the Vertex importer's tests hold them to Google's source. Region-scoped Bedrock and Azure
+    entries are compared, by the group that agrees with LiteLLM, else the cheapest."""
     try:
         doc = yaml.safe_load(path.read_text(encoding="utf-8"))
         entries = []
         for raw in doc["models"]:
+            if raw.get("regions") and str(raw["id"]).startswith("google/"):
+                continue  # Vertex AI, not the Gemini API LiteLLM describes
             lc = raw.get("long_context")
             entries.append(
                 Ours(

@@ -1,0 +1,400 @@
+{
+ "skus": [
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content output token count gemini 4 carbon text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/0D64-5CF1-4B98",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 20000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "0D64-5CF1-4B98"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content input token count gemini 4 carbon text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/11A8-D415-F085",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 4000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "11A8-D415-F085"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content input token count gemini 4 neon text contributor",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/2294-6A90-1790",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "2294-6A90-1790"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content input token count gemini 4 neon text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/25D2-14F6-B4CC",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 3000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "25D2-14F6-B4CC"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content input token count Gemini 2.5 Pro short input text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/2D1C-F790-3C09",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 1250,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "2D1C-F790-3C09"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content output token count gemini 4 neon text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/2F66-38A2-E6E5",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 15000,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "2F66-38A2-E6E5"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content input token count Gemini 2.5 Pro long input text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/67F1-97F9-6ED4",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 2500,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "67F1-97F9-6ED4"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content cached input token count gemini 4 carbon text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/928E-2F02-F602",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 200,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "928E-2F02-F602"
+  },
+  {
+   "category": {
+    "resourceFamily": "ApplicationServices",
+    "resourceGroup": "Gemini",
+    "serviceDisplayName": "Gemini API",
+    "usageType": "OnDemand"
+   },
+   "description": "Generate content cached input token count gemini 4 neon text",
+   "geoTaxonomy": {
+    "regions": [],
+    "type": "GLOBAL"
+   },
+   "name": "services/AEFD-7695-64FA/skus/CACD-9ACC-DF95",
+   "pricingInfo": [
+    {
+     "currencyConversionRate": 1,
+     "effectiveTime": "2026-11-26T08:00:00Z",
+     "pricingExpression": {
+      "baseUnit": "count",
+      "baseUnitConversionFactor": 1,
+      "baseUnitDescription": "count",
+      "displayQuantity": 1000000,
+      "tieredRates": [
+       {
+        "startUsageAmount": 0,
+        "unitPrice": {
+         "currencyCode": "USD",
+         "nanos": 150,
+         "units": "0"
+        }
+       }
+      ],
+      "usageUnit": "count",
+      "usageUnitDescription": "count"
+     },
+     "summary": ""
+    }
+   ],
+   "serviceProviderName": "Google",
+   "serviceRegions": [
+    "global"
+   ],
+   "skuId": "CACD-9ACC-DF95"
+  }
+ ]
+}

@@ -580,3 +580,20 @@ def test_region_scoped_entries_compare_the_one_that_matches_litellm_else_the_che
     assert lp._closest(current[0], theirs, match, Decimal(1)) is entries[2]
     none = {"input_per_mtok": Decimal("0.65"), "output_per_mtok": Decimal("2.6")}
     assert lp._closest(current[0], theirs, none, Decimal(1)) is entries[1]  # ours lower shows
+
+
+def test_region_scoped_google_entries_are_vertex_and_never_compared_with_litellm(
+    tmp_path: Path,
+) -> None:
+    # Vertex AI prices (google/ with regions) are not what LiteLLM's Gemini API rows describe;
+    # Region-scoped entries of other providers (Bedrock, Azure) are still compared.
+    doc = yaml.safe_load((DATA / "catalog.yaml").read_text(encoding="utf-8"))
+    first = doc["models"][0]
+    vertex = {**first, "id": "google/gemini-x", "regions": ["global"]}
+    vertex |= {"meters": {"input_per_mtok": "99", "output_per_mtok": "99"}}
+    bedrock = {**first, "id": "bedrock/x", "regions": ["eu-west-2"]}
+    path = tmp_path / "catalog.yaml"
+    models = [*doc["models"], vertex, bedrock]
+    path.write_text(yaml.safe_dump({**doc, "models": models}), encoding="utf-8")
+    ids = [o.id for o in lp.load_ours(path)]
+    assert "google/gemini-x" not in ids and "bedrock/x" in ids
