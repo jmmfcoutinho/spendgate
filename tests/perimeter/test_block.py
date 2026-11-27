@@ -34,15 +34,17 @@ def test_refusals_reach_no_upstream(sqlite_stack: Stack) -> None:
     # A virtual key shaped like a real one, but unknown to the ledger.
     forged = "sg-" + "0" * 12 + "-" + "0" * 48
     huge = {**Alpha, "messages": [{"role": "user", "content": "a" * (MAX_BODY_BYTES * 2)}]}
-    embedding_as_chat = {**Alpha, "model": "embeddings"}  # priced for input only: unpriceable here
+    embedding_as_chat = {**Alpha, "model": "embeddings"}  # an embeddings model on the chat endpoint
     c.request(CHAT, key=slow, body=Alpha)  # uses slow's one request this minute; reaches the fake
     before = c.upstream_calls()
 
     cases = {
-        "T-BLK-01 unpriced": (
+        # Every routed model here is priced (an unpriced route does not start), so T-BLK-01 is
+        # proved in process: test_gateway_refusals.py::test_unpriced_model_is_refused.
+        "T-DOS-06 other mode": (
             c.request(CHAT, key=key, body=embedding_as_chat),
-            404,
-            "model_not_priced",
+            400,
+            "invalid_request",
         ),
         "T-BLK-02 budget": (c.request(CHAT, key=tight, body=Alpha), 402, "budget_period_exhausted"),
         "T-BLK-04 bad key": (c.request(CHAT, key=forged, body=Alpha), 401, "unauthorized"),

@@ -64,7 +64,7 @@ def test_unknown_and_disallowed_models(tmp_path: Path) -> None:
     run(case, tmp_path)
 
 
-# T-CAT-02
+# T-CAT-02, T-BLK-01: a routed model the catalog cannot price reaches no upstream
 def test_unpriced_model_is_refused(tmp_path: Path) -> None:
     async def case(path: Path) -> None:
         async with open_stack(path) as s:
