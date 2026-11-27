@@ -42,14 +42,16 @@ from spendgate.pipeline.model import AttemptEvent, Clock, Observer, Sender
 from spendgate.pipeline.settle import Book, Flight, Reading, attempt_record, read_usage
 from spendgate.pipeline.streaming import Live
 from spendgate.pipeline.transport import SendError, SendFailure, exchange, open_response, read_body
-from spendgate.providers.port import SseLimits, Untranslatable, UpstreamResponse
+from spendgate.providers.port import SseLimits, Untranslatable, UpstreamError, UpstreamResponse
 
 _MS = 1000
 _HTTP_OK = 200
 _HTTP_REDIRECT = 300
 _HTTP_ERROR = 400
+_HTTP_SERVER_ERROR = 500
 _MAX_ERROR_BYTES = 1024 * 1024  # an error answer to a streaming request is read whole, capped
-_OUR_CREDENTIAL_FAULTS = frozenset({401, 403, 404})  # the deployment is misconfigured, not busy
+_HTTP_UNAUTHORIZED = 401  # only our credential is sent, so a 401 is never the caller's doing
+_HTTP_TIMEOUT = 408
 # Longest a request waits for a cooling deployment. At least `HealthConfig.throttle_max_ms`, so a
 # 429 without Retry-After is always outwaited; a longer Retry-After is refused at once instead.
 MAX_WAIT_MS = 1_000
@@ -364,7 +366,7 @@ class Forwarder:
                 error_code=err.code,
             )
             return Retry(cause, retry_s)
-        self._feed_health(target, status, now, started)
+        self._feed_health(target, _everyones_fault(status, err), now, started)
         self._record(
             job,
             book,
@@ -377,8 +379,21 @@ class Forwarder:
         )
         return failure_for(err, target.provider)
 
-    def _feed_health(self, target: Target, status: int, now: int, started: int) -> None:
-        if status >= 500 or status == 408 or status in _OUR_CREDENTIAL_FAULTS:  # noqa: PLR2004
+    def _feed_health(self, target: Target, everyones: bool, now: int, started: int) -> None:
+        if everyones:
             self._router.failed(target, now)
         else:
             self._router.succeeded(target, now, started)  # it answered: the request was bad
+
+
+def _everyones_fault(status: int, err: UpstreamError) -> bool:
+    """Whether a sent, answered error counts towards the deployment's shared breaker.
+
+    Only what would fail for every caller does: the provider's 5xx or 408, a 401, or a code the
+    adapter reads as our credential or deployment being wrong (`deployment_fault`). Any other 4xx,
+    a 403 or 404 included, answered this one request: counting it would let one key take the
+    deployment away from every other key (ADR-0033).
+    """
+    if status >= _HTTP_SERVER_ERROR or status in {_HTTP_TIMEOUT, _HTTP_UNAUTHORIZED}:
+        return True
+    return err.deployment_fault

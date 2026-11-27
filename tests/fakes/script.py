@@ -40,7 +40,8 @@ class Script:
     oversize_event_bytes: int | None = None  # one stream event with this many bytes of text
     extra_events: int = 0  # this many additional empty-delta events (too many events)
     headers: tuple[tuple[str, str], ...] = field(default_factory=tuple)  # extra response headers
-    body: bytes | None = None  # a 200 answered with these JSON bytes in place of the shape's reply
+    # JSON bytes in place of the shape's reply: the 200's body, or the error body when status >= 400
+    body: bytes | None = None
 
     def stream_deltas(self) -> tuple[str, ...]:
         """Text pieces to stream, with the oversize piece and the extra empty events added."""
