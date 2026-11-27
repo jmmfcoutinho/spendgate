@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Security
+
+- The daily price watch reads the Google Pricing API key from the `price-watch` environment, which only
+  `main` may use, instead of a repository secret: a workflow changed on another branch can no longer
+  read it, even when started by hand (#109).
+
 ## [0.4.0] - 2026-11-27
 
 **Upgrading from 0.3.1:** no migration is needed, but three things can change what a running gateway does.
