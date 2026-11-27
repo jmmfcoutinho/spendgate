@@ -6,6 +6,8 @@ A block is executable when the line before its fence is an HTML comment `<!-- do
 - `shell`: run with bash in that directory; exported variables carry over to later blocks.
 - `serve`: started in the background (`spendgate serve`).
 - `shell` blocks that run `migrate --bootstrap` print the data key; the test reads it from stderr.
+  Their stderr is a pseudo-terminal, as in the reader's shell: `migrate --bootstrap` prints a
+  secret only to a terminal (ADR-0032).
 - `python`: run in a fresh interpreter against the running proxy.
 - `library`: run in this process with the local guard pointed at the fake provider.
 
@@ -20,6 +22,7 @@ do. The in-process library block opens no socket at all.
 
 import contextlib
 import os
+import pty
 import re
 import shutil
 import signal
@@ -72,6 +75,28 @@ SHIM = (
     "exec {python} -c 'import sys; from spendgate.cli import main; sys.exit(main())' \"$@\"\n"
 )
 BASH = shutil.which("bash") or "/bin/bash"
+
+
+@contextlib.contextmanager
+def terminal() -> Iterator[tuple[int, bytearray]]:
+    """A pseudo-terminal: the child writes to the first fd, the bytes it wrote fill the second
+    once the block ends. A thread drains it, so a long output never blocks the child."""
+    controller, tty = pty.openpty()
+    out = bytearray()
+
+    def drain() -> None:
+        with contextlib.suppress(OSError):  # EIO: every writer closed the terminal
+            while chunk := os.read(controller, 4096):
+                out.extend(chunk)
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+    try:
+        yield tty, out
+    finally:
+        os.close(tty)
+        reader.join(timeout=10)
+        os.close(controller)
 
 
 @dataclass(frozen=True)
@@ -167,15 +192,17 @@ class Stack:
         )
 
     def shell(self, script: str) -> str:
-        """Run a block; keep the variables it exported. Returns its stdout."""
+        """Run a block, stderr on a terminal; keep the variables it exported. Returns its stdout."""
         dump = self.dir / "env.dump"
         full = f"set -e\n{script}\nenv -0 > {dump}\n"
-        done = subprocess.run(  # noqa: S603
-            [BASH, "-c", full], cwd=self.dir, env=self.env, capture_output=True, text=True,
-            timeout=120, check=False,
-        )  # fmt: skip
-        assert done.returncode == 0, f"README shell block failed:\n{script}\n{done.stderr}"
-        if found := KEY_LINE.search(done.stderr):  # `migrate --bootstrap` prints it once (SR-08)
+        with terminal() as (tty, err):
+            done = subprocess.run(  # noqa: S603
+                [BASH, "-c", full], cwd=self.dir, env=self.env, stdout=subprocess.PIPE,
+                stderr=tty, text=True, timeout=120, check=False,
+            )  # fmt: skip
+        stderr = err.decode(errors="replace")
+        assert done.returncode == 0, f"README shell block failed:\n{script}\n{stderr}"
+        if found := KEY_LINE.search(stderr):  # `migrate --bootstrap` prints it once (SR-08)
             self.secret = found.group(1)
         self.env = dict(item.split("=", 1) for item in dump.read_text().split("\0") if "=" in item)
         return done.stdout

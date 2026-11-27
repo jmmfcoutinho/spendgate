@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from spendgate.cli import serve
+from spendgate.cli.bootstrap import print_bootstrap
 from spendgate.cli.runtime import open_runtime
 from spendgate.config import Settings, load
 from spendgate.core.errors import Refusal
@@ -109,11 +110,12 @@ async def test_t_log_04_serve_bootstraps_scopes_and_budgets_but_never_prints_or_
 
 
 @async_test
-async def test_t_log_04_migrate_bootstrap_still_creates_and_prints_each_key_once(
+async def test_t_log_04_migrate_bootstrap_still_creates_and_prints_each_key_once_to_a_terminal(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Without a terminal or `--secrets-file` it refuses (`test_bootstrap_secrets.py`)."""
     settings = await _settings(tmp_path)
-    await serve._migrate(settings, bootstrap=True)
+    await serve._migrate(settings, bootstrap=True, secrets_file=None, interactive=True)
     secrets = re.findall(r"\bsga?-[0-9a-f]{12}-[0-9a-f]{48}\b", capsys.readouterr().err)
     assert len(secrets) == 2 and len(set(secrets)) == 2
 
@@ -193,7 +195,7 @@ async def test_bootstrap_warns_when_an_existing_key_has_other_session_settings(
         assert "app-key" in warning and "PATCH /admin/v1/keys/" in warning
         api = [k for k in await ledger.list_keys(None) if k.name == "app-key"]
         assert api[0].policy.session_defaults is None  # create-only: never applied
-        serve.print_bootstrap(report)
+        print_bootstrap(report)
         assert "warning: bootstrap: key app-key" in capsys.readouterr().err
         # Rotate, then fix the new key: the old one warns only while its grace period runs.
         new = await keys.rotate_key(api[0].id, grace_ms=1000, actor="op", now=NOW_MS + 3)
