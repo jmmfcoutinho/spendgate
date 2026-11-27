@@ -1,0 +1,174 @@
+name: Price watch
+
+# Daily: run the three catalog importers on fresh provider data (ADR-0028 point 6) and, when their
+# generated blocks of prices.yaml change, open or update one pull request for the maintainer to
+# review. It never merges, and the proxy still fetches no prices at runtime (ADR-0014). A red run
+# means an importer refused its data (an unknown meter, a source format change) and nothing was
+# proposed: read the step's error and fix the importer or its reviewed tables by hand.
+#
+# Three jobs, so that no job holds two powers: `regenerate` downloads and runs Python with
+# read-only access, and is the only one that sees the Google key (in one step); `propose` pushes
+# and opens the pull request, running no Python and no dependency; `dispatch-ci` starts CI on the
+# branch, because events made with GITHUB_TOKEN start no `pull_request` run.
+
+on:
+  schedule:
+    - cron: "11 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: price-watch-${{ github.workflow }}
+  cancel-in-progress: false
+
+env:
+  UV_VERSION: "0.9.11"
+  BRANCH: prices/daily-watch
+
+jobs:
+  regenerate:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: "3.13"
+          enable-cache: false
+      - run: uv sync --frozen --all-extras
+      - name: Download the AWS Price List
+        run: |
+          mkdir -p "$RUNNER_TEMP/snapshot"
+          uv run --no-sync python scripts/bedrock_prices.py --download "$RUNNER_TEMP/snapshot/aws"
+      - name: Download the Azure Retail Prices
+        run: uv run --no-sync python scripts/azure_prices.py --download "$RUNNER_TEMP/snapshot/azure.json"
+      - name: Download the Google Cloud Pricing API SKUs
+        # The only step that sees the key; this workflow never runs on pull requests.
+        env:
+          GOOGLE_PRICING_API_KEY: ${{ secrets.GOOGLE_PRICING_API_KEY }}
+        run: uv run --no-sync python scripts/vertex_prices.py --download "$RUNNER_TEMP/snapshot/vertex"
+      - name: Resolve the latest LiteLLM commit
+        id: litellm
+        run: |
+          sha="$(git ls-remote https://github.com/BerriAI/litellm refs/heads/main | cut -f1)"
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "could not resolve the LiteLLM commit" >&2; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      - name: Regenerate the generated blocks (exit 2 on any importer failure)
+        env:
+          LITELLM_SHA: ${{ steps.litellm.outputs.sha }}
+        run: |
+          uv run --no-sync python scripts/price_watch.py --from-dir "$RUNNER_TEMP/snapshot" \
+            --out "$RUNNER_TEMP/proposal" --litellm-commit "$LITELLM_SHA"
+          cat "$RUNNER_TEMP/proposal/body.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Did the catalog change?
+        id: diff
+        run: |
+          if git diff --quiet -- src/spendgate/catalog/prices.yaml; then
+            echo "The regenerated catalog equals main's: nothing to propose."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            cp src/spendgate/catalog/prices.yaml "$RUNNER_TEMP/proposal/prices.yaml"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Upload the proposal and the LiteLLM report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: price-watch
+          path: ${{ runner.temp }}/proposal
+          if-no-files-found: ignore
+          retention-days: 30
+
+  propose:
+    needs: regenerate
+    if: needs.regenerate.outputs.changed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the prices/daily-watch branch
+      pull-requests: write # open or edit its pull request
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The commit `regenerate` read, not a newer main: copying its prices.yaml onto a newer
+          # main would undo a catalog change merged in between. The next run catches up.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: price-watch
+          path: ${{ runner.temp }}/proposal
+      - name: Commit the regenerated catalog on top of that commit
+        run: |
+          set -euo pipefail
+          # The platform's bot identity: scripts/check-commit-identity.sh accepts it, and the
+          # maintainer's squash merge is the commit that lands, signed by GitHub.
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$BRANCH"
+          cp "$RUNNER_TEMP/proposal/prices.yaml" src/spendgate/catalog/prices.yaml
+          git add src/spendgate/catalog/prices.yaml
+          git commit -q -F "$RUNNER_TEMP/proposal/commit.txt"
+          scripts/check-commit-message.sh "$RUNNER_TEMP/proposal/commit.txt"
+          scripts/check-commit-message.sh "$RUNNER_TEMP/proposal/body.md"
+      - name: Force-push the bot branch (unless it already proposes the same)
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The credential helper reads GH_TOKEN from this step only; nothing is stored on disk.
+          auth=(-c credential.helper= -c 'credential.helper=!gh auth git-credential')
+          # Same tree but for checked_on dates (a rewritten block takes today's): pushing again
+          # would only re-run CI and dismiss a review, so keep the branch as it is.
+          if git "${auth[@]}" fetch -q --depth=1 origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null \
+            && git diff --quiet -I '^    checked_on: "' "origin/$BRANCH" HEAD; then
+            echo "$BRANCH already proposes this catalog on this commit: not pushed."
+            echo "pushed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # This bot branch is the one place a force-push is fine: it is rebuilt from main on
+          # every run and nobody else commits to it (the main ruleset forbids it on main).
+          git "${auth[@]}" push --force origin "HEAD:refs/heads/$BRANCH"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+      - name: Open or update the pull request
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          title="$(cat "$RUNNER_TEMP/proposal/title.txt")"
+          number="$(gh pr list --head "$BRANCH" --base main --state open --json number --jq '.[0].number // empty')"
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --title "$title" --body-file "$RUNNER_TEMP/proposal/body.md"
+          else
+            gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$RUNNER_TEMP/proposal/body.md"
+          fi
+
+  dispatch-ci:
+    # A push or pull request made with GITHUB_TOKEN starts no workflow run, but a dispatch does:
+    # CI then reports `CI gate` on the branch's head commit, which the pull request shows.
+    needs: propose
+    if: needs.propose.outputs.pushed == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write # dispatch ci.yml on the bot branch
+    steps:
+      - name: Run CI on the bot branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: gh workflow run ci.yml --repo "$REPO" --ref "$BRANCH"
