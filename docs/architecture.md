@@ -35,7 +35,7 @@ Every component above is exactly one package. Rows show the one-line job and the
 
 | Package | Responsibility | May import |
 |---|---|---|
-| `spendgate.core` | Pure rules: money, catalog (`catalog.parse(dicts, sha)`), cost, estimate, audio, media (which inline media is priceable), policy, limits, `DeploymentHealth` (one tracker merging cooldown and circuit breaker), outcomes (including `not_processed`), errors, `litellm` (LiteLLM's price file mapped to draft catalog entries, for `spendgate catalog import` only) and `standin` (an entry's meters times a multiplier of at least 1, for `spendgate catalog draft`). No I/O, never reads files. | nothing internal |
+| `spendgate.core` | Pure rules: money, catalog (`catalog.parse(dicts, sha)`), cost, estimate, modes (which endpoint kinds an entry's `mode` serves), audio, media (which inline media is priceable), policy, limits, `DeploymentHealth` (one tracker merging cooldown and circuit breaker), outcomes (including `not_processed`), errors, `litellm` (LiteLLM's price file mapped to draft catalog entries, for `spendgate catalog import` only) and `standin` (an entry's meters times a multiplier of at least 1, for `spendgate catalog draft`). No I/O, never reads files. | nothing internal |
 | `spendgate.ledger` | Two ports: `port.MoneyLedger` (hold, settle, release, renew, sweep, totals, scope, kill switches: all the pipeline may call) and `admin_port.AdminLedger`, which extends it with the admin writes, keys and reads. SQLite and Postgres adapters over one shared `sql.py` implement both; keys, usage queries, SQL migrations (one pure `pending_migrations` decides what runs for both backends). | `core` |
 | `spendgate.providers` | Provider port plus one adapter per provider; slug = module name: `openai`, `azure_openai`, `anthropic`, `bedrock`, `google`, `azure_speech`, `elevenlabs`. `openai` and `azure_openai` share the OpenAI wire half (`openai_wire`) and differ only in URL and auth. | `core` |
 | `spendgate.config` | Reads `spendgate.yaml` and catalog YAML files, computes their sha256, produces typed settings and the dicts for `core.catalog.parse`. | `core` |
@@ -59,11 +59,11 @@ Pipeline order (fixed, one function per step in `spendgate.pipeline`):
 1. Authenticate from the headers (`Authorization: Bearer sg-<prefix>-<secret>`), before any body byte is read, so a caller without a valid key never holds a gate place or memory (SR-01).
 2. Body size and concurrency: the declared `Content-Length`, the key's in-flight uploads, then the size and concurrency gate; only then is the body read under its cap and parsed (`pipeline/intake.py`).
 3. Endpoint allowlist validation (protocol section 2); no provider translation yet.
-4. Route: candidate deployments of the same catalog id, skipping cooled ones (`model_not_priced` if unpriced).
+4. Route: candidate deployments of the same catalog id, skipping cooled ones (`model_not_priced` if unpriced; `invalid_request` if the entry's `mode` does not serve the endpoint, ADR-0033).
 5. Price, plan budgets, worst case = max over candidates, output ceiling (protocol 2.1).
 6. Admit limits (RPM, TPM, concurrency); refund on any later refusal.
 7. Hold: one admission transaction that checks kill switches, session limits and budgets (ledger-state-machine.md). Ledger down, or slower than the hold deadline ([operations.md](operations.md#postgres-connections)), means `ledger_unavailable`. Kill-switch checks outside the transaction are only a cache.
-8. Adapter `prepare()` (credential refresh in a worker thread, off the event loop), `translate()` and forward; only when `not_processed(attempt)` holds (never sent, or a `free_statuses` answer), next candidate within the same reservation (no second hold), at cost 0. A 5xx or timeout after send is returned without failover.
+8. Adapter `prepare()` (credential refresh in a worker thread, off the event loop), `translate()` and forward; only when `not_processed(attempt)` holds (never sent, or a `free_statuses` answer), next candidate within the same reservation (no second hold), at cost 0. A 5xx or timeout after send is returned without failover. The deployment's circuit breaker counts only what fails for every caller: a connect failure, a 5xx, 408 or 401, or a code the adapter marks `deployment_fault` (ADR-0033).
 9. Settle once on the reservation (after send, a cancel or failure is the full hold unless usage was seen, for a stream its final usage, M-13), or `release` if every attempt was `not_processed`.
 10. Record (`calls` row per attempt) and emit headers, logs and metrics.
 
@@ -203,3 +203,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0028](adr/0028-price-coverage-and-regional-prices.md): price coverage, Region-scoped catalog entries (`regions`), one price per route, and how the catalog stays current.
 - [ADR-0029](adr/0029-audio-duration-is-counted.md): audio duration is counted from the packets a decoder decodes, never read from the container header; a size floor backs the count.
 - [ADR-0032](adr/0032-bootstrap-secrets-file.md): `migrate --bootstrap` prints key secrets only to a terminal; unattended runs write them to a new 0600 `--secrets-file` or refuse before creating a key.
+- [ADR-0033](adr/0033-caller-caused-errors-do-not-open-the-breaker.md): a model is sent only to endpoints of its catalog mode, and a provider 403 or 404 opens the shared circuit breaker only when its code says our key or deployment is wrong.
