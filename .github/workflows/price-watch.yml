@@ -30,6 +30,9 @@ env:
 jobs:
   regenerate:
     if: github.ref == 'refs/heads/main'
+    # The Google Pricing API key is an environment secret of `price-watch`, which only `main` may
+    # use: a workflow changed on another branch cannot read it, even when started by hand.
+    environment: price-watch
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

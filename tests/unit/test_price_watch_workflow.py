@@ -67,6 +67,13 @@ def test_the_google_key_reaches_only_the_vertex_download_step() -> None:
     assert "GOOGLE" not in str(FLOW["env"]) and "env" not in JOBS["regenerate"]
 
 
+def test_only_the_job_that_reads_the_google_key_uses_the_main_only_environment() -> None:
+    # The key is a secret of the `price-watch` environment, restricted to `main` in the repository
+    # settings, so only this job, on main, receives it.
+    assert JOBS["regenerate"]["environment"] == "price-watch"
+    assert all("environment" not in job for name, job in JOBS.items() if name != "regenerate")
+
+
 def test_the_jobs_that_write_run_no_python() -> None:
     for name in ("propose", "dispatch-ci"):
         text = str(JOBS[name])

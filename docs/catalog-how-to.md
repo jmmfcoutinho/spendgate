@@ -513,6 +513,12 @@ pull request and a release ([ADR-0028](adr/0028-price-coverage-and-regional-pric
   pull request shows `CI gate` on its head commit. Squash-merge it only after checking; a merged
   price change ships in a patch release ([releasing.md](releasing.md)). The next run rebuilds the
   branch from the new `main`, so leave edits to the branch to a separate pull request.
+- **The Pricing API key** is the `GOOGLE_PRICING_API_KEY` secret of the `price-watch` environment
+  (Settings → Environments), whose deployment branches are limited to `main`. Only the job that
+  downloads the Vertex prices uses that environment, so a workflow changed on another branch cannot
+  read the key, even when started by hand. The repository setting "Allow GitHub Actions to create
+  and approve pull requests" must be on for the job to open its pull request; that does not bypass
+  review, because the workflow is not a code owner.
 - **By hand.** `make price-watch` does the same in a new temporary directory and prints the pull
   request text (it needs the network and the Pricing API key; `LITELLM_SHA=<commit>` adds the LiteLLM
   diff); review `git diff src/spendgate/catalog/prices.yaml` afterwards.
