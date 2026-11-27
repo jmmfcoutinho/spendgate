@@ -24,6 +24,8 @@ def check(idents: str) -> int:
     [
         "Ada Lovelace <ada@example.org>",
         "dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>",
+        # The daily price watch's commit (.github/workflows/price-watch.yml).
+        "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
         "GitHub <noreply@github.com>",
         "Claudette Marsh <cm@example.org>",  # a name that merely starts like an assistant's
     ],

@@ -1,6 +1,6 @@
 # Same commands as CONTRIBUTING.md section 3; CI calls these targets.
 .PHONY: check lint format-check format type arch test coverage-gates test-postgres load fuzz \
-	secrets audit size
+	secrets audit size price-watch
 
 check: lint format-check type arch test secrets audit size
 
@@ -70,3 +70,17 @@ audit:
 
 size:
 	uv run python scripts/lightweight_report.py
+
+# The daily price watch, by hand (.github/workflows/price-watch.yml, docs/catalog-how-to.md):
+# downloads the three providers' price data into a new temporary directory, rewrites only the
+# generated blocks that are out of date and prints the pull request text the job would open.
+# Needs the network and a Google Cloud Pricing API key (GOOGLE_PRICING_API_KEY or its key file);
+# LITELLM_SHA=<commit> adds the LiteLLM diff. Not part of `check`. Review the catalog diff after.
+price-watch:
+	@set -e; snap="$$(mktemp -d)"; \
+	uv run python scripts/bedrock_prices.py --download "$$snap/aws"; \
+	uv run python scripts/azure_prices.py --download "$$snap/azure.json"; \
+	uv run python scripts/vertex_prices.py --download "$$snap/vertex"; \
+	uv run python scripts/price_watch.py --from-dir "$$snap" --out "$$snap/proposal" \
+		$(if $(LITELLM_SHA),--litellm-commit $(LITELLM_SHA)); \
+	cat "$$snap/proposal/body.md"; echo "snapshot and proposal: $$snap"

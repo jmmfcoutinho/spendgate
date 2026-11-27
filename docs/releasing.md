@@ -18,6 +18,22 @@ covers changes and pull requests.
    the CHANGELOG has a non-empty section for it.
 4. **Check** that the version is on PyPI and the image on GHCR, and that the GitHub Release exists.
 
+## Price updates
+
+The daily price watch ([catalog-how-to.md](catalog-how-to.md#12-how-prices-stay-current)) opens one
+pull request from `prices/daily-watch`, authored by `github-actions[bot]`.
+
+1. **Review it** against the providers' pages, as that section says. Its CI run is a
+   `workflow_dispatch` run that the price-watch workflow starts on the branch; it reports the
+   required `CI gate` check on the head commit. If it is missing (the dispatch failed), start it:
+   `gh workflow run ci.yml --ref prices/daily-watch`.
+2. **Squash-merge** it once `CI gate` is green and you have approved it. Its commit is unsigned; the
+   squash commit GitHub makes on `main` is signed, which is what the `main` ruleset requires. The
+   pull request does not touch `CHANGELOG.md`, so that daily updates never conflict.
+3. **Ship it in a patch release** (a normal release, `X.Y.Z+1`): the release commit adds a `Changed`
+   line to the CHANGELOG naming the price pull request and the ids whose prices changed. A merged
+   price change waits for no other work: until it is released, installs keep the old prices.
+
 ## Security release
 
 A fix for a vulnerability (see [SECURITY.md](../SECURITY.md)) never appears in a public issue, pull
