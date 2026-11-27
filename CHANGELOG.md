@@ -6,25 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-**Upgrading from 0.3.1:** no migration is needed. A route whose deployments' Regions would resolve to
-different catalog entries no longer starts (see Changed). With the bundled catalog this affects only
-Vertex AI routes that mix the `global` endpoint with a regional or multi-region one (or Regions Google
-prices differently): split them into separate models. A Vertex deployment is now charged Google's
-Vertex list price for its Region instead of the Gemini API price, and Vertex refuses Gemini 2.5 Pro,
-2.5 Flash and 2.5 Flash-Lite, which Google retired on Vertex on 2026-10-20 (see Added).
+## [0.4.0] - 2026-11-27
 
-**Upgrading from 0.3.1:** no migration is needed. A route whose deployments' Regions would resolve to
-different catalog entries no longer starts (see Changed). The bundled Bedrock catalog now has
-Region-scoped entries where AWS's price differs by Region (or AWS lists no price in a source Region):
-a Bedrock route that spans such Regions must be split, and a Bedrock deployment needs its `region`
-set to be priced by a Region-scoped entry. Of the Bedrock ids bundled before, only
-`global.anthropic.claude-sonnet-5-5` is now Region-scoped (AWS lists no global price for it in
-ap-northeast-1 and ap-northeast-3, so it is refused there); every price is unchanged.
+**Upgrading from 0.3.1:** no migration is needed, but three things can change what a running gateway does.
 
-**Upgrading from 0.3.1:** no migration is needed. A route whose deployments' Regions would resolve to
-different catalog entries no longer starts (see Changed). The bundled catalog's Region-scoped entries
-are all new ids (`azure_openai/global.`, `datazone.` and `regional.<model>`), so no existing route is
-affected.
+- **One route, one price.** A route whose deployments' Regions resolve to different catalog entries no
+  longer starts (exit 3, naming the route and the Regions; see Changed). Split such a route into
+  separate models. With the bundled catalog this can affect: Vertex AI routes that mix the `global`
+  endpoint with regional or multi-region ones; and Bedrock routes that span Regions AWS prices
+  differently. The new Azure OpenAI entries use new ids (`azure_openai/global.`, `datazone.` and
+  `regional.<model>`), so no existing Azure route is affected.
+- **Region-scoped prices need `region`.** A deployment is priced by a Region-scoped entry only when its
+  `region` is set (Vertex deployments always have one; set it on Bedrock and Azure deployments). Of
+  the Bedrock ids bundled before, only `global.anthropic.claude-sonnet-5-5` became Region-scoped: AWS
+  lists no global price for it in ap-northeast-1 and ap-northeast-3, so it is refused there. Every
+  other bundled price is unchanged.
+- **Vertex is priced as Vertex.** A Vertex deployment is now charged Google's Vertex list price for its
+  Region instead of the Gemini API price, and Vertex refuses Gemini 2.5 Pro, 2.5 Flash and 2.5
+  Flash-Lite, which Google retired on Vertex on 2026-10-20.
 
 ### Added
 
@@ -127,6 +126,13 @@ affected.
 - The `model_not_priced` refusal and the `check-config` error for an unpriced route now say how to
   price the model: an override file in `catalog.paths`, or a stand-in from `spendgate catalog draft`.
   The code, status and the leading `<provider>/<model>: <reason>` of the message are unchanged (#104).
+
+### Fixed
+
+- Azure OpenAI `gpt-4o-transcribe` was refused from 2026-10-15; Microsoft's retirement schedule (last
+  updated 2026-11-18) retires it on 2027-02-26, so it is priced until then. The retirement dates
+  Microsoft now confirms are set on the bundled Azure entries (gpt-6-astra, gpt-6-luna, gpt-6.1-sol,
+  gpt-6.1-terra, gpt-transcribe, gpt-live-transcribe) (#106).
 
 ## [0.3.1] - 2026-11-26
 
