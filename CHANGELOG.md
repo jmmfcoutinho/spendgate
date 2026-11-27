@@ -21,6 +21,15 @@ All notable changes to this project are documented here. The format follows
   key revived this way before upgrading keeps working: look for `key.update` audit rows whose
   `expires_at` went from a time to `null` or later, and revoke those keys.
 
+- A Vertex AI deployment in a Region the catalog does not list was held and booked at the Gemini API
+  price, about 10% below what Vertex bills (`gemini-4-carbon` in `us-central1`: 4.00 / 20.00 instead
+  of 4.40 / 22.00 USD per million tokens). For `google` ids the region-less entries are the Gemini API
+  prices, a different product, and lookup fell back to them (ADR-0028, point 3). A route with a Vertex
+  deployment is now priced only by entries that list its Regions: start-up refuses an unlisted Region,
+  naming the route, the Region and the Regions listed, and a call gets `model_not_priced` while no
+  such entry is in force. Other providers and the Gemini API keep the region-less fallback and its
+  warning (ADR-0034).
+
 ## [0.5.0] - 2026-11-27
 
 A security release. Upgrade every gateway: four advisories are fixed (below), and budget-warning

@@ -329,6 +329,14 @@ refreshed before it expires in a worker thread, as for a service-account key, an
 deployment shares it. `adc` is refused for any other provider or auth mode. The `google` extra is
 needed.
 
+The `region` also picks the Vertex price, and it must be one the catalog lists for the model you
+route: a Vertex deployment is never priced at the region-less Gemini API price, so a Region no entry
+lists stops `check-config` and `serve` (exit 3, naming the route, the Region and the Regions listed).
+Gemini 4 Carbon is sold on `global`, `us` and `eu` only, for example, so `europe-west4` above
+cannot serve it: route it through the `eu` multi-region endpoint, or price your Region in a
+`catalog.paths` file
+([catalog-how-to.md](catalog-how-to.md) section 11, [ADR-0034](adr/0034-vertex-unlisted-region.md)).
+
 ### Cloud identity for the database
 
 With `ledger.backend.auth`, every new Postgres connection logs in with a short-lived token from
