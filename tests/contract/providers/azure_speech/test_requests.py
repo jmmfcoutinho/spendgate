@@ -150,6 +150,17 @@ def test_a_deployment_without_a_credential_fails_closed() -> None:
         AzureSpeech().translate(request(), sigv4)
 
 
+@pytest.mark.anyio
+async def test_a_stored_bearer_token_is_refused_never_silently_ignored() -> None:
+    adapter = AzureSpeech(lambda: Token(TOKEN, 2**40))
+    stored = type(deployment())(
+        "azure_speech", BASE_URL, "azure-speech", AuthMode.BEARER_TOKEN, credential=KEY
+    )
+    await adapter.prepare(stored)
+    with pytest.raises(ValueError, match="Entra ID only"):
+        adapter.translate(request(), stored)  # config refuses it at load too (ADR-0035)
+
+
 def test_secrets_stay_out_of_reprs_urls_and_logs(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
     out = AzureSpeech().translate(request(), deployment())

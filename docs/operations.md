@@ -321,9 +321,10 @@ migrations, `psql` and backups. SQLite ignores these keys.
 
 Where the host has a cloud identity (an AWS role, an Azure managed or workload identity, a Google
 service account attached to the workload), spendgate can use it instead of a stored key for Vertex
-AI and instead of a stored password for the Postgres ledger. No new dependency: each kind uses the
+AI, Azure OpenAI and Azure Speech, and instead of a stored password for the Postgres ledger. No new dependency: each kind uses the
 library of an extra you already install for that cloud, and the `full` image has them all. The
-reasoning is in [ADR-0017](adr/0017-cloud-identity.md).
+reasoning is in [ADR-0017](adr/0017-cloud-identity.md) and, for Azure,
+[ADR-0035](adr/0035-azure-entra-from-config.md).
 
 ### Vertex AI with application default credentials
 
@@ -358,10 +359,34 @@ cannot serve it: route it through the `eu` multi-region endpoint, or price your 
 
 ### Azure with Entra ID
 
-An `azure_speech` deployment with `auth: bearer_token` signs in with `DefaultAzureCredential`
-(environment, workload identity, managed identity, a developer's `az login`) for the
-`https://cognitiveservices.azure.com/.default` scope. The `azure` extra is needed. The Azure
-adapters handle Entra tokens alike:
+Set `credential: entra` on an `azure_openai` or `azure_speech` provider or deployment with
+`auth: bearer_token`, instead of a key:
+
+```yaml
+providers:
+  azure_openai:
+    base_url: "https://my-resource.openai.azure.com"
+    auth: bearer_token
+    credential: entra
+  azure_speech:
+    base_url: "https://my-speech.cognitiveservices.azure.com"
+    auth: bearer_token
+    credential: entra
+```
+
+spendgate asks `DefaultAzureCredential`: environment variables, AKS workload identity, the managed
+identity of the VM, App Service or Container App, or a developer's `az login`. The scope is
+`https://ai.azure.com/.default` for the Azure OpenAI v1 path, `https://cognitiveservices.azure.com/.default`
+for a classic `api_version` and for Azure Speech. Give the identity a data-plane role on the
+resource (for example *Cognitive Services OpenAI User*, or *Cognitive Services User* for Speech).
+The `azure` extra is needed. `entra` is refused for any other provider or auth mode (exit 3).
+
+For Azure OpenAI a secret reference with `auth: bearer_token` is still sent as a ready-made token,
+but it expires (about an hour for an Entra token) and a `file:` is read again only on `SIGHUP`, so
+prefer `entra`. Azure Speech bearer auth is Entra ID only: any other credential there stops
+`check-config` and `serve` (exit 3) at the field that names it, rather than being ignored.
+
+The Azure adapters handle Entra tokens alike:
 
 - A token is fetched in a worker thread, one fetch at a time per scope (callers share the fetch
   in flight), and reused until 5 minutes before it expires. A token issued with less than 10

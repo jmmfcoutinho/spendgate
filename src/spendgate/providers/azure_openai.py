@@ -9,8 +9,9 @@ differs is here:
   (`/openai/deployments/<deployment>/...?api-version=`, Responses at `/openai/responses`);
   absent means the v1 API (`/openai/v1/...`, no query). The deployment name is
   `Deployment.model`; the client's alias never reaches the URL (SSRF, naming).
-* Auth. `api-key` header for API keys; `Authorization: Bearer` for Entra ID, from an injected or
-  default credential (see `azure_openai_auth`), or a static token when the config gives one. A
+* Auth. `api-key` header for API keys; `Authorization: Bearer` for Entra ID (config
+  `credential: entra`, `Deployment.ambient`), from an injected or default credential (see
+  `azure_openai_auth`), or a static token when the config gives a secret reference instead. A
   401 or 403 drops the cached Entra tokens, so the next call's `prepare` fetches a new one.
 * Errors. Azure sends `retry-after-ms`; a 400 `content_filter` is a client error (not retried);
   Azure's own codes for a missing deployment or a denied identity are deployment faults.
@@ -85,6 +86,14 @@ def _scope(deployment: Deployment) -> str:
     return CLASSIC_SCOPE if deployment.api_version else V1_SCOPE
 
 
+def _entra(deployment: Deployment) -> bool:
+    """Bearer auth from the host's Entra ID identity: `credential: entra` in config, or (library
+    callers building a `Deployment` by hand) no stored token at all."""
+    return deployment.auth is AuthMode.BEARER_TOKEN and (
+        deployment.ambient or not deployment.credential
+    )
+
+
 class AzureOpenAIProvider(OpenAIWire):
     name = "azure_openai"
 
@@ -104,7 +113,7 @@ class AzureOpenAIProvider(OpenAIWire):
 
     async def prepare(self, deployment: Deployment) -> None:
         """Fetch the Entra token in a worker thread when the cache has none fresh."""
-        if deployment.auth is not AuthMode.BEARER_TOKEN or deployment.credential:
+        if not _entra(deployment):
             return  # an API key or a configured static token: nothing to refresh
         scope = _scope(deployment)
         stale = lambda: not self._tokens.fresh(scope)  # noqa: E731 - a one-line check
@@ -123,9 +132,10 @@ class AzureOpenAIProvider(OpenAIWire):
                 raise ValueError("the deployment has no API key")  # misconfiguration, fail closed
             return {"api-key": deployment.credential}
         if deployment.auth is AuthMode.BEARER_TOKEN:
-            # A configured credential is a ready-made token; none means Entra ID via azure-identity,
-            # fetched by `prepare` off the loop: without one ready, this raises and nothing is sent.
-            token = deployment.credential or self._tokens.ready(_scope(deployment))
+            # Entra ID: what `prepare` fetched off the loop; without one ready, this raises and
+            # nothing is sent. Otherwise the configured credential is a ready-made token.
+            entra = _entra(deployment)
+            token = self._tokens.ready(_scope(deployment)) if entra else deployment.credential
             return {"Authorization": f"Bearer {token}"}
         raise ValueError(f"azure_openai does not support auth mode {deployment.auth.value}")
 
