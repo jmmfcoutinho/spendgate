@@ -63,8 +63,9 @@ anthropic:
 fail_open: {}                            # explicit opt-outs only, e.g. allow_remote_media: true
 
 # Traces need the otel extra; the exporter reads OTEL_EXPORTER_OTLP_ENDPOINT and friends.
+# trust_inbound_context: continue callers' traceparent (they then decide sampling; ADR-0036).
 observability:
-  otel: { enabled: false, service_name: spendgate }
+  otel: { enabled: false, service_name: spendgate, trust_inbound_context: false }
 
 bootstrap:                               # create-only; a restart never changes existing rows
   scopes: ["org:acme", "org:acme/project:app"]

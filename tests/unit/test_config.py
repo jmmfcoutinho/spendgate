@@ -138,6 +138,16 @@ def test_tracing_is_off_by_default_and_its_keys_are_checked(tmp_path: Path) -> N
     assert "observability.otel.endpoint" in failure(write(tmp_path, typo))
 
 
+def test_an_inbound_trace_context_is_not_trusted_unless_the_config_says_so(tmp_path: Path) -> None:
+    """T-OBS-05 (ADR-0036): off by default, a strict boolean when set."""
+    assert load(write(tmp_path), env=ENV).config.observability.otel.trust_inbound_context is False
+    on = BASE + "observability: {otel: {enabled: true, trust_inbound_context: true}}\n"
+    assert load(write(tmp_path, on), env=ENV).config.observability.otel.trust_inbound_context
+    for value in ('"true"', "1", "[true]"):
+        bad = BASE + f"observability: {{otel: {{trust_inbound_context: {value}}}}}\n"
+        assert "observability.otel.trust_inbound_context" in failure(write(tmp_path, bad))
+
+
 def test_fail_open_opt_out_is_listed(tmp_path: Path) -> None:
     s = load(write(tmp_path, BASE + "fail_open: {allow_remote_media: true}\n"), env=ENV)
     (line,) = s.fail_open_summary()

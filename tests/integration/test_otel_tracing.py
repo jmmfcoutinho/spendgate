@@ -1,9 +1,10 @@
 """OpenTelemetry tracing (issue #34): one span per hold, forward and settle, allowlisted attributes.
 
-An in-memory exporter records the spans. The caller's `traceparent` is the parent of every span
-and reaches the provider with the forward span's id; nothing the caller made up (prompt, key,
-user, session, tags, `tracestate`) reaches a span attribute or the provider. Without a tracer the
-pipeline makes no span and adds no header.
+An in-memory exporter records the spans. With `trust_inbound_context` on, the caller's
+`traceparent` is the parent of every span and reaches the provider with the forward span's id;
+off (the default, ADR-0036), every call starts its own trace whatever the caller sent. Nothing the
+caller made up (prompt, key, user, session, tags, `tracestate`) reaches a span attribute or the
+provider. Without a tracer the pipeline makes no span and adds no header.
 """
 
 from collections.abc import AsyncIterator
@@ -19,6 +20,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import (
     InMemorySpanExporter,
 )
+from opentelemetry.sdk.trace.sampling import ALWAYS_ON, ParentBased, Sampler, TraceIdRatioBased
 from opentelemetry.trace import SpanKind
 
 from spendgate.cli import serve
@@ -45,10 +47,16 @@ NAMES = [tracing.HOLD, tracing.FORWARD, tracing.SETTLE]
 
 @asynccontextmanager
 async def traced(
-    tmp_path: Path, fake: FakeUpstream | None = None, **kw: object
+    tmp_path: Path,
+    fake: FakeUpstream | None = None,
+    *,
+    trust: bool = False,
+    sampler: Sampler | None = None,
+    **kw: object,
 ) -> AsyncIterator[tuple[Stack, InMemorySpanExporter, FakeUpstream]]:
     exporter = InMemorySpanExporter()
-    started = otel.start("spendgate-test", SimpleSpanProcessor(exporter))
+    processor = SimpleSpanProcessor(exporter)
+    started = otel.start("spendgate-test", processor, trust_inbound=trust, sampler=sampler)
     fake = fake or FakeUpstream()
     client = fake.client()
     extra: dict[str, object] = {"tracer": started.tracer, "sender": otel.TracingSender(client)}
@@ -77,7 +85,7 @@ def assert_allowlisted(spans: tuple[ReadableSpan, ...], secret: str) -> None:
 @async_test
 async def test_a_call_makes_three_spans_under_the_callers_traceparent(tmp_path: Path) -> None:
     sessions = SessionDefaults(max_steps=10)
-    async with traced(tmp_path, session_defaults=sessions) as (s, exporter, fake):
+    async with traced(tmp_path, trust=True, session_defaults=sessions) as (s, exporter, fake):
         headers = {"traceparent": TRACEPARENT, **CALLER_MADE}
         reply = await s.post("/v1/chat/completions", chat_body(), headers=headers)
         assert reply.status_code == 200, reply.text
@@ -125,6 +133,66 @@ async def test_without_a_traceparent_the_hold_starts_the_trace_for_its_call(tmp_
         assert spans[0].context is not None and spans[3].context is not None
         assert spans[0].context.trace_id != spans[3].context.trace_id  # one trace per call
         assert all(r.headers["traceparent"].startswith("00-") for r in fake.requests)
+
+
+def sent_trace_id(fake: FakeUpstream, index: int) -> str:
+    """The trace id of the `traceparent` the provider got on request `index`."""
+    return fake.requests[index].headers["traceparent"].split("-")[1]
+
+
+NEVER = ParentBased(TraceIdRatioBased(0))  # an operator who samples nothing of their own
+
+
+@async_test
+async def test_untrusted_a_sampled_traceparent_neither_forces_a_span_nor_reaches_the_provider(
+    tmp_path: Path,
+) -> None:
+    """T-OBS-05: ratio 0 traces nothing, whatever the caller's sampled flag says."""
+    async with traced(tmp_path, sampler=NEVER) as (s, exporter, fake):
+        for headers in ({"traceparent": TRACEPARENT}, {}):
+            assert (await s.post("/v1/chat/completions", chat_body(), headers=headers)).is_success
+        await s.pipeline.drain()
+        assert exporter.get_finished_spans() == ()
+        assert len(fake.requests) == 2
+        assert TRACE_ID not in repr(fake.requests[0].headers)
+        assert sent_trace_id(fake, 0) != sent_trace_id(fake, 1)  # each call its own trace
+
+
+@async_test
+async def test_untrusted_a_callers_unsampled_traceparent_does_not_hide_its_call(
+    tmp_path: Path,
+) -> None:
+    """T-OBS-05: under the default parent-based sampler the caller cannot opt out either."""
+    unsampled = f"00-{TRACE_ID}-{PARENT_ID}-00"
+    async with traced(tmp_path, sampler=ParentBased(ALWAYS_ON)) as (s, exporter, fake):
+        headers = {"traceparent": unsampled}
+        assert (await s.post("/v1/chat/completions", chat_body(), headers=headers)).is_success
+        await s.pipeline.drain()
+        hold, forward, _settle = spans = exporter.get_finished_spans()
+        assert [span.name for span in spans] == NAMES
+        assert hold.parent is None and hold.context is not None
+        assert hold.context.trace_id != int(TRACE_ID, 16)
+        assert forward.context is not None
+        gateway_trace = f"{hold.context.trace_id:032x}"
+        sent, flags = fake.requests[0].headers["traceparent"].rsplit("-", 1)
+        assert sent == f"00-{gateway_trace}-{forward.context.span_id:016x}"
+        assert int(flags, 16) & 1  # sampled; the SDK may also set the random-id flag
+
+
+@async_test
+async def test_trusted_the_callers_traceparent_decides_sampling_and_names_the_trace(
+    tmp_path: Path,
+) -> None:
+    """Today's behaviour when the operator opts in: the caller's sampled flag wins over ratio 0."""
+    async with traced(tmp_path, trust=True, sampler=NEVER) as (s, exporter, fake):
+        for headers in ({"traceparent": TRACEPARENT}, {}):
+            assert (await s.post("/v1/chat/completions", chat_body(), headers=headers)).is_success
+        await s.pipeline.drain()
+        spans = exporter.get_finished_spans()
+        assert [span.name for span in spans] == NAMES  # only the caller-sampled call
+        assert {span.context.trace_id for span in spans if span.context} == {int(TRACE_ID, 16)}
+        assert sent_trace_id(fake, 0) == TRACE_ID
+        assert sent_trace_id(fake, 1) != TRACE_ID
 
 
 @async_test
@@ -223,4 +291,7 @@ async def test_tracing_is_on_only_when_enabled_and_installed(
         async with serve.upstream(otel_settings(s, enabled=True)) as (sender, tracer):
             assert isinstance(tracer, otel.OtelTracer)
             assert isinstance(sender, otel.TracingSender)
+            assert tracer.trust_inbound is False
+        async with serve.upstream(otel_settings(s, enabled=True, trust=True)) as (_, tracer):
+            assert isinstance(tracer, otel.OtelTracer) and tracer.trust_inbound is True
     assert serve.OTEL_MISSING not in capsys.readouterr().err

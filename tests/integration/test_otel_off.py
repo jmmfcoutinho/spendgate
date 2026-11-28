@@ -87,11 +87,12 @@ def test_the_no_tracer_is_a_no_op() -> None:
         span.set("spendgate.outcome", "held")
 
 
-def otel_settings(stack: Stack, *, enabled: bool) -> Settings:
-    """The stack's settings with `observability.otel.enabled` set."""
+def otel_settings(stack: Stack, *, enabled: bool, trust: bool = False) -> Settings:
+    """The stack's settings with `observability.otel.enabled` and `trust_inbound_context` set."""
     config = stack.settings.config
+    fields = {"enabled": enabled, "trust_inbound_context": trust}
     observability = config.observability.model_copy(
-        update={"otel": config.observability.otel.model_copy(update={"enabled": enabled})}
+        update={"otel": config.observability.otel.model_copy(update=fields)}
     )
     new = config.model_copy(update={"observability": observability})
     return dataclasses.replace(stack.settings, config=new)

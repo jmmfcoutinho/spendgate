@@ -11,6 +11,11 @@ What leaves the process is an allowlist, as for logs (`gateway.logs`): the attri
 recorded as span events (their messages may quote a body or a secret); only `error.type`, the
 class name, is set. Only `traceparent` crosses in either direction: `tracestate` and baggage are
 caller-made values and are neither read nor passed on to the provider.
+
+A caller's `traceparent` is continued only when `observability.otel.trust_inbound_context` is true
+(ADR-0036). It carries a sampled flag and a trace id the caller chose: with a parent-based sampler
+(the OpenTelemetry default) it would decide whether the gateway records the call, and its trace id
+would reach the provider. Untrusted, it is ignored and every call starts its own trace.
 """
 
 import contextlib
@@ -24,6 +29,7 @@ from opentelemetry.context import Context
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import SpanProcessor, TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, SpanExporter
+from opentelemetry.sdk.trace.sampling import Sampler
 from opentelemetry.trace import SpanKind, Status, StatusCode
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
@@ -89,12 +95,13 @@ class _NoSpan:
 class OtelTracer:
     """`pipeline.tracing.Tracer` over an OpenTelemetry tracer. Never raises into the pipeline."""
 
-    def __init__(self, tracer: trace.Tracer) -> None:
+    def __init__(self, tracer: trace.Tracer, *, trust_inbound: bool = False) -> None:
         self._tracer = tracer
+        self.trust_inbound = trust_inbound
 
     def parent(self, headers: Mapping[str, str]) -> object:
-        """The caller's `traceparent` (tracestate and baggage ignored); invalid means none."""
-        value = headers.get(TRACEPARENT)
+        """The caller's `traceparent` when trusted (tracestate and baggage never); else none."""
+        value = headers.get(TRACEPARENT) if self.trust_inbound else None
         found: Context | None = None
         if value:
             with contextlib.suppress(Exception):
@@ -169,11 +176,20 @@ class Tracing:
             self.provider.shutdown()
 
 
-def start(service_name: str, processor: SpanProcessor | None = None) -> Tracing:
-    """A tracer provider for this gateway; OTLP/HTTP in batches unless a processor is given."""
-    provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
+def start(
+    service_name: str,
+    processor: SpanProcessor | None = None,
+    *,
+    trust_inbound: bool = False,
+    sampler: Sampler | None = None,
+) -> Tracing:
+    """A tracer provider for this gateway; OTLP/HTTP in batches unless a processor is given.
+    Without a sampler the SDK reads `OTEL_TRACES_SAMPLER` (parent-based always-on by default)."""
+    resource = Resource.create({"service.name": service_name})
+    provider = TracerProvider(sampler=sampler, resource=resource)
     provider.add_span_processor(processor or BatchSpanProcessor(_exporter()))
-    return Tracing(OtelTracer(provider.get_tracer("spendgate", package_version())), provider)
+    tracer = provider.get_tracer("spendgate", package_version())
+    return Tracing(OtelTracer(tracer, trust_inbound=trust_inbound), provider)
 
 
 def _exporter() -> SpanExporter:

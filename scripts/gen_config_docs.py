@@ -302,12 +302,19 @@ D: dict[str, str] = {
     # Observability
     "Observability.otel": "OpenTelemetry tracing of the hold, forward and settle steps.",
     "Otel.enabled": (
-        "Export one span per hold, forward and settle over OTLP/HTTP, and pass the caller's "
-        "`traceparent` on to the provider. Needs the `otel` extra (`spendgate[otel]`); "
+        "Export one span per hold, forward and settle over OTLP/HTTP, and send the provider a "
+        "`traceparent` naming the forward span. Needs the `otel` extra (`spendgate[otel]`); "
         "without it `serve` warns at start and traces nothing. The exporter reads the standard "
         "`OTEL_EXPORTER_OTLP_*` variables."
     ),
     "Otel.service_name": "The `service.name` resource attribute of every span.",
+    "Otel.trust_inbound_context": (
+        "Continue a caller's `traceparent`: its span becomes the parent of the gateway's spans "
+        "and its trace id reaches the provider. With a parent-based sampler (the OpenTelemetry "
+        "default) the caller's sampled flag then decides whether the call is traced. `false`: "
+        "every call starts its own trace and the sampler alone decides. Set `true` only when "
+        "the callers are your own traced services (ADR-0036)."
+    ),
     # Anthropic
     "Anthropic.allowed_versions": "`anthropic-version` header values the proxy accepts.",
     "Anthropic.allowed_betas": "`anthropic-beta` header values the proxy accepts. Empty: none.",

@@ -118,7 +118,7 @@ async def upstream(settings: Settings) -> AsyncIterator[tuple[Sender, Tracer | N
             return
         from spendgate.gateway import otel as tracing  # noqa: PLC0415 - the optional extra
 
-        started = tracing.start(otel.service_name)
+        started = tracing.start(otel.service_name, trust_inbound=otel.trust_inbound_context)
         try:
             yield tracing.TracingSender(client), started.tracer
         finally:
