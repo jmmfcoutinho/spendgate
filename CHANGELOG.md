@@ -11,6 +11,12 @@ of its model lists now stops `check-config` and `serve` (exit 3) instead of star
 Use a Region the error lists (`global`, `us` or `eu` for Gemini 4 Carbon, for example) or price
 yours in a `catalog.paths` file (ADR-0034).
 
+**Upgrading:** with tracing on (`observability.otel.enabled`), a caller's `traceparent` is no
+longer continued: each call starts its own trace, the sampler alone decides whether it is traced,
+and the provider sees the gateway's trace id, not the caller's. To keep the gateway's spans inside
+your callers' traces as before, set `observability.otel.trust_inbound_context: true` (ADR-0036).
+Nothing changes with tracing off.
+
 **Upgrading:** a `spendgate migrate --bootstrap` run without a terminal on stderr (a Kubernetes Job,
 CI, a Compose service) whose config declares a key that does not exist yet now exits 2 and creates
 nothing. Add `--secrets-file PATH` on a volume only the operator reads, or create the keys once
@@ -28,6 +34,13 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
 
 ### Changed
 
+- **An inbound `traceparent` is ignored unless trusted.** New setting
+  `observability.otel.trust_inbound_context` (default `false`). Off, every call starts a new root
+  trace: a caller can no longer force its call to be traced (with a parent-based sampler, a sampled
+  `traceparent` used to win even at ratio 0) or keep it out of the operator's traces, and its trace
+  id no longer reaches the provider, which still gets a `traceparent` naming the gateway's forward
+  span. On, the behaviour of ADR-0019 holds ([operations](docs/operations.md#metrics-and-logs),
+  ADR-0036, pen test T-083, #142, T-OBS-05).
 - **A model is sent only to endpoints of its catalog mode.** A chat model on `/v1/embeddings` or
   `/v1/audio/speech`, an embedding, speech or transcription model on chat or Responses, and the
   like, are refused `invalid_request` (400, `param` `model`) before anything is held or sent. They

@@ -1,6 +1,7 @@
 # ADR-0019: Ledger health metrics and an optional OpenTelemetry extra
 
-**Status:** Accepted
+**Status:** Accepted; the inbound `traceparent` is continued only when `trust_inbound_context` is set, by
+[ADR-0036](0036-otel-inbound-trace-context.md)
 **Date:** 2026-11-24
 
 ## Context
