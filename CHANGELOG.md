@@ -48,6 +48,20 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
 
 ### Fixed
 
+- Azure Entra ID tokens (Azure Speech with `auth: bearer_token`, and the Azure OpenAI Entra path)
+  were kept after the provider rejected them, refetched on every call when short-lived, and
+  refetched on the event loop when the identity endpoint handed out an already-expired one (#140,
+  pen test SG-PT-15). After an Entra revoke or rotation every Azure call failed with `502
+  upstream_unavailable` until 5 minutes before the old token's stated expiry (often 24 hours) or a
+  restart; a token with under 5 minutes of life cost one identity round trip per call; and with a
+  slow identity endpoint, one Azure call stalled every other tenant's calls. Now a provider 401 or
+  403 drops the cached token and the next call fetches a new one in a worker thread, as Bedrock
+  does with its credentials; building the request never fetches a token (with none ready the call
+  fails closed, `500 internal_error`, nothing sent); a token whose expiry is not in the future is
+  refused and logged (`error_class: ExpiredTokenError`); and a token is reused until the smaller
+  of 5 minutes and half its lifetime before it expires. Money was never at risk: each rejected call
+  was charged 0 (T-IDN-01 to T-IDN-05,
+  [operations](docs/operations.md#azure-with-entra-id)).
 - `PATCH /admin/v1/keys/{key_id}` with `"expires_at": null`, or a later `expires_at`, brought back a
   key that a rotation had replaced or that had already expired, so its old secret spent again and a
   rotation done because a secret leaked could be undone by one call. On such a key the expiry can

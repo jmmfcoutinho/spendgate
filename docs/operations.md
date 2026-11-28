@@ -356,6 +356,27 @@ cannot serve it: route it through the `eu` multi-region endpoint, or price your 
 `catalog.paths` file
 ([catalog-how-to.md](catalog-how-to.md) section 11, [ADR-0034](adr/0034-vertex-unlisted-region.md)).
 
+### Azure with Entra ID
+
+An `azure_speech` deployment with `auth: bearer_token` signs in with `DefaultAzureCredential`
+(environment, workload identity, managed identity, a developer's `az login`) for the
+`https://cognitiveservices.azure.com/.default` scope. The `azure` extra is needed. The Azure
+adapters handle Entra tokens alike:
+
+- A token is fetched in a worker thread, one fetch at a time per scope (callers share the fetch
+  in flight), and reused until 5 minutes before it expires. A token issued with less than 10
+  minutes of life is reused for half of it instead, so a short-lived token is not fetched again
+  on every call. The request itself never fetches a token: with none ready it fails closed
+  (`500 internal_error`, nothing sent).
+- A provider 401 or 403 drops the cached token, so the next call fetches a new one. After an Entra
+  revoke, a role change or a rotation, calls recover without a restart.
+- A token whose expiry is not in the future (host clock skew, a broken identity endpoint) is
+  refused and not cached: the call is answered `500 internal_error`, nothing is sent, and the
+  `spendgate.internal` line has `where: routing.translate` and `error_class: ExpiredTokenError`.
+  Keep the host clock in sync.
+- A failed fetch fails the call the same way, logged with the credential's error class; the next
+  call tries again. The token is never logged.
+
 ### Cloud identity for the database
 
 With `ledger.backend.auth`, every new Postgres connection logs in with a short-lived token from
@@ -698,7 +719,9 @@ the sweeper charges the hold later). `false` means released, refused or not know
 the same facts (never the message) go to the `spendgate.local` logger at level `ERROR`. Alert on
 any `spendgate.internal` line and report it as a bug, except `where: pipeline.watch` with a ledger
 error class (such as `LedgerUnavailable` or `TimeoutError`): that is the ledger failing a read, so
-check the ledger instead.
+check the ledger instead; and `where: routing.translate` with a credential error class (such as
+`ExpiredTokenError` or `ClientAuthenticationError`): that is the cloud identity failing a token
+fetch ([Azure with Entra ID](#azure-with-entra-id)).
 
 **Budget warnings** are WARNING lines on the `spendgate.budget` logger, in the same JSON format
 and through the same allowlist. Each comes from the transaction that caused it, so a repeat call
