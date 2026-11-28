@@ -204,3 +204,4 @@ Starlette, uvicorn, httpx, Pydantic, PyYAML. One slot stays free. Postgres (`psy
 - [ADR-0029](adr/0029-audio-duration-is-counted.md): audio duration is counted from the packets a decoder decodes, never read from the container header; a size floor backs the count.
 - [ADR-0032](adr/0032-bootstrap-secrets-file.md): `migrate --bootstrap` prints key secrets only to a terminal; unattended runs write them to a new 0600 `--secrets-file` or refuse before creating a key.
 - [ADR-0033](adr/0033-caller-caused-errors-do-not-open-the-breaker.md): a model is sent only to endpoints of its catalog mode, and a provider 403 or 404 opens the shared circuit breaker only when its code says our key or deployment is wrong.
+- [ADR-0036](adr/0036-otel-inbound-trace-context.md): a caller's `traceparent` is continued only when `observability.otel.trust_inbound_context` is on (off by default).

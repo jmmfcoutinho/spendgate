@@ -643,13 +643,27 @@ traces nothing. Spans go out over OTLP/HTTP, configured only by the standard var
 `..._TIMEOUT`, `..._CERTIFICATE`; `OTEL_TRACES_SAMPLER` for sampling); the default endpoint is
 `http://localhost:4318`. Each call gives at most three spans: `spendgate.hold`,
 `spendgate.forward` (every attempt of the call, kind client) and `spendgate.settle` (for a stream,
-when it ends). A valid `traceparent` on the request is their parent; without one the hold span
-starts a new trace and the other two are its children. The provider request carries a
-`traceparent` naming the forward span. `tracestate` and baggage are neither read nor passed on.
+when it ends). The hold span starts a new trace for each call and the other two are its
+children. The provider request carries a `traceparent` naming the forward span, in that trace.
+`tracestate` and baggage are neither read nor passed on.
 Span attributes are an allowlist: `spendgate.request_id`, `spendgate.model`, `spendgate.endpoint`,
 `spendgate.deployment`, `spendgate.outcome`, `spendgate.attempts`, `spendgate.released`,
 `spendgate.booked` and `error.type` (an exception's class, never its message). Never a prompt, a
 key, a user, tag or session label. See [ADR-0019](adr/0019-otel-extra.md).
+
+A caller's own `traceparent` is ignored unless you set
+`observability.otel.trust_inbound_context: true` (off by default,
+[ADR-0036](adr/0036-otel-inbound-trace-context.md)). Turn it on
+only when the callers are your own traced services and you want the gateway's spans inside their
+traces: a valid `traceparent` then becomes the parent of the three spans and its trace id reaches
+the provider. Be aware of what that hands the caller. With a parent-based sampler, which is the
+OpenTelemetry default (`parentbased_always_on`) and the usual way to sample by ratio
+(`parentbased_traceidratio`), **the caller decides sampling**: a sampled `traceparent` gets its
+call traced even at ratio 0, and an unsampled one keeps it out of your traces. With
+`traceidratio` the caller's chosen trace id decides instead. Only `always_on` and `always_off`
+ignore the caller. Left off, a caller can neither force nor suppress a span, and its trace id
+never reaches the provider. To match a call to the caller's side, use `spendgate.request_id`: the
+caller gets it in `X-Spendgate-Request-Id`, and it is also in the call log and the `calls` table.
 
 **Logs** are one JSON object per line on the `spendgate.call` logger, written for every settled
 call and for events such as `sweep_failed`. Only an allowlist of fields can appear: `event`,

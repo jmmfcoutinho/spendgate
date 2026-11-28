@@ -237,6 +237,8 @@ class Otel(_Strict):
 
     enabled: bool = False
     service_name: Annotated[str, Field(strict=True, min_length=1, max_length=128)] = "spendgate"
+    # Off: a caller's traceparent could force or suppress sampling and name the trace (ADR-0036).
+    trust_inbound_context: bool = False
 
 
 class Observability(_Strict):
