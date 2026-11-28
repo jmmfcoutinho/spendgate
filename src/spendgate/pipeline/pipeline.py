@@ -13,6 +13,7 @@ import asyncio
 import contextlib
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import replace
+from functools import partial
 
 from spendgate.config import Route, Settings
 from spendgate.core.errors import ErrorCode, Refusal, Shape
@@ -26,9 +27,9 @@ from spendgate.pipeline.alerts import log_alerts
 from spendgate.pipeline.assembly import Parts, PipelineOptions, assemble, request_id, system_ms
 from spendgate.pipeline.auth import authenticate, recheck
 from spendgate.pipeline.closing import Call, Sleeper
-from spendgate.pipeline.faults import InternalEvent, fault_of
+from spendgate.pipeline.faults import Fault, InternalEvent, fault_of
 from spendgate.pipeline.forward_results import Answered, Failed, Job, unavailable
-from spendgate.pipeline.holding import HOLD_SECONDS
+from spendgate.pipeline.holding import HOLD_SECONDS, LEDGER_DOWN
 from spendgate.pipeline.model import (
     Clock,
     Endpoint,
@@ -46,7 +47,7 @@ from spendgate.pipeline.model import (
 from spendgate.pipeline.settle import Book, Closed
 from spendgate.pipeline.streaming import PING_SECONDS, STREAM_LIMITS, Live, StreamBody, StreamEnv
 from spendgate.pipeline.upkeep import Step, heartbeat
-from spendgate.pipeline.watch import StreamFacts, session_ends_at
+from spendgate.pipeline.watch import StreamFacts, facts_at_open, read_facts
 from spendgate.providers.port import Provider, SseLimits
 
 _MS = 1000
@@ -243,17 +244,20 @@ class Pipeline:
 
     async def _forward_and_settle(self, call: Call, job: Job, book: Book, held: Held) -> Reply:
         result: Answered | Failed | Live | None = None
-        standing: StreamFacts | None = None
+        standing: StreamFacts | Fault | None = None
         interrupted: Outcome | None = None
         pre: tuple[Money, str] | None = None
         try:
             if job.request.stream:  # headers go out before the cost exists: room after the hold
                 pre = await self._closer.room_left(call.principal.scope_id, held.rooms)
                 standing = await self._standing(call, held)
-            with self._tracer.span(tracing.FORWARD, call.trace, call.tags) as span:
-                async with asyncio.timeout(self._max_request_s):  # SR-13: no call runs forever
-                    result = await self._forwarder.run(job, book)
-                span.set("spendgate.attempts", len(book.attempts) + (book.flight is not None))
+            if isinstance(standing, Fault):  # never streamed unwatched; nothing was sent (M-12)
+                result = Failed(LEDGER_DOWN, 503, should_retry=True, fault=standing)
+            else:
+                with self._tracer.span(tracing.FORWARD, call.trace, call.tags) as span:
+                    async with asyncio.timeout(self._max_request_s):  # SR-13: none runs forever
+                        result = await self._forwarder.run(job, book)
+                    span.set("spendgate.attempts", len(book.attempts) + (book.flight is not None))
         except asyncio.CancelledError:
             interrupted = Outcome.CANCELLED  # after send: the full hold; before: released
             raise
@@ -288,7 +292,7 @@ class Pipeline:
         book: Book,
         live: Live,
         pre: tuple[Money, str] | None,
-        standing: StreamFacts | None,
+        standing: StreamFacts | Fault | None,
     ) -> Reply:
         """Protocol 2.8: event stream headers at once; the cost comes later as an SSE comment."""
         env = StreamEnv(
@@ -302,20 +306,15 @@ class Pipeline:
             int(self._max_request_s * _MS),
         )
         body = StreamBody(env, call.id, call.inbound.endpoint, book, live, call.started)
-        if standing is not None:
+        if isinstance(standing, StreamFacts):  # always, for a stream: else it was never started
             self._leases.watch(call.id, replace(standing, provider=live.provider))
         headers = replies.stream_headers(call.id, pre[0] if pre else None, pre[1] if pre else None)
         return Reply(200, headers, stream=body)
 
-    async def _standing(self, call: Call, held: Held) -> StreamFacts | None:
-        """What the heartbeat re-checks for this stream; None (not watched) if it cannot be read."""
-        try:
-            chain = await self._closer.chain_scope_ids(call.principal.scope_id)
-            ends = await session_ends_at(self._ledger, held)
-        except Exception:
-            return None
-        model = call.prepared.route.catalog_id
-        return StreamFacts(call.principal.policy, chain, model, "", ends, held.key_lineage)
+    async def _standing(self, call: Call, held: Held) -> StreamFacts | Fault:
+        """What the heartbeat re-checks for this stream, or why it cannot be read (fail closed)."""
+        read = partial(facts_at_open, call, held, self._closer.chain_scope_ids, self._ledger)
+        return await read_facts(read, self._holder.seconds, self._observer, call.id)
 
     # --- step 10: records, headers --------------------------------------------------------------
 
