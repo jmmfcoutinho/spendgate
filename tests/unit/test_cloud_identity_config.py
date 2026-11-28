@@ -17,7 +17,7 @@ server: {listen: 127.0.0.1:8080, key_pepper: "env:SPENDGATE_KEY_PEPPER"}
 ledger: {currency: USD, backend: {kind: sqlite, path: ./l.db}}
 providers:
   google: {base_url: "https://vertex.example.test", auth: bearer_token, credential: adc,
-           region: europe-west4}
+           region: eu}  # a Region the catalog prices Vertex in (ADR-0034)
 models:
   g: {catalog_id: google/gemini-4-carbon, deployments: [{provider: google}]}
 """

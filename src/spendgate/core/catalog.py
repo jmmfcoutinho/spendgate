@@ -292,27 +292,47 @@ class Catalog:
     _free: Mapping[str, frozenset[int]]
     _replaced_verified: frozenset[str] = frozenset()  # unverified price_ids that replaced one
 
-    def lookup(self, provider: str, model: str, now: int, region: Region = None) -> PriceEntry:
+    def lookup(
+        self,
+        provider: str,
+        model: str,
+        now: int,
+        region: Region = None,
+        *,
+        listed_only: bool = False,
+    ) -> PriceEntry:
         """Entry in force at `now` (epoch ms, UTC date) for a deployment in `region`.
 
         `ModelNotPriced` when none is. A deprecated winner never falls back to an older entry.
+        `listed_only`: only an entry that lists `region` counts, never a region-less one.
         """
-        entry = pick(self._by_model.get((provider, model), ()), region, _day(now))
+        entries = self._by_model.get((provider, model), ())
+        entry = pick(entries, region, _day(now), listed_only=listed_only)
         if entry is None:
-            raise ModelNotPriced(provider, model, "no price entry in force")
+            why = "no price entry lists the deployment's region" if listed_only else ""
+            raise ModelNotPriced(provider, model, why or "no price entry in force")
         if entry.deprecation_date is not None and entry.deprecation_date <= _day(now):
             raise ModelNotPriced(provider, model, "model is past its deprecation date")
         return entry
 
     def lookup_route(
-        self, provider: str, model: str, regions: Sequence[Region], now: int
+        self,
+        provider: str,
+        model: str,
+        regions: Sequence[Region],
+        now: int,
+        *,
+        listed_only: bool = False,
     ) -> PriceEntry:
         """The one entry that prices every deployment Region of a route (ADR-0028, point 4).
 
         Load refuses a route whose Regions resolve differently; refusing here too keeps a hold
         from ever being sized with one Region's price for another.
         """
-        entries = [self.lookup(provider, model, now, r) for r in regions or (None,)]
+        entries = [
+            self.lookup(provider, model, now, r, listed_only=listed_only)
+            for r in regions or (None,)
+        ]
         if len({e.key for e in entries}) > 1:
             raise ModelNotPriced(provider, model, "deployments resolve to different prices")
         return entries[0]
@@ -322,16 +342,26 @@ class Catalog:
         entries = self._by_model.get((provider, model), ())
         return tuple(sorted({r for e in entries for r in e.regions or ()}))
 
-    def could_price(self, provider: str, model: str, region: Region) -> bool:
+    def could_price(
+        self, provider: str, model: str, region: Region, *, listed_only: bool = False
+    ) -> bool:
         """Whether some entry, on some date, prices a deployment in `region`."""
-        return can_price(self._by_model.get((provider, model), ()), region)
+        entries = self._by_model.get((provider, model), ())
+        return can_price(entries, region, listed_only=listed_only)
 
     def split_by_region(
-        self, provider: str, model: str, regions: Sequence[Region], now: int | None
+        self,
+        provider: str,
+        model: str,
+        regions: Sequence[Region],
+        now: int | None,
+        *,
+        listed_only: bool = False,
     ) -> Mapping[Region, PriceEntry] | None:
         """Regions that resolve to different entries, from `now` on (any date if None)."""
         today = None if now is None else _day(now)
-        return split(self._by_model.get((provider, model), ()), regions, today)
+        entries = self._by_model.get((provider, model), ())
+        return split(entries, regions, today, listed_only=listed_only)
 
     def free_statuses(self, provider: str) -> frozenset[int]:
         """Statuses that mean 'rejected before processing' for this provider."""

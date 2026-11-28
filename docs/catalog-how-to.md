@@ -301,10 +301,17 @@ models:
   never falls back to a region-less entry while one is in force. **Every other Region**, and a deployment
   without a `region`, takes the newest region-less entry in force. If there is none, the call is refused
   with `model_not_priced`: a Region-scoped price is never used for a Region it does not list.
+- **Vertex AI never falls back** ([ADR-0034](adr/0034-vertex-unlisted-region.md)). A route with a Vertex
+  deployment (the `google` adapter with `auth: bearer_token`) is priced only by entries that list each
+  deployment's Region: a `google` id's region-less entries are the Gemini API's prices, a different
+  product. A Vertex Region no entry lists (in force today, or at all) is refused at start (exit 3, naming
+  the route, the Region and the Regions the id does list), and a call is refused with `model_not_priced`
+  until an entry lists it.
 - `region` (singular) stays documentation only; `regions` is the one that is enforced. Region names are
   compared as written, so use the provider's own slug (`swedencentral`, `eu-west-1`) in both files.
   `check-config` and `serve` warn about a deployment Region that no entry of its Region-scoped id lists
   (it takes the region-less price), naming the Regions the catalog does list, so a typo shows at start.
+  For Vertex that is an error, not a warning (above).
 - Entries of one `id` and `effective_from` must not list the same Region twice, and at most one of them
   may omit `regions`: either is a load error. An override replaces the entry with the same `id`,
   `effective_from` and set of `regions`; one whose Regions only overlap is refused.
@@ -441,8 +448,8 @@ On Vertex AI (the `google` adapter with `auth: bearer_token`) Google prices the 
 differently from the Gemini API, and differently on the global endpoint and on the others. The
 bundled catalog carries Vertex prices under the same ids as the Gemini API (`google/gemini-4-neon`),
 scoped to the Vertex Regions (section 8). A Vertex deployment always has a `region` (the
-`locations/<region>` in its URL), so it takes the Vertex price; a Gemini API deployment has none and
-keeps the Gemini API price. Set the Region you call:
+`locations/<region>` in its URL) and takes only an entry that lists it, never the Gemini API price; a
+Gemini API deployment has none and keeps the Gemini API price. Set the Region you call:
 
 ```yaml
 providers:
@@ -463,8 +470,12 @@ models:
   endpoints (`europe-west4`, ...) another, 10% dearer for Gemini 3 and later. One route cannot mix
   them (section 8), so route the global endpoint as its own model, as above.
 - **Only the Regions Google sells a model in are listed.** Gemini 4 Neon is sold on `global`, `us` and
-  `eu`, for example; Gemini 2.5 Flash in 23 regional endpoints and `global`. A Region the entry does
-  not list falls back to the Gemini API price, and `check-config` warns about it.
+  `eu`, for example; Gemini 2.5 Flash in 23 regional endpoints and `global`. A Region no entry of the
+  id lists is refused at start (exit 3) rather than priced at the Gemini API price, which is lower
+  than Vertex's non-global price ([ADR-0034](adr/0034-vertex-unlisted-region.md)); the error names the
+  Regions the id lists. Use one of them, or price your Region in a `catalog.paths` file, for example
+  with a stand-in of the non-global price: `spendgate catalog draft --like google/<model> --region us
+  --as google/<model> --regions <your Region> --out vertex-region.yaml` (section 9).
 - **List prices.** Where Google's pricing page shows a promotional price paid as credits back (Gemini 4
   Carbon and Argon until 2026-11-30, 3.8 Flash and 3.6 Flash until 2026-12-31), the catalog holds and
   charges the list price, so a budget runs out no later than the bill says.

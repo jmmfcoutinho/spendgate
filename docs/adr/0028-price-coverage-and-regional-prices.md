@@ -1,6 +1,6 @@
 # ADR-0028: Price coverage, regional prices and how the catalog stays current
 
-**Status:** Accepted
+**Status:** Accepted; point 3 amended for Vertex AI by [ADR-0034](0034-vertex-unlisted-region.md)
 **Date:** 2026-11-26
 
 ## Context

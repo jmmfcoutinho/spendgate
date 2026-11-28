@@ -5,6 +5,10 @@ price every other deployment, including one without a `region`. The tier is chos
 date second, so a newer region-less entry never displaces an older Region-scoped one: a scoped
 price is never used for a Region it does not list, and a listed Region never falls back while a
 scoped entry for it is in force.
+
+`listed_only` drops the region-less tier: a deployment that must never take it (a Vertex AI one,
+whose region-less entries are the Gemini API's prices, ADR-0034) is priced by a Region-scoped
+entry that lists its Region or by nothing.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
@@ -25,16 +29,22 @@ class Scoped(Protocol):
     def regions(self) -> tuple[str, ...] | None: ...
 
 
-def pick[E: Scoped](entries: Sequence[E], region: Region, today: date) -> E | None:
+def pick[E: Scoped](
+    entries: Sequence[E], region: Region, today: date, *, listed_only: bool = False
+) -> E | None:
     """The entry that prices `region` on `today`, or None. `entries`: one id, newest first."""
     in_force = [e for e in entries if e.effective_from <= today]
     scoped = [e for e in in_force if e.regions is not None and region in e.regions]
+    if listed_only:
+        return scoped[0] if scoped else None
     tier = scoped or [e for e in in_force if e.regions is None]
     return tier[0] if tier else None
 
 
-def can_price(entries: Iterable[Scoped], region: Region) -> bool:
+def can_price(entries: Iterable[Scoped], region: Region, *, listed_only: bool = False) -> bool:
     """Whether any entry of the id could ever price `region` (date-independent)."""
+    if listed_only:
+        return any(e.regions is not None and region in e.regions for e in entries)
     return any(e.regions is None or region in e.regions for e in entries)
 
 
@@ -62,7 +72,11 @@ def overlap(entries: Iterable[Scoped]) -> str | None:
 
 
 def split[E: Scoped](
-    entries: Sequence[E], regions: Iterable[Region], today: date | None
+    entries: Sequence[E],
+    regions: Iterable[Region],
+    today: date | None,
+    *,
+    listed_only: bool = False,
 ) -> Mapping[Region, E] | None:
     """The first date on which `regions` resolve to different entries, as Region -> entry.
 
@@ -75,7 +89,11 @@ def split[E: Scoped](
     if today is not None:
         dates.add(today)
     for day in sorted(dates):
-        found = {r: e for r in wanted if (e := pick(entries, r, day)) is not None}
+        found = {
+            r: e
+            for r in wanted
+            if (e := pick(entries, r, day, listed_only=listed_only)) is not None
+        }
         if len({id(e) for e in found.values()}) > 1:
             return found
     return None

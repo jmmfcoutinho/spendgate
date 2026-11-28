@@ -204,8 +204,10 @@ D: dict[str, str] = {
         "identity, the metadata server). A `file:` credential is read again on `SIGHUP`."
     ),
     "Provider.region": (
-        "Provider region, where the adapter needs one (Bedrock, Azure). Also selects a catalog "
-        "entry scoped to this Region (`regions`), if there is one."
+        "Provider region, where the adapter needs one (Bedrock, Azure, Vertex AI). Also selects a "
+        "catalog entry scoped to this Region (`regions`), if there is one. A Vertex AI deployment "
+        "(`google` with `bearer_token`) must use a Region an entry of its id lists: it never "
+        "takes the region-less (Gemini API) price, and is refused at start otherwise."
     ),
     "Provider.api_version": (
         "Azure OpenAI query version; leave unset for the v1 path (recommended). A classic version "
@@ -229,7 +231,8 @@ D: dict[str, str] = {
     "ModelRoute.catalog_id": (
         "Catalog id, `provider/model`. One price entry prices every deployment; no entry in "
         "force means `model_not_priced`. Deployments whose Regions resolve to different entries "
-        "are refused at start: route them as separate models."
+        "are refused at start: route them as separate models. A route with a Vertex AI deployment "
+        "is priced only by entries that list its Regions."
     ),
     "ModelRoute.deployments": (
         "Candidates in preference order. A throttled or unreachable one is skipped for the "

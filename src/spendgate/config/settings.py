@@ -10,7 +10,7 @@ from pathlib import Path
 
 from spendgate.config.schema import Config
 from spendgate.config.secrets import Secret
-from spendgate.core.catalog import Catalog
+from spendgate.core.catalog import Catalog, PriceEntry
 from spendgate.core.health import HealthConfig
 from spendgate.core.money import FxSnapshot
 from spendgate.core.policy import model_filter_matches
@@ -32,11 +32,26 @@ class ResolvedDeployment:
     ambient: bool = False  # `credential: adc`: the host's own cloud identity, no stored secret
 
 
+def is_vertex(provider: str, auth: str) -> bool:
+    """A Google Vertex AI deployment: the `google` adapter with bearer-token auth."""
+    return provider == "google" and auth == "bearer_token"
+
+
 @dataclass(frozen=True, slots=True)
 class Route:
     alias: str
     catalog_id: str
     deployments: tuple[ResolvedDeployment, ...]
+    # Priced only by entries that list each deployment's Region, never by a region-less one: a
+    # route with a Vertex AI deployment, whose region-less entries are Gemini API prices (ADR-0034).
+    listed_only: bool = False
+
+    def price(self, catalog: Catalog, now: int) -> PriceEntry:
+        """The one entry that prices every deployment at `now` (ADR-0028 point 4), or raises
+        `ModelNotPriced`."""
+        provider, _, model = self.catalog_id.partition("/")
+        regions = [d.region for d in self.deployments]
+        return catalog.lookup_route(provider, model, regions, now, listed_only=self.listed_only)
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,13 +140,14 @@ class Settings:
 
         Not an error: such a Region is priced by the region-less entry, which may be right. But
         a Region spelled differently from the catalog (`swedencental`) would get that price too,
-        so it is named at start with the Regions the catalog does list.
+        so it is named at start with the Regions the catalog does list. A Vertex AI route
+        never falls back (ADR-0034): load refuses its unlisted Regions instead.
         """
         lines: dict[str, None] = {}
         for alias, route in self.routes.items():
             provider, _, model = route.catalog_id.partition("/")
             listed = self.catalog.listed_regions(provider, model)
-            if not listed:
+            if not listed or route.listed_only:
                 continue
             shown = ", ".join(listed[:_REGIONS_SHOWN])
             more = (

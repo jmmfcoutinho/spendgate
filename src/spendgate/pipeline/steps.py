@@ -198,10 +198,9 @@ def _prepare(ctx: Context) -> Prepared | Refusal:
         return routed
     if (bad := _check_shape(ctx.inbound, ctx.settings)) is not None:
         return bad
-    slug, _, model_part = routed.route.catalog_id.partition("/")
+    slug = routed.route.catalog_id.partition("/")[0]
     try:
-        regions = [d.region for d in routed.route.deployments]
-        entry = ctx.settings.catalog.lookup_route(slug, model_part, regions, ctx.now)
+        entry = routed.route.price(ctx.settings.catalog, ctx.now)
     except ModelNotPriced as exc:
         return exc.refusal()
     key_cap = ctx.key.max_output_tokens or ctx.settings.config.defaults.max_output_tokens
