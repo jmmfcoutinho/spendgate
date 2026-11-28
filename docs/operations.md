@@ -405,6 +405,15 @@ handler (or whatever logging your application sets up in library mode). Alert on
 `heartbeat step failed`, or on `spendgate_heartbeat_failures_total` (see
 [Metrics and logs](#metrics-and-logs)).
 
+The stream watch needs, for each stream, the key's scope chain and its session's clock. They are
+read when the stream opens, after its hold and before the provider is called. A stream is never
+run unwatched: if that read fails it is tried once more at once (both tries within the hold's 10 s
+bound), and if it fails again the call is refused `ledger_unavailable` (503, `Retry-After: 5`)
+before any provider contact and its hold is released at 0. Each failed read writes a
+`spendgate.internal` line with `where: pipeline.watch`; the refused call is counted in
+`spendgate_requests_total` as `internal_error` (its hold existed, so it is a settled call, not a
+`spendgate_ledger_unavailable_total` refusal).
+
 Scope chains (a key's scope and its ancestors, used for the budget headers, the settled call's
 `scope_path` and the stream watch) are cached for 30 seconds. A scope moved to a new parent shows
 in the headers and settled calls after that time, and in streams opened after it; a stream already
@@ -493,6 +502,8 @@ answers again.
 - `/readyz` answers 503 on every replica (`ledger_unreachable` in the admin detail), or does not
   answer within the load balancer's probe timeout (the ledger wait can last up to 10 s). Once the
   load balancer marks them all unready, clients get the balancer's own error instead.
+- A new stream whose kill-switch and session facts cannot be read after its hold is refused the same
+  way, before any provider contact, and its hold is released at 0 (see the stream watch above).
 - A stream whose lease renewal fails is stopped and settled from its final (end-of-stream) usage if
   that already arrived, else at the full hold (M-13). A settle the ledger refuses is retried by the
   heartbeat; if the hold's lease runs out first, the sweeper charges it in full and a later settle
@@ -670,6 +681,7 @@ turns away writes one `spendgate.internal` event at level `ERROR`:
 | `steps.prepare` | `400 invalid_request` | Nothing held |
 | `pipeline.handle` | `500 internal_error` | Any hold is left to the sweeper; `charged` is `false` (not known) |
 | `pipeline.forward` | `500 internal_error` | Full hold if the request was sent, else released |
+| `pipeline.watch` | A stream's kill-switch and session facts could not be read after the hold. The first failed read is retried at once and the stream goes on if that works; a second failure, or no answer within the hold's 10 s, gives `503 ledger_unavailable` (stream not started) | Never sent: released |
 | `routing.translate` | `500 internal_error` | Never sent: released |
 | `routing.relay` | `500 internal_error` (stream not started) | Sent: the full hold |
 | `routing.usage` | `500 internal_error` | Usage unreadable: the full hold |
@@ -684,7 +696,9 @@ body or a secret. With `charged: true` the client got an error for a call it was
 `call` line with the same `request_id` carries the cost (when the ledger could not book the close,
 the sweeper charges the hold later). `false` means released, refused or not known. In library mode
 the same facts (never the message) go to the `spendgate.local` logger at level `ERROR`. Alert on
-any `spendgate.internal` line and report it as a bug.
+any `spendgate.internal` line and report it as a bug, except `where: pipeline.watch` with a ledger
+error class (such as `LedgerUnavailable` or `TimeoutError`): that is the ledger failing a read, so
+check the ledger instead.
 
 **Budget warnings** are WARNING lines on the `spendgate.budget` logger, in the same JSON format
 and through the same allowlist. Each comes from the transaction that caused it, so a repeat call

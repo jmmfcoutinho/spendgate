@@ -43,6 +43,11 @@ class Holder:
         self._ledger, self._closer, self._observer, self._tracer = ledger, closer, observer, tracer
         self._now, self._spawn, self._hold_s = now, spawn, hold_seconds
 
+    @property
+    def seconds(self) -> float:
+        """How long a call waits for the ledger before it fails closed."""
+        return self._hold_s
+
     async def hold(self, request: HoldRequest, call: Call, book: Book) -> Held | Refusal:
         """The hold, or why not: a budget refusal, or `ledger_unavailable` / internal on a fault."""
         started = self._now()

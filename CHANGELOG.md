@@ -50,6 +50,12 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
   that request body is not applied. Expiry on any other key can still be set, moved or cleared. A
   key revived this way before upgrading keeps working: look for `key.update` audit rows whose
   `expires_at` went from a time to `null` or later, and revoke those keys.
+- A stream whose kill-switch and session facts could not be read from the ledger, between the hold
+  and the stream start, ran unwatched: a kill switch or the session's `max_seconds` could no longer
+  stop it (its cost stayed bounded by the hold). The read is now retried once at once, both tries
+  within the hold's 10-second bound; if it still fails the call is refused `ledger_unavailable`
+  (503, `Retry-After: 5`) before any provider contact and its hold is released at 0. Each failed
+  read is logged as an internal error with `where=pipeline.watch` (pen test H-34, T-BLK-07).
 
 - A Vertex AI deployment in a Region the catalog does not list was held and booked at the Gemini API
   price, about 10% below what Vertex bills (`gemini-4-carbon` in `us-central1`: 4.00 / 20.00 instead
