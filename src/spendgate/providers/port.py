@@ -324,7 +324,7 @@ class Provider(Protocol):
         adapters do nothing. A credential fault raises, as it would from `translate`: the
         pipeline answers internal_error and nothing is sent. `translate` then signs with what
         `prepare` readied and never refreshes on the loop; without a `prepare` (direct callers,
-        tests) it fetches inline.
+        tests) Bedrock and Vertex fetch inline, and the Azure adapters raise instead.
         """
         ...
 

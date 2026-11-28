@@ -85,21 +85,25 @@ def test_api_key_goes_in_the_api_key_header_never_the_url(provider: AzureOpenAIP
     assert SECRET not in sent.url
 
 
-def test_entra_token_is_a_bearer_header_and_is_cached() -> None:
+@pytest.mark.anyio
+async def test_entra_token_is_a_bearer_header_and_is_cached() -> None:
     cred = FakeCredential()
     provider = AzureOpenAIProvider(credential=cred)
     dep = deployment(auth=AuthMode.BEARER_TOKEN, credential="", api_version=VERSION)
+    await provider.prepare(dep)
     first = provider.translate(chat(), dep)
+    await provider.prepare(dep)
     second = provider.translate(chat(), dep)
     assert first.headers["Authorization"] == f"Bearer {TOKEN}-1" == second.headers["Authorization"]
     assert "api-key" not in first.headers
     assert cred.calls == [(CLASSIC_SCOPE,)]  # one fetch for two requests
 
 
-def test_entra_scope_follows_the_url_style() -> None:
+@pytest.mark.anyio
+async def test_entra_scope_follows_the_url_style() -> None:
     cred = FakeCredential()
-    AzureOpenAIProvider(credential=cred).translate(
-        chat(), deployment(auth=AuthMode.BEARER_TOKEN, credential="")
+    await AzureOpenAIProvider(credential=cred).prepare(
+        deployment(auth=AuthMode.BEARER_TOKEN, credential="")
     )
     assert cred.calls == [(V1_SCOPE,)]
 
@@ -108,11 +112,13 @@ def test_a_token_is_refreshed_near_expiry() -> None:
     cred = FakeCredential(lifetime=3600, now=1000)
     clock = {"now": 1000.0}
     tokens = EntraTokens(cred, clock=lambda: clock["now"])
-    assert tokens.bearer("s") == f"{TOKEN}-1"
+    assert tokens.fetch("s") == f"{TOKEN}-1"
     clock["now"] = 1000 + 3600 - 301  # still outside the 5 minute margin
-    assert tokens.bearer("s") == f"{TOKEN}-1"
+    assert tokens.fresh("s")
     clock["now"] = 1000 + 3600 - 299
-    assert tokens.bearer("s") == f"{TOKEN}-2"
+    assert not tokens.fresh("s")
+    assert tokens.cached("s") == f"{TOKEN}-1"  # still sendable until it expires
+    assert tokens.fetch("s") == f"{TOKEN}-2"
     assert len(cred.calls) == 2
 
 
@@ -158,14 +164,17 @@ def test_same_allowlist_forced_fields_and_refused_price_options(
     assert provider.validate(CleanRequest("/v1/messages", "m", {})) is not None
 
 
-def test_secrets_stay_out_of_reprs_and_logs(
+@pytest.mark.anyio
+async def test_secrets_stay_out_of_reprs_and_logs(
     provider: AzureOpenAIProvider, caplog: pytest.LogCaptureFixture
 ) -> None:
     cred = FakeCredential()
     entra = AzureOpenAIProvider(credential=cred)
+    entra_dep = deployment(auth=AuthMode.BEARER_TOKEN, credential="")
     with caplog.at_level(logging.DEBUG):
         sent = provider.translate(chat(), deployment(api_version=VERSION))
-        bearer = entra.translate(chat(), deployment(auth=AuthMode.BEARER_TOKEN, credential=""))
+        await entra.prepare(entra_dep)
+        bearer = entra.translate(chat(), entra_dep)
     text = repr(sent) + repr(bearer) + repr(deployment()) + repr(entra) + repr(entra._tokens)
     assert SECRET not in text
     assert TOKEN not in text

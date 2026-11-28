@@ -3,19 +3,20 @@
 Transcription is priced by audio seconds, which spendgate measures from the request bytes; what the
 caller declares is never read. The answer's own `durationMilliseconds` is a second opinion and the
 larger of the two is billed, so a short provider figure can never under-bill. Auth is the Speech
-resource key (`Ocp-Apim-Subscription-Key`) or an Entra bearer token (lazy `azure-identity`).
+resource key (`Ocp-Apim-Subscription-Key`) or an Entra bearer token (lazy `azure-identity`, cached
+by `azure_openai_auth.EntraTokens`, fetched only in `prepare`, dropped on a 401 or 403).
 """
 
 import time
 from collections.abc import Callable
 from http import HTTPStatus
-from typing import Protocol
 
 from spendgate.core.audio import AudioError, measure
 from spendgate.core.cost import Usage
 from spendgate.core.errors import Refusal
 from spendgate.providers import azure_speech_shapes as shapes
 from spendgate.providers import openai_shapes as openai
+from spendgate.providers.azure_openai_auth import AccessToken, EntraTokens
 from spendgate.providers.port import (
     AuthMode,
     CleanRequest,
@@ -33,31 +34,19 @@ from spendgate.providers.port import (
 from spendgate.providers.refresh import Refreshes
 
 TRANSCRIPTIONS = "/v1/audio/transcriptions"
-
-
-_REFRESH_MARGIN_SECONDS = 300  # renew this long before expiry: never send a token about to lapse
-_ENTRA = "entra"  # one token source per adapter: one refresh key
-
-
-class AccessToken(Protocol):
-    """The shape of `azure.core.credentials.AccessToken`; tests pass a plain fake."""
-
-    @property
-    def token(self) -> str: ...
-
-    @property
-    def expires_on(self) -> int: ...  # Unix seconds
-
+_REVOKED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)  # perhaps a revoked or stale token
 
 type TokenSource = Callable[[], AccessToken]
 
 
-def _default_token() -> TokenSource:
-    """Entra token source from `azure-identity` (optional extra): a blocking network call."""
-    from azure.identity import DefaultAzureCredential  # noqa: PLC0415 - optional extra
+class _SourceCredential:
+    """A zero-argument token source seen as a `TokenCredential` (the scope is fixed here)."""
 
-    credential = DefaultAzureCredential()
-    return lambda: credential.get_token(shapes.SCOPE)
+    def __init__(self, source: TokenSource) -> None:
+        self._source = source
+
+    def get_token(self, *scopes: str) -> AccessToken:
+        return self._source()
 
 
 class AzureSpeech:
@@ -66,9 +55,9 @@ class AzureSpeech:
     def __init__(
         self, token_source: TokenSource | None = None, *, clock: Callable[[], float] = time.time
     ) -> None:
-        self._token_source = token_source  # injectable so tests never touch Entra
-        self._clock = clock
-        self._token: tuple[str, int] | None = None  # (token, expires_on); never printed
+        # Injectable so tests never touch Entra; None asks `DefaultAzureCredential` on first use.
+        credential = None if token_source is None else _SourceCredential(token_source)
+        self._tokens = EntraTokens(credential, clock=clock)
         self._refreshes = Refreshes()
 
     def __repr__(self) -> str:
@@ -84,25 +73,10 @@ class AzureSpeech:
     async def prepare(self, deployment: Deployment) -> None:
         """Entra: fetch the token in a worker thread when none is cached outside the margin."""
         if deployment.auth is AuthMode.BEARER_TOKEN:
-            await self._refreshes.ensure(_ENTRA, self._stale, self._fetch)
-
-    def _stale(self) -> bool:
-        return self._token is None or self._token[1] - self._clock() <= _REFRESH_MARGIN_SECONDS
-
-    def _fetch(self) -> str:
-        """A token from the source (blocking: Entra is a network call)."""
-        if self._token_source is None:
-            self._token_source = _default_token()  # first use only: no Azure SDK until needed
-        fetched = self._token_source()
-        if not fetched.token:
-            raise ValueError("the Entra credential returned an empty token")
-        self._token = (fetched.token, fetched.expires_on)
-        return fetched.token
-
-    def _bearer(self) -> str:
-        """What `prepare` readied, while unexpired; a direct caller without it fetches inline."""
-        cached = self._token
-        return cached[0] if cached is not None and cached[1] > self._clock() else self._fetch()
+            stale = lambda: not self._tokens.fresh(shapes.SCOPE)  # noqa: E731 - a one-line check
+            await self._refreshes.ensure(
+                shapes.SCOPE, stale, lambda: self._tokens.fetch(shapes.SCOPE)
+            )
 
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request Azure cannot carry."""
@@ -141,6 +115,8 @@ class AzureSpeech:
 
     @never_raises_error
     def error(self, response: UpstreamResponse) -> UpstreamError:
+        if response.status in _REVOKED:
+            self._tokens.drop()  # perhaps revoked or rotated: the next `prepare` fetches anew
         return shapes.map_error(response)
 
     def _check(self, req: CleanRequest) -> bytes:
@@ -153,7 +129,8 @@ class AzureSpeech:
 
     def _auth(self, deployment: Deployment) -> dict[str, str]:
         if deployment.auth is AuthMode.BEARER_TOKEN:
-            return {"Authorization": f"Bearer {self._bearer()}"}
+            # What `prepare` readied; without it this raises (nothing sent), never fetches inline.
+            return {"Authorization": f"Bearer {self._tokens.ready(shapes.SCOPE)}"}
         if deployment.auth is not AuthMode.API_KEY or not deployment.credential:
             raise ValueError("an Azure Speech deployment needs a key or Entra auth")
         return {"Ocp-Apim-Subscription-Key": deployment.credential}
