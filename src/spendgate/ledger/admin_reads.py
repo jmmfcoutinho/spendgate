@@ -22,7 +22,7 @@ from spendgate.ledger.admin_port import (
 )
 from spendgate.ledger.common import Ctx, audit, i, oi, s
 from spendgate.ledger.key_types import KeyRecord
-from spendgate.ledger.port import CallRow, HeldItem, ReservationRow, ScopeRow
+from spendgate.ledger.port import CallRow, ConflictError, HeldItem, ReservationRow, ScopeRow
 from spendgate.ledger.sql import Flow, Row, Value, q
 
 FAR_FUTURE = 2**62  # a bound that no epoch-ms value reaches, so filters need no NULL branches
@@ -107,8 +107,24 @@ def list_kill_switches_flow() -> Flow[tuple[KillSwitchRow, ...]]:
 def set_key_expiry_flow(
     ctx: Ctx, key_id: str, expires_at: int | None, actor: str, now: int
 ) -> Flow[KeyRecord]:
-    """Set or clear a key's expiry (the policy flow leaves it alone); one audit row."""
+    """Set or clear a key's expiry (the policy flow leaves it alone); one audit row.
+
+    On a key a rotation replaced, or one already expired, the expiry may only move earlier:
+    clearing or extending it would let an old secret spend again (SG-PT-10). The key row is
+    locked first, so a rotation running at the same time is seen.
+    """
     before = yield from key_flow.must_get(key_id)
+    if _extends(before.expires_at, expires_at):
+        if before.expires_at is not None and now >= before.expires_at:
+            raise ConflictError(
+                f"key {key_id} has expired; its expiry can only be moved earlier: "
+                "issue a new key instead"
+            )
+        if (yield q(sql.KEY_SUCCESSOR, id=key_id)):
+            raise ConflictError(
+                f"key {key_id} was replaced by rotation; its expiry can only be moved earlier: "
+                "use the key that replaced it"
+            )
     yield q(sql.KEY_SET_EXPIRY, id=key_id, expires_at=expires_at)
     after = replace(before, expires_at=expires_at)
     yield from audit(
@@ -121,6 +137,11 @@ def set_key_expiry_flow(
         {"expires_at": expires_at},
     )
     return after
+
+
+def _extends(current: int | None, wanted: int | None) -> bool:
+    """Whether `wanted` keeps a key valid past its `current` expiry (None: never expires)."""
+    return current is not None and (wanted is None or wanted > current)
 
 
 def list_audit_flow(

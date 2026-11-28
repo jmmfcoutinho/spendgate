@@ -377,6 +377,7 @@ KEY_LIST_SCOPE = (
 )
 KEY_REVOKE = "UPDATE keys SET revoked_at = :now WHERE id = :id AND revoked_at IS NULL"
 KEY_SET_EXPIRY = "UPDATE keys SET expires_at = :expires_at WHERE id = :id"
+KEY_SUCCESSOR = "SELECT id FROM keys WHERE replaces_key_id = :id LIMIT 1"
 KEY_SET_POLICY = """UPDATE keys SET name = :name, allowed_models = :allowed_models,
   limits = :limits, session_defaults = :session_defaults WHERE id = :id"""
 

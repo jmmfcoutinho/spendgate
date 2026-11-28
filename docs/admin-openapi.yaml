@@ -196,6 +196,12 @@ paths:
         otherwise; ADR-0030). The change is compared with the stored value; a key without session
         defaults counts as no session budget and 60 new sessions an hour. Lowering needs only
         `keys:write`.
+
+        `expires_at` sets, moves or (with `null`) clears the expiry. On a key that a rotation
+        replaced, or whose expiry has passed, it may only move earlier: clearing or extending it
+        is refused with `conflict` (409), so a rotated-out or expired secret never works again;
+        issue or rotate to a new key instead. The expiry is applied first, so a refused body
+        changes nothing.
       requestBody:
         required: true
         content:
@@ -669,7 +675,7 @@ components:
         limits: {$ref: '#/components/schemas/KeyLimits'}
         session_defaults: {$ref: '#/components/schemas/SessionDefaults'}
         session_required: {type: boolean, description: Absent keeps the stored value. Needs session_defaults (sent or stored).}
-        expires_at: {type: [string, 'null'], format: date-time}
+        expires_at: {type: [string, 'null'], format: date-time, description: "null clears the expiry. On a rotated-out or expired key only an earlier time is accepted (else conflict)."}
     Key:
       type: object
       required: [id, prefix, scope_id, created_at, revoked, session_required]
