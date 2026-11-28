@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+**Upgrading:** a Vertex AI route (`google` with `auth: bearer_token`) whose `region` no catalog entry
+of its model lists now stops `check-config` and `serve` (exit 3) instead of starting with a warning.
+Use a Region the error lists (`global`, `us` or `eu` for Gemini 4 Carbon, for example) or price
+yours in a `catalog.paths` file (ADR-0034).
+
 ### Added
 
 - Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
