@@ -2,12 +2,12 @@
 
 import json
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 
 import pytest
 
-from spendgate.providers import azure_speech
+from spendgate.providers import azure_openai_auth
+from spendgate.providers import azure_speech_shapes as shapes
 from spendgate.providers.azure_speech import AzureSpeech
 from spendgate.providers.port import AuthMode, CleanRequest, Json, Untranslatable
 from tests.contract.providers.azure_speech.helpers import (
@@ -84,7 +84,8 @@ class Token:
     expires_on: int  # Unix seconds
 
 
-def test_entra_bearer_token_is_used_and_cached_until_near_expiry() -> None:
+@pytest.mark.anyio
+async def test_entra_bearer_token_is_used_and_cached_until_near_expiry() -> None:
     calls: list[int] = []
 
     def source() -> Token:
@@ -93,38 +94,50 @@ def test_entra_bearer_token_is_used_and_cached_until_near_expiry() -> None:
 
     now = [1_000.0]
     adapter = AzureSpeech(source, clock=lambda: now[0])
-    out = adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
+    entra = deployment(auth=AuthMode.BEARER_TOKEN)
+    await adapter.prepare(entra)
+    out = adapter.translate(request(), entra)
     assert out.headers["Authorization"] == f"Bearer {TOKEN}"
     assert "Ocp-Apim-Subscription-Key" not in out.headers
     assert TOKEN not in out.url and TOKEN not in repr(adapter)
-    adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
+    await adapter.prepare(entra)
+    adapter.translate(request(), entra)
     assert len(calls) == 1  # cached
-    now[0] = 10_000  # expired and not prepared: a direct caller fetches inline
-    adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
+    now[0] = 10_000 - 300  # inside the margin: `prepare` renews it off the loop
+    await adapter.prepare(entra)
     assert len(calls) == 2
 
 
-def test_an_empty_entra_token_fails_closed() -> None:
+@pytest.mark.anyio
+async def test_an_empty_entra_token_fails_closed() -> None:
     adapter = AzureSpeech(lambda: Token("", 10_000), clock=lambda: 1_000.0)
     with pytest.raises(ValueError, match="empty token"):
-        adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
+        await adapter.prepare(deployment(auth=AuthMode.BEARER_TOKEN))
 
 
-def test_azure_identity_is_loaded_lazily_and_only_for_entra(
+@pytest.mark.anyio
+async def test_azure_identity_is_loaded_lazily_and_only_for_entra(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     loads: list[int] = []
 
-    def fake_default() -> Callable[[], Token]:
-        loads.append(1)
-        return lambda: Token(TOKEN, 2**40)
+    class FakeDefault:
+        def get_token(self, *scopes: str) -> Token:
+            assert scopes == (shapes.SCOPE,)
+            return Token(TOKEN, 2**40)
 
-    monkeypatch.setattr(azure_speech, "_default_token", fake_default)
+    def fake_default() -> FakeDefault:
+        loads.append(1)
+        return FakeDefault()
+
+    monkeypatch.setattr(azure_openai_auth, "default_credential", fake_default)
     adapter = AzureSpeech()
-    adapter.translate(request(), deployment())  # a key deployment never loads the SDK
+    await adapter.prepare(deployment())  # a key deployment never loads the SDK
+    adapter.translate(request(), deployment())
     assert not loads
-    adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
-    adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
+    for _ in range(2):
+        await adapter.prepare(deployment(auth=AuthMode.BEARER_TOKEN))
+        adapter.translate(request(), deployment(auth=AuthMode.BEARER_TOKEN))
     assert loads == [1]
 
 

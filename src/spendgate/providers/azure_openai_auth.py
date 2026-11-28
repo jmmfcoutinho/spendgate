@@ -1,9 +1,10 @@
-"""Entra ID bearer tokens for Azure OpenAI: a cached, injectable token source.
+"""Entra ID bearer tokens for the Azure adapters: a cached, injectable token source.
 
 `azure-identity` is an optional extra, so it is imported only when no credential object was
-injected, and only here. A refresh is a blocking network call to Entra (typically 100 ms to a
-few seconds), so the adapter's async `prepare` makes it in a worker thread (`providers.refresh`)
-and `translate` then reads the cache. The cache makes refreshes rare: one per token lifetime.
+injected, and only here. A fetch is a blocking network call to Entra (typically 100 ms to a few
+seconds), so an adapter's async `prepare` makes it in a worker thread (`providers.refresh`) and
+`translate` only reads the cache: with no usable token there it raises (nothing is sent), and
+never fetches on the event loop. The cache makes fetches rare: about one per token lifetime.
 """
 
 import threading
@@ -11,7 +12,9 @@ import time
 from collections.abc import Callable
 from typing import Protocol
 
-# Refresh this long before expiry so a request never leaves with a token about to lapse.
+# Refresh this long before expiry so a request never leaves with a token about to lapse. A token
+# issued with less than twice this much life is refreshed half way through it instead, so a
+# short-lived token is reused for a while rather than fetched again on every call.
 REFRESH_MARGIN_SECONDS = 300
 # The scope Microsoft documents for Azure OpenAI; `ai.azure.com` is its newer alias for the v1 path.
 CLASSIC_SCOPE = "https://cognitiveservices.azure.com/.default"
@@ -30,6 +33,16 @@ class AccessToken(Protocol):
 
 class TokenCredential(Protocol):
     def get_token(self, *scopes: str) -> AccessToken: ...
+
+
+class ExpiredTokenError(ValueError):
+    """The credential handed out a token whose expiry is not in the future (clock skew, a broken
+    identity endpoint). It is refused and nothing is cached: the call fails closed and the next
+    one asks again. The class name is what the internal-error log shows."""
+
+
+class TokenNotReadyError(RuntimeError):
+    """`translate` found no unexpired token: only `prepare` fetches one, off the event loop."""
 
 
 def default_credential() -> TokenCredential:
@@ -61,31 +74,47 @@ class EntraTokens:
         self._credential = credential
         self._clock = clock
         self._create = threading.Lock()  # guards only the lazy default credential
-        self._cache: dict[str, tuple[str, int]] = {}  # scope -> (token, expires_on)
+        # scope -> (token, expires_on, refresh_at); never printed
+        self._cache: dict[str, tuple[str, float, float]] = {}
 
     def cached(self, scope: str) -> str | None:
         """The cached token for `scope` while it has not expired; a lookup that never blocks."""
         entry = self._cache.get(scope)
         return entry[0] if entry is not None and entry[1] > self._clock() else None
 
-    def fresh(self, scope: str) -> bool:
-        """A cached token for `scope` outside the refresh margin (a lookup: never blocks)."""
-        entry = self._cache.get(scope)
-        return entry is not None and entry[1] - self._clock() > REFRESH_MARGIN_SECONDS
+    def ready(self, scope: str) -> str:
+        """What `prepare` readied; raises (fail closed, nothing sent) rather than fetch inline."""
+        token = self.cached(scope)
+        if token is None:
+            raise TokenNotReadyError("no Entra token is ready; prepare fetches one")
+        return token
 
-    def bearer(self, scope: str) -> str:
-        """The token for `scope`, fetched from Entra (blocking) when the cache has none fresh."""
+    def fresh(self, scope: str) -> bool:
+        """A cached token for `scope` not yet due for refresh (a lookup: never blocks)."""
         entry = self._cache.get(scope)
-        if entry is not None and entry[1] - self._clock() > REFRESH_MARGIN_SECONDS:
-            return entry[0]
+        return entry is not None and self._clock() < entry[2]
+
+    def fetch(self, scope: str) -> str:
+        """A new token for `scope` from Entra (blocking: run it in a worker thread)."""
         with self._create:  # created on first use, so a key-only setup never needs it
             if self._credential is None:
                 self._credential = default_credential()
         fetched = self._credential.get_token(scope)
+        now = self._clock()
         if not fetched.token:
+            self._cache.pop(scope, None)
             raise ValueError("the Entra credential returned an empty token")
-        self._cache[scope] = (fetched.token, fetched.expires_on)
+        life = fetched.expires_on - now
+        if life <= 0:
+            self._cache.pop(scope, None)  # treated as no token at all
+            raise ExpiredTokenError("the Entra credential returned an expired token")
+        margin = min(REFRESH_MARGIN_SECONDS, life / 2)
+        self._cache[scope] = (fetched.token, fetched.expires_on, fetched.expires_on - margin)
         return fetched.token
+
+    def drop(self) -> None:
+        """Forget every cached token (the provider rejected one): the next `prepare` fetches."""
+        self._cache.clear()
 
     def __repr__(self) -> str:  # tokens live only in `_cache`; never print it
         return "EntraTokens()"

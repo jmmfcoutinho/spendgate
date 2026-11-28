@@ -10,13 +10,16 @@ differs is here:
   absent means the v1 API (`/openai/v1/...`, no query). The deployment name is
   `Deployment.model`; the client's alias never reaches the URL (SSRF, naming).
 * Auth. `api-key` header for API keys; `Authorization: Bearer` for Entra ID, from an injected or
-  default credential (see `azure_openai_auth`), or a static token when the config gives one.
+  default credential (see `azure_openai_auth`), or a static token when the config gives one. A
+  401 or 403 drops the cached Entra tokens, so the next call's `prepare` fetches a new one.
 * Errors. Azure sends `retry-after-ms`; a 400 `content_filter` is a client error (not retried);
   Azure's own codes for a missing deployment or a denied identity are deployment faults.
 """
 
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from dataclasses import replace
+from http import HTTPStatus
 from urllib.parse import quote
 
 from spendgate.core.errors import ErrorCode
@@ -48,6 +51,7 @@ _CLASSIC_TAIL: Mapping[str, str] = {
     shapes.TRANSCRIPTIONS: "audio/transcriptions",
     shapes.SPEECH: "audio/speech",
 }
+_REVOKED = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)  # perhaps a revoked or stale token
 # Azure's own `error.code` for a deployment that does not exist, an Entra identity without a role
 # on the resource, and key auth turned off on it: our configuration, whatever was sent (ADR-0033).
 _DEPLOYMENT_FAULTS = wire.DEPLOYMENT_FAULTS | {
@@ -85,10 +89,14 @@ class AzureOpenAIProvider(OpenAIWire):
     name = "azure_openai"
 
     def __init__(
-        self, *, remote_ok: bool = False, credential: TokenCredential | None = None
+        self,
+        *,
+        remote_ok: bool = False,
+        credential: TokenCredential | None = None,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         super().__init__(remote_ok=remote_ok)
-        self._tokens = EntraTokens(credential)
+        self._tokens = EntraTokens(credential, clock=clock)
         self._refreshes = Refreshes()
 
     def __repr__(self) -> str:
@@ -100,7 +108,7 @@ class AzureOpenAIProvider(OpenAIWire):
             return  # an API key or a configured static token: nothing to refresh
         scope = _scope(deployment)
         stale = lambda: not self._tokens.fresh(scope)  # noqa: E731 - a one-line check
-        await self._refreshes.ensure(scope, stale, lambda: self._tokens.bearer(scope))
+        await self._refreshes.ensure(scope, stale, lambda: self._tokens.fetch(scope))
 
     def translate(self, req: CleanRequest, deployment: Deployment) -> UpstreamRequest:
         """Raises `Untranslatable` for a request that cannot be carried."""
@@ -115,22 +123,22 @@ class AzureOpenAIProvider(OpenAIWire):
                 raise ValueError("the deployment has no API key")  # misconfiguration, fail closed
             return {"api-key": deployment.credential}
         if deployment.auth is AuthMode.BEARER_TOKEN:
-            # A configured credential is a ready-made token; none means Entra ID via azure-identity.
-            scope = _scope(deployment)
-            # What `prepare` readied, while unexpired; a direct caller without it fetches inline.
-            token = (
-                deployment.credential or self._tokens.cached(scope) or self._tokens.bearer(scope)
-            )
+            # A configured credential is a ready-made token; none means Entra ID via azure-identity,
+            # fetched by `prepare` off the loop: without one ready, this raises and nothing is sent.
+            token = deployment.credential or self._tokens.ready(_scope(deployment))
             return {"Authorization": f"Bearer {token}"}
         raise ValueError(f"azure_openai does not support auth mode {deployment.auth.value}")
 
     @never_raises_error
     def error(self, response: UpstreamResponse) -> UpstreamError:
-        """OpenAI mapping, plus Azure's millisecond `retry-after-ms` on throttling.
+        """OpenAI mapping, plus Azure's millisecond `retry-after-ms` on throttling; a 401 or 403
+        drops the cached Entra tokens (perhaps revoked or rotated), as Bedrock drops its snapshot.
 
         A 400 with code `content_filter` already maps to `invalid_request` (a client error that
         costs nothing and is never retried); it is not an upstream fault.
         """
+        if response.status in _REVOKED:
+            self._tokens.drop()  # the next call's `prepare` fetches a new token off the loop
         mapped = wire.map_error(response, _DEPLOYMENT_FAULTS)
         if mapped.code is not ErrorCode.UPSTREAM_THROTTLED:
             return mapped
