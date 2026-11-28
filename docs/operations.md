@@ -13,7 +13,7 @@ any other host exits with code 3: pass `--url` or set `SPENDGATE_URL` for a remo
 proxy, add `--local` instead: it opens the ledger from `--config` directly and needs no key (in
 Compose, run it through `docker compose exec spendgate`). Add `--json` for machine output. These
 three flags belong to the admin commands; `serve`, `migrate` and `check-config` take only
-`--config` (plus `serve --migrate`, `serve --no-bootstrap` and `migrate --bootstrap`), and `catalog import` (drafting an override file from LiteLLM's price file,
+`--config` (plus `serve --migrate`, `serve --no-bootstrap`, `migrate --bootstrap` and `migrate --bootstrap --secrets-file PATH`), and `catalog import` (drafting an override file from LiteLLM's price file,
 [catalog how-to section 6](catalog-how-to.md#6-starting-from-litellms-price-file-and-cross-checking-against-it)) takes neither; `catalog draft` (a `verified: false` stand-in priced like another model, [section 9](catalog-how-to.md#9-when-a-model-has-no-price)) takes only an optional `--config`, to read its override files. `spendgate --version` prints the installed version.
 Exit codes: 0 ok, 1 refused by the server, 2 bad command line, 3 bad configuration, 4 no or wrong
 admin key, 5 cannot reach the API or the ledger.
@@ -111,14 +111,33 @@ rollback-safe ships at most one migration, and marks it compatible.
 - **Create** (the secret is printed once and never stored in clear):
   `spendgate keys create --scope org:acme/project:app --name my-app --models gpt-6-luna`.
   Keys can also be declared under `bootstrap.keys`; `spendgate migrate --bootstrap` creates them
-  (printing each secret once) and never changes them afterwards. `serve` creates the bootstrap
-  scopes and budgets but never keys, so no secret reaches the server's log.
+  (handing each secret over once, see below) and never changes them afterwards. `serve` creates
+  the bootstrap scopes and budgets but never keys, so no secret reaches the server's log.
 - **Where a printed secret goes:** `keys create`, `keys rotate` and `migrate --bootstrap` print it
   to the terminal. Run them interactively; in containers, as a one-off
   `docker compose run --rm spendgate …` (with `--rm` the container and its log are deleted when it
   exits). Never put them in a service's command or entrypoint, where the output stays in the
   container log. If your Docker log driver ships output elsewhere (journald, a cloud log service),
   that copy holds the secret too: delete it there, or rotate the key.
+- **Bootstrap keys without a terminal** (a Kubernetes Job, CI, a Compose service): `migrate
+  --bootstrap` prints a secret only when stderr is a terminal. Unattended, pass
+  `--secrets-file PATH`: it writes each new key as one line of JSON to a new file created 0600,
+  never over an existing file, and prints only the names and scopes
+  ([ADR-0032](adr/0032-bootstrap-secrets-file.md)):
+
+  ```bash
+  spendgate migrate --bootstrap --config spendgate.yaml --secrets-file /run/bootstrap/keys.jsonl
+  # bootstrap: created api key app-key (org:acme/project:app)
+  # bootstrap: wrote 1 key secrets to /run/bootstrap/keys.jsonl
+  jq -r 'select(.name == "app-key") | .secret' /run/bootstrap/keys.jsonl   # name, kind, scope, secret
+  ```
+
+  Put PATH on a volume only the operator can read (in a container it must be mounted to outlive
+  the run), move the secrets into your secret store, then delete the file. If the file exists, the
+  command refuses (exit 2) before creating anything. Without a terminal and without the flag, a run
+  that would create a key exits 2 before writing any bootstrap row and names the keys; a run that
+  creates no key (only scopes and budgets, or every key already there) needs neither, so a Job can
+  run `migrate --bootstrap` on every deploy and needs the file only the first time.
 - **Rotate** with no downtime: `spendgate keys rotate KEY_ID --grace-seconds 3600`. It issues a
   replacement with the same settings; the old key keeps working for the grace period (default one
   hour, at most seven days), so you can roll the new one out first. A key kill switch on the old

@@ -144,6 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     m = top.add_parser("migrate", parents=[config], help="create or upgrade the ledger schema")
     m.add_argument("--bootstrap", action="store_true", help="then apply the bootstrap section")
+    m.add_argument(
+        "--secrets-file",
+        metavar="PATH",
+        help="write new bootstrap key secrets to PATH (a new 0600 file) instead of the terminal",
+    )
     _keys(top, common)
     _budgets(top, common)
     kill = _group(top, "kill", "kill switches")
@@ -263,7 +268,9 @@ def _dispatch(args: argparse.Namespace) -> int:
         case "check-config":
             return serve.run_check_config(args.config)
         case "migrate":
-            return serve.run_migrate(args.config, bootstrap=args.bootstrap)
+            return serve.run_migrate(
+                args.config, bootstrap=args.bootstrap, secrets_file=args.secrets_file
+            )
         case _:
             return asyncio.run(_run_admin(args))
 

@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from spendgate.cli import serve
+from spendgate.cli.bootstrap import print_bootstrap
 from spendgate.cli.runtime import open_runtime
 from spendgate.config import Settings, load
 from spendgate.core.errors import Refusal
@@ -109,11 +110,12 @@ async def test_t_log_04_serve_bootstraps_scopes_and_budgets_but_never_prints_or_
 
 
 @async_test
-async def test_t_log_04_migrate_bootstrap_still_creates_and_prints_each_key_once(
+async def test_t_log_04_migrate_bootstrap_still_creates_and_prints_each_key_once_to_a_terminal(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    """Without a terminal or `--secrets-file` it refuses (`test_bootstrap_secrets.py`)."""
     settings = await _settings(tmp_path)
-    await serve._migrate(settings, bootstrap=True)
+    await serve._migrate(settings, bootstrap=True, secrets_file=None, interactive=True)
     secrets = re.findall(r"\bsga?-[0-9a-f]{12}-[0-9a-f]{48}\b", capsys.readouterr().err)
     assert len(secrets) == 2 and len(set(secrets)) == 2
 
@@ -128,6 +130,22 @@ async def test_t_key_01_a_bootstrap_key_with_empty_models_is_refused(tmp_path: P
         with pytest.raises(ValueError, match="models must not be empty"):
             await apply_bootstrap(settings, ledger, KeyService(ledger, PEPPER), NOW_MS)
         assert await ledger.list_keys(None) == ()
+    finally:
+        ledger.close()
+
+
+@async_test
+async def test_a_bad_bootstrap_key_is_refused_before_any_row_is_written(tmp_path: Path) -> None:
+    """A later key's error must not leave an earlier key created and its secret never shown."""
+    bad = BOOTSTRAP + '    - {name: empty, scope: "org:acme/project:app", models: []}\n'
+    settings = await _settings(tmp_path, bad)
+    ledger = SqliteLedger.open(settings.ledger_path, currency="USD")  # type: ignore[arg-type]
+    try:
+        with pytest.raises(ValueError, match="bootstrap key empty: models must not be empty"):
+            await apply_bootstrap(settings, ledger, KeyService(ledger, PEPPER), NOW_MS)
+        assert await ledger.list_keys(None) == ()
+        assert await ledger.find_scope("org:acme") is None
+        assert await ledger.get_budget("bootstrap-monthly", NOW_MS) is None
     finally:
         ledger.close()
 
@@ -177,7 +195,7 @@ async def test_bootstrap_warns_when_an_existing_key_has_other_session_settings(
         assert "app-key" in warning and "PATCH /admin/v1/keys/" in warning
         api = [k for k in await ledger.list_keys(None) if k.name == "app-key"]
         assert api[0].policy.session_defaults is None  # create-only: never applied
-        serve.print_bootstrap(report)
+        print_bootstrap(report)
         assert "warning: bootstrap: key app-key" in capsys.readouterr().err
         # Rotate, then fix the new key: the old one warns only while its grace period runs.
         new = await keys.rotate_key(api[0].id, grace_ms=1000, actor="op", now=NOW_MS + 3)

@@ -77,8 +77,9 @@ model applies (128,000 tokens here), so one call can hold far more than it will 
 `max_tokens` in every call: the hold, and so what a budget admits, follows it.
 
 Check it, create the virtual key, then start the proxy. The provider key stays here, in the
-proxy's environment. `migrate --bootstrap` prints each key once; `serve` never prints a secret, so
-none ends up in a container or service log.
+proxy's environment. `migrate --bootstrap` prints each key once, and only to a terminal (unattended
+runs write them to a 0600 `--secrets-file`); `serve` never prints a secret, so none ends up in a
+container or service log.
 
 <!-- doctest: shell -->
 ```bash

@@ -15,14 +15,15 @@ import httpx
 import uvicorn
 from uvicorn.logging import DefaultFormatter
 
-from spendgate.cli.client import EXIT_CONFIG, EXIT_OK
+from spendgate.cli.bootstrap import migrate_bootstrap, print_bootstrap
+from spendgate.cli.client import EXIT_CONFIG, EXIT_OK, EXIT_USAGE, CliError
 from spendgate.cli.reload import SecretReload, on_sighup
 from spendgate.cli.runtime import Runtime, open_runtime, system_ms
 from spendgate.config import ConfigError, Settings, check_config, load
 from spendgate.config.schema import Server
 from spendgate.gateway.admin import combine
 from spendgate.gateway.alert_webhook import webhook_alerts
-from spendgate.gateway.bootstrap import BootstrapReport, apply_bootstrap
+from spendgate.gateway.bootstrap import apply_bootstrap
 from spendgate.gateway.compose import build_gateway
 from spendgate.gateway.logs import configure_json_logging
 from spendgate.gateway.metrics import Metrics
@@ -62,31 +63,25 @@ def run_check_config(path: str) -> int:
     return EXIT_OK if report.ok else EXIT_CONFIG
 
 
-def print_bootstrap(report: BootstrapReport) -> None:
-    """Created rows, and each new key's secret exactly once (stderr: stdout may be a pipe)."""
-    out = sys.stderr
-    for path in report.scopes:
-        print(f"bootstrap: created scope {path}", file=out)
-    for budget in report.budgets:
-        print(f"bootstrap: created budget {budget}", file=out)
-    for key in report.keys:
-        print(f"bootstrap: created {key.kind} key {key.name} ({key.scope}): {key.secret}", file=out)
-    for warning in report.warnings:
-        print(f"warning: bootstrap: {warning}", file=out)
-
-
-async def _migrate(settings: Settings, *, bootstrap: bool) -> None:
+async def _migrate(
+    settings: Settings, *, bootstrap: bool, secrets_file: str | None, interactive: bool
+) -> None:
     async with open_runtime(settings, migrate=True) as rt:  # opening applies the migrations
         print(f"ledger ready ({settings.config.ledger.backend.kind}, {settings.ledger_currency})")
         if bootstrap:
-            print_bootstrap(await apply_bootstrap(settings, rt.ledger, rt.keys, rt.now()))
+            await migrate_bootstrap(rt, secrets_file=secrets_file, interactive=interactive)
 
 
-def run_migrate(path: str, *, bootstrap: bool) -> int:
+def run_migrate(path: str, *, bootstrap: bool, secrets_file: str | None = None) -> int:
+    if secrets_file is not None and not bootstrap:
+        raise CliError(EXIT_USAGE, "--secrets-file needs --bootstrap")
     settings = load_settings(path)
     if isinstance(settings, int):
         return settings
-    asyncio.run(_migrate(settings, bootstrap=bootstrap))
+    interactive = sys.stderr.isatty()  # where the secrets would be printed (ADR-0032)
+    asyncio.run(
+        _migrate(settings, bootstrap=bootstrap, secrets_file=secrets_file, interactive=interactive)
+    )
     return EXIT_OK
 
 

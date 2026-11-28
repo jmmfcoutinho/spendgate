@@ -11,6 +11,11 @@ of its model lists now stops `check-config` and `serve` (exit 3) instead of star
 Use a Region the error lists (`global`, `us` or `eu` for Gemini 4 Carbon, for example) or price
 yours in a `catalog.paths` file (ADR-0034).
 
+**Upgrading:** a `spendgate migrate --bootstrap` run without a terminal on stderr (a Kubernetes Job,
+CI, a Compose service) whose config declares a key that does not exist yet now exits 2 and creates
+nothing. Add `--secrets-file PATH` on a volume only the operator reads, or create the keys once
+from a terminal. Runs that create no key are unchanged (ADR-0032).
+
 ### Added
 
 - Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
@@ -34,6 +39,18 @@ yours in a `catalog.paths` file (ADR-0034).
   naming the route, the Region and the Regions listed, and a call gets `model_not_priced` while no
   such entry is in force. Other providers and the Gemini API keep the region-less fallback and its
   warning (ADR-0034).
+
+### Security
+
+- `spendgate migrate --bootstrap` no longer prints key secrets into logs. It printed each new
+  key's secret to stderr whatever stderr was, so an unattended run put the secrets, admin keys
+  included, into log storage. It now prints a secret only when stderr is a terminal. The new
+  `--secrets-file PATH` writes the new keys as JSON lines (name, kind, scope, secret) to a new file
+  created 0600 with `O_EXCL`, never over an existing file or through a symlink, and prints only
+  the names and scopes. Without a terminal or the flag, a run that would create a key exits 2
+  before writing any bootstrap row (ADR-0032).
+- Bootstrap checks every configured key before it writes any row, so an error in a later key no
+  longer leaves earlier keys created with secrets nobody saw.
 
 ## [0.5.0] - 2026-11-27
 
