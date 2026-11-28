@@ -177,6 +177,33 @@ def test_error_mapping_table(provider: OpenAIProvider, case: ErrorCase) -> None:
     assert error.not_processed({429}) is (status == 429)
 
 
+def openai_error_body(code: str | None) -> bytes:
+    error = {"message": "provider text", "type": "invalid_request_error", "code": code}
+    return json.dumps({"error": error}).encode()
+
+
+# (status, error.code, deployment fault): only a code that fails for every caller counts towards
+# the shared breaker (ADR-0033); the pipeline counts any 401 by status on its own.
+DEPLOYMENT_FAULTS = [
+    (401, "invalid_api_key", True),
+    (404, "model_not_found", True),
+    (403, "unsupported_country_region_territory", True),
+    (403, None, False),  # "You are not allowed to generate embeddings from this model" (T-012)
+    (404, None, False),  # a model that is not served on this endpoint
+    (400, "invalid_value", False),
+    (429, "insufficient_quota", False),  # a quota 429 cools the deployment; it is not a fault
+]
+
+
+@pytest.mark.parametrize(("status", "code", "fault"), DEPLOYMENT_FAULTS)
+def test_only_a_bad_key_or_missing_model_code_is_a_deployment_fault(
+    provider: OpenAIProvider, status: int, code: str | None, fault: bool
+) -> None:
+    error = provider.error(UpstreamResponse(status, {}, openai_error_body(code)))
+    assert error.deployment_fault is fault
+    assert provider.error(answer("error_401.json", 401)).deployment_fault  # the recorded fixture
+
+
 def test_throttle_carries_retry_after_and_junk_does_not(provider: OpenAIProvider) -> None:
     assert (
         provider.error(answer("error_429.json", 429, {"Retry-After": "7"})).retry_after_seconds == 7

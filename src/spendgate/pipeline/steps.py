@@ -14,6 +14,7 @@ from spendgate.core.cost import UnpricedUsage, worst_case
 from spendgate.core.errors import ErrorCode, LimitName, Refusal
 from spendgate.core.estimate import RequestKind, estimate, resolve_output_ceiling
 from spendgate.core.limits import Admit, Deny, LimitKey, LimitStore
+from spendgate.core.modes import serves
 from spendgate.core.policy import (
     SESSION_HEADER,
     TAGS_HEADER,
@@ -215,8 +216,17 @@ def _prepare(ctx: Context) -> Prepared | Refusal:
 def _clean_request(
     ctx: Context, routed: _Routed, entry: PriceEntry, key_cap: int | None
 ) -> CleanRequest | Refusal:
-    """The validated request: output ceiling resolved once and set, secrets kept out."""
+    """The validated request: output ceiling resolved once and set, secrets kept out.
+
+    A model whose entry is of another mode than the endpoint (a chat model on /v1/embeddings) is
+    refused here, before upstream: the provider would only answer it with a 4xx.
+    """
     kind = ctx.inbound.endpoint.kind
+    if not serves(entry.mode, kind):
+        path = ctx.inbound.endpoint.path
+        return Refusal(
+            ErrorCode.INVALID_REQUEST, f"Model {routed.name} does not serve {path}.", "model"
+        )
     body: dict[str, Json] = dict(ctx.inbound.body)
     ceiling = resolve_output_ceiling(kind, body, entry=entry, key_max_output_tokens=key_cap)
     if isinstance(ceiling, Refusal):

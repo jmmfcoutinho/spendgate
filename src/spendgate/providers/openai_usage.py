@@ -29,6 +29,12 @@ from spendgate.providers.port import (
 )
 
 _CONTEXT_CODES = frozenset({"context_length_exceeded", "string_above_max_length"})
+# `error.code` values that say our key, account or configured model is wrong whatever was sent,
+# so the breaker counts them (ADR-0033). A 403 or 404 without one answered one request: OpenAI's
+# "not allowed to generate embeddings from this model" 403 carries `code: null`.
+DEPLOYMENT_FAULTS = frozenset(
+    {"invalid_api_key", "model_not_found", "unsupported_country_region_territory"}
+)
 _MAX_MESSAGE = 500
 
 
@@ -186,18 +192,24 @@ def is_usage_only_chunk(event: SseEvent) -> bool:
 # --- errors --------------------------------------------------------------------------------------
 
 
-def map_error(response: UpstreamResponse) -> UpstreamError:
-    """Core error for an OpenAI error answer (protocol.md section 4.2, rule 1)."""
+def map_error(
+    response: UpstreamResponse, faults: frozenset[str] = DEPLOYMENT_FAULTS
+) -> UpstreamError:
+    """Core error for an OpenAI error answer (protocol.md section 4.2, rule 1).
+
+    An `error.code` in `faults` marks a deployment fault (Azure passes its own codes as well).
+    """
     status = response.status
     body = load_json(response.body)
     err = body.get("error") if isinstance(body, Mapping) else None
     err = err if isinstance(err, Mapping) else {}
     code, text, param = err.get("code"), err.get("message"), err.get("param")
     message = text[:_MAX_MESSAGE] if isinstance(text, str) else ""
-    mapped = _code_for(status, code if isinstance(code, str) else "")
+    provider_code = code if isinstance(code, str) else ""
+    mapped = _code_for(status, provider_code)
     retry = retry_after_seconds(response.headers) if status == 429 else None  # noqa: PLR2004
     del param  # provider param names are not ours; the pipeline reports its own
-    return UpstreamError(mapped, True, status, retry, message)
+    return UpstreamError(mapped, True, status, retry, message, provider_code in faults)
 
 
 def _code_for(status: int, provider_code: str) -> ErrorCode:

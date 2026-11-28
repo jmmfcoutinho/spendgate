@@ -293,6 +293,33 @@ def test_a_bad_api_key_or_missing_permission_is_our_fault_not_the_callers() -> N
     )
 
 
+def google_error(status: int, name: str, *reasons: str) -> UpstreamResponse:
+    details = [{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": r} for r in reasons]
+    error = {"code": status, "status": name, "message": "provider text", "details": details}
+    return UpstreamResponse(status, {}, json.dumps({"error": error}).encode())
+
+
+@pytest.mark.parametrize(
+    ("answer", "fault"),
+    [
+        (google_error(400, "INVALID_ARGUMENT", "API_KEY_INVALID"), True),  # a bad key is a 400
+        (google_error(403, "PERMISSION_DENIED", "API_KEY_SERVICE_BLOCKED"), True),
+        (google_error(403, "PERMISSION_DENIED", "SERVICE_DISABLED"), True),
+        (google_error(403, "PERMISSION_DENIED", "IAM_PERMISSION_DENIED"), True),
+        (google_error(401, "UNAUTHENTICATED"), True),
+        (google_error(404, "NOT_FOUND"), True),  # the configured model: media arrive inline
+        (google_error(403, "PERMISSION_DENIED"), False),  # no ErrorInfo: may answer this request
+        (google_error(400, "INVALID_ARGUMENT"), False),
+        (google_error(400, "FAILED_PRECONDITION"), False),
+        (UpstreamResponse(403, {}, b"{}"), False),
+    ],
+)
+def test_only_a_bad_key_a_denied_service_or_a_missing_model_is_a_deployment_fault(
+    answer: UpstreamResponse, fault: bool
+) -> None:
+    assert provider().error(answer).deployment_fault is fault  # ADR-0033
+
+
 def test_an_account_out_of_prepaid_credit_is_upstream_unavailable_not_invalid_request() -> None:
     # The Gemini API's answer to an account with no prepaid credit left (seen live 2026-11-25).
     message = "Your prepayment credits are depleted."

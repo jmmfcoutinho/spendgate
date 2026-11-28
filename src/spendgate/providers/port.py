@@ -227,6 +227,12 @@ class UpstreamError:
     `sent` is False for failures before the request left (connect, DNS, TLS); `status` is the
     provider's HTTP status when one came back. Whether the attempt is free depends on the
     catalog's `free_statuses`, so it is a method, not a stored flag.
+
+    `deployment_fault` is the adapter's reading of the provider's own error code: the answer says
+    our credential, account or deployment is wrong (an invalid key, a missing deployment or
+    model), so it would fail for every caller. Only then does a 403 or 404 count towards the
+    deployment's circuit breaker; a 401 always does, a 403 or 404 without such a code is taken as
+    an answer to this one request (ADR-0033). It never changes `code` or the charge.
     """
 
     code: ErrorCode
@@ -234,6 +240,7 @@ class UpstreamError:
     status: int | None = None
     retry_after_seconds: int | None = None
     message: str = field(default="", repr=False)  # provider text; never shown to the client
+    deployment_fault: bool = False
 
     def not_processed(self, free_statuses: Collection[int]) -> bool:
         return not_processed(Attempt(self.sent, self.status), free_statuses)

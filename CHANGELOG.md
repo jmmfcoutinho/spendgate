@@ -21,6 +21,26 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
 - Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
   and other arm64 hosts without emulation (#123; reported, with the fix, by @joaolsg).
 
+### Changed
+
+- **A model is sent only to endpoints of its catalog mode.** A chat model on `/v1/embeddings` or
+  `/v1/audio/speech`, an embedding, speech or transcription model on chat or Responses, and the
+  like, are refused `invalid_request` (400, `param` `model`) before anything is held or sent. They
+  used to be forwarded with an input-only hold, and the provider answered them with a 4xx (or, behind
+  an OpenAI-compatible `base_url` that serves both, billed them above the hold). The text modes
+  (chat, responses, messages) stay one family: each provider adapter decides which text endpoints
+  it carries (ADR-0033, T-DOS-06).
+- **What opens a deployment's circuit breaker.** A provider 403 or 404 now counts towards it only
+  when the provider's own error code says the gateway's key, account or configured model is wrong
+  (for example OpenAI `invalid_api_key` or `model_not_found`, Azure `DeploymentNotFound`, Anthropic
+  `authentication_error`, Google `API_KEY_*`, Bedrock `AccessDeniedException`; the ADR lists each
+  adapter's codes). Any 401, 5xx, 408 or connection failure still counts, so a bad provider key
+  still opens the breaker and moves traffic to the next deployment. A Google bad-key answer, which
+  arrives as a 400, now counts too. A misconfiguration reported as a 403 or 404 without such a
+  code no longer opens the breaker: each call to it fails at once with `502 upstream_unavailable`,
+  charged 0 ([operations](docs/operations.md#provider-failures-and-the-circuit-breaker),
+  ADR-0033).
+
 ### Fixed
 
 - `PATCH /admin/v1/keys/{key_id}` with `"expires_at": null`, or a later `expires_at`, brought back a
@@ -51,6 +71,14 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
   before writing any bootstrap row (ADR-0032).
 - Bootstrap checks every configured key before it writes any row, so an error in a later key no
   longer leaves earlier keys created with secrets nobody saw.
+
+- One key could cut every other key and org off a shared deployment, for free. Every provider 401,
+  403 or 404 counted towards the deployment's circuit breaker, and a caller could cause a 403 on
+  purpose: a chat alias sent to `/v1/embeddings` was forwarded, and OpenAI answers it with an
+  unbilled 403. Four such calls opened the breaker, and every caller routed to that deployment got
+  `503 upstream_unavailable` for `routing.cooldown_seconds`, as often as the attack was repeated.
+  An ElevenLabs `voice_not_found` 404, for a voice the caller names, did the same. Both triggers
+  are closed by the two changes above (ADR-0033, T-DOS-05). Availability only: no money was at risk.
 
 ## [0.5.0] - 2026-11-27
 

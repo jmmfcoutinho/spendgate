@@ -196,7 +196,11 @@ def _message(body: bytes) -> str:
 
 
 def map_error(resp: UpstreamResponse) -> UpstreamError:
-    """Core error for an Azure Speech failure (protocol.md section 4.2, rule 1)."""
+    """Core error for an Azure Speech failure (protocol.md section 4.2, rule 1).
+
+    Azure Speech gives no code that tells a missing resource from an answer to this request, so
+    no answer is marked a deployment fault: the breaker counts its 401 by status (ADR-0033).
+    """
     status = resp.status
     text = _message(resp.body)
     lowered = text.lower()

@@ -1,7 +1,7 @@
 # Operations
 
 Day-two tasks for a running proxy: backups, upgrades and rollbacks, keys, the kill switch, usage,
-retention, Postgres connections, the sweeper, draining on restart, a ledger outage or failover, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
+retention, Postgres connections, the sweeper, draining on restart, provider failures and the circuit breaker, a ledger outage or failover, and reading metrics and logs. Setup is in [Running locally](deploy/local.md); every setting is in
 the [configuration reference](configuration.md).
 
 Commands talk to the admin API, so they need an admin key in `SPENDGATE_ADMIN_KEY`. The API's
@@ -453,6 +453,32 @@ A forced exit, or a kill before the deadline has passed, skips that settle: thos
 connection stays open. Keep it above the load balancer's idle timeout (60 s on many): if the proxy
 closes first, the balancer can send a request on a connection that is being closed and answer it
 with a 502. Raise it when your balancer keeps idle connections longer.
+
+## Provider failures and the circuit breaker
+
+Each deployment has one circuit breaker, shared by every alias, key and org routed to it. Once
+`routing.min_requests` attempts in `routing.window_seconds` include `failure_threshold_pct`
+failures, it opens for `cooldown_seconds`: calls go to the alias's next deployment, or, when none
+is left, are refused `503 upstream_unavailable` without contacting the provider. One probe then
+goes through; a success closes it. A provider 429 only cools the deployment (ADR-0021).
+
+What counts as a failure is what would fail for every caller ([ADR-0033](adr/0033-caller-caused-errors-do-not-open-the-breaker.md)):
+a connection failure, a timeout, a 5xx or 408, any 401, and an answer whose provider code says
+our key, account, grants or configured model is wrong: OpenAI `invalid_api_key` or
+`model_not_found`, Azure `DeploymentNotFound` or `PermissionDenied`, Anthropic
+`authentication_error` or `not_found_error`, Google `API_KEY_*` or a `PERMISSION_DENIED` with a
+reason, Bedrock `AccessDeniedException`, `ResourceNotFoundException` or a signature error,
+ElevenLabs `invalid_api_key` (the ADR has each adapter's full list). Any other 4xx, a 403 or 404
+included, answered one caller's request and never opens the breaker, so one key cannot take a
+deployment away from the others. A model sent to an endpoint of another mode (a chat alias on
+`/v1/embeddings`) is refused `invalid_request` before anything is sent.
+
+So a bad or revoked provider key still opens the breaker and moves traffic to the next
+deployment. A misconfiguration the provider reports with a 403 or 404 and no code spendgate
+reads (an Anthropic workspace without access to the model, an Azure Speech 403) does not: every
+call to that deployment fails at once with `502 upstream_unavailable`, charged 0. Alert on a rise
+of `spendgate_requests_total{outcome="client_error"}` for one model, and read the `calls` rows
+(`http_status`, `error_code`, `key_id`) to tell a broken deployment from one caller's bad requests.
 
 ## Ledger outage and failover
 

@@ -47,6 +47,10 @@ _THROTTLED = frozenset({429, 529})
 _UNAVAILABLE_4XX = frozenset(
     {401, 402, 403, 404}
 )  # our key, billing or model config, not the caller
+# `error.type` values that fail for every caller, so the breaker counts them (ADR-0033): a bad
+# key, and a missing model (the body names no other resource: only base64 images are accepted).
+# `permission_error` is left out: it can answer one request's feature, not our whole deployment.
+_DEPLOYMENT_FAULTS = frozenset({"authentication_error", "not_found_error"})
 
 _TOP = frozenset(
     {
@@ -304,11 +308,16 @@ class _Collector:
         )
 
 
-def _error_message(body: bytes) -> str:
+def _error_fields(body: bytes) -> tuple[str, str]:
+    """(`error.type`, `error.message`) of an error body; empty strings when absent."""
     data = load_json(body)
     error = data.get("error") if isinstance(data, Mapping) else None
-    message = error.get("message") if isinstance(error, Mapping) else None
-    return message[:500] if isinstance(message, str) else ""
+    error = error if isinstance(error, Mapping) else {}
+    kind, message = error.get("type"), error.get("message")
+    return (
+        kind if isinstance(kind, str) else "",
+        message[:500] if isinstance(message, str) else "",
+    )
 
 
 class AnthropicProvider:
@@ -389,9 +398,11 @@ class AnthropicProvider:
             code = ErrorCode.UPSTREAM_UNAVAILABLE
         else:
             code = ErrorCode.INVALID_REQUEST
+        kind, message = _error_fields(response.body)
         return UpstreamError(
             code,
             status=status,
             retry_after_seconds=retry_after_seconds(response.headers),
-            message=_error_message(response.body),
+            message=message,
+            deployment_fault=kind in _DEPLOYMENT_FAULTS,
         )

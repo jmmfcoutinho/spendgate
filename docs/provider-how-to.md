@@ -20,7 +20,7 @@ out, no HTTP client.
 | `response(req, resp)` | A non-streamed answer in the client's shape (identity unless you convert) |
 | `relay(req, limits)` | A per-request `StreamRelay` that turns upstream bytes into client bytes and remembers usage, enforcing `SseLimits` |
 | `usage(req, resp)` | Normalised `Usage` of a non-streamed answer, or `None` if absent or unreadable |
-| `error(resp)` | Map an error answer to an `UpstreamError` (`sent`, `status`, `retry_after_seconds`) |
+| `error(resp)` | Map an error answer to an `UpstreamError` (`sent`, `status`, `retry_after_seconds`); set `deployment_fault` only for a provider code that says our key, account or configured model is wrong, never for an answer to one caller's request (ADR-0033) |
 
 Rules the pipeline relies on:
 

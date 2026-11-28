@@ -1,5 +1,6 @@
 """Response side: audio bytes, billed characters, costs, errors, the fake."""
 
+import json
 from decimal import ROUND_CEILING, Decimal
 
 import httpx
@@ -177,6 +178,29 @@ def test_errors_map_to_core_codes_and_outcomes(
     assert (err.code, err.status, err.sent) == (code, status, True)
     assert err.outcome(FREE) is outcome
     assert err.not_processed(FREE) is (status == 429)  # only 429 is free by default
+
+
+def detail(status: int, code: str) -> UpstreamResponse:
+    body = json.dumps({"detail": {"status": code, "message": "provider text"}}).encode()
+    return UpstreamResponse(status, {}, body)
+
+
+@pytest.mark.parametrize(
+    ("answer", "fault"),
+    [
+        (detail(401, "invalid_api_key"), True),
+        (detail(401, "missing_permissions"), True),  # our key lacks text-to-speech
+        (error("error_404_voice.json", 404), False),  # the caller named a voice that is not there
+        (detail(400, "invalid_uid"), False),
+        # Out of credits for this request's length: a shorter one may still fit (the pipeline
+        # still counts any 401 by its status).
+        (error("error_401_quota.json", 403), False),
+    ],
+)
+def test_only_a_bad_or_unpermitted_key_is_a_deployment_fault(
+    answer: UpstreamResponse, fault: bool
+) -> None:
+    assert ElevenLabs().error(answer).deployment_fault is fault  # ADR-0033
 
 
 def test_retry_after_is_carried_on_a_429_only() -> None:

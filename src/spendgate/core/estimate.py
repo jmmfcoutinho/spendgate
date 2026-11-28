@@ -30,7 +30,7 @@ type Body = Mapping[str, object]
 
 
 class RequestKind(StrEnum):
-    """Values equal the catalog `mode` of the entry that prices the request."""
+    """An endpoint's kind. Values are catalog modes; `core.modes.serves` says which entries fit."""
 
     CHAT = "chat"
     RESPONSES = "responses"
