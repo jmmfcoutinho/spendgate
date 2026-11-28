@@ -1,6 +1,7 @@
 # ADR-0017: Cloud identity, secret reload on SIGHUP, ledger pool settings
 
-**Status:** Accepted
+**Status:** Accepted; extended by [ADR-0035](0035-azure-entra-from-config.md) (`credential: entra`
+for the Azure adapters)
 **Date:** 2026-11-24
 
 ## Context

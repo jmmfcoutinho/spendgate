@@ -16,6 +16,11 @@ CI, a Compose service) whose config declares a key that does not exist yet now e
 nothing. Add `--secrets-file PATH` on a volume only the operator reads, or create the keys once
 from a terminal. Runs that create no key are unchanged (ADR-0032).
 
+**Upgrading:** an `azure_speech` provider or deployment with `auth: bearer_token` and a secret
+reference as its `credential` now stops `check-config` and `serve` (exit 3), naming the field. That
+credential was never used (Azure Speech always signed in with `DefaultAzureCredential`): replace it
+with `credential: entra` and the gateway behaves as before (ADR-0035).
+
 ### Added
 
 - Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
@@ -48,6 +53,16 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
 
 ### Fixed
 
+- Azure OpenAI could not use Entra ID from the config file, and Azure Speech ignored its bearer
+  `credential` (#141, pen test SG-PT-16). `azure_openai` with `auth: bearer_token` and no
+  credential was refused at load, and with one the value was sent as a static token, so `serve`
+  never signed in with the host's managed or workload identity. The new `credential: entra`, on an
+  `azure_openai` or `azure_speech` provider or deployment with `auth: bearer_token`, signs in with
+  `DefaultAzureCredential` (the `azure` extra), as `adc` does for Vertex AI; it is refused for any
+  other provider or auth mode. A static bearer token for Azure OpenAI still works as before. An
+  Azure Speech bearer credential other than `entra`, which used to be silently ignored, is refused
+  at load (see Upgrading above;
+  [operations](docs/operations.md#azure-with-entra-id), ADR-0035).
 - Azure Entra ID tokens (Azure Speech with `auth: bearer_token`, and the Azure OpenAI Entra path)
   were kept after the provider rejected them, refetched on every call when short-lived, and
   refetched on the event loop when the identity endpoint handed out an already-expired one (#140,
