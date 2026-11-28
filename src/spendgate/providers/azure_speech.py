@@ -129,6 +129,8 @@ class AzureSpeech:
 
     def _auth(self, deployment: Deployment) -> dict[str, str]:
         if deployment.auth is AuthMode.BEARER_TOKEN:
+            if deployment.credential:  # config refuses it too: a stored token is never used
+                raise ValueError("Azure Speech bearer auth is Entra ID only (credential: entra)")
             # What `prepare` readied; without it this raises (nothing sent), never fetches inline.
             return {"Authorization": f"Bearer {self._tokens.ready(shapes.SCOPE)}"}
         if deployment.auth is not AuthMode.API_KEY or not deployment.credential:

@@ -202,7 +202,11 @@ D: dict[str, str] = {
         "Secret reference for the key or token. Not used with `sigv4`, which reads the standard "
         "AWS credential chain. For Vertex AI (`google` with `bearer_token`) it is the "
         "service-account JSON, or `adc` for application default credentials (workload "
-        "identity, the metadata server). A `file:` credential is read again on `SIGHUP`."
+        "identity, the metadata server). For `azure_openai` and `azure_speech` with "
+        "`bearer_token`, `entra` signs in with the host's Microsoft Entra ID identity "
+        "(`DefaultAzureCredential`); Azure OpenAI also takes a static token as a secret "
+        "reference, Azure Speech takes `entra` only. A `file:` credential is read again on "
+        "`SIGHUP`."
     ),
     "Provider.region": (
         "Provider region, where the adapter needs one (Bedrock, Azure, Vertex AI). Also selects a "
@@ -417,7 +421,7 @@ def render_type(field: FieldInfo, links: Callable[[str], str]) -> str:
 # AfterValidator function -> how a string it checks is described.
 _VALIDATED_STR: dict[object, str] = {
     check_ref: "secret reference (`env:NAME` or `file:/path`)",
-    check_credential_ref: "secret reference (`env:NAME` or `file:/path`) or `adc`",
+    check_credential_ref: "secret reference (`env:NAME` or `file:/path`), `adc` or `entra`",
     schema._decimal_text: "quoted decimal",
 }
 

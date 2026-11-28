@@ -19,7 +19,7 @@ import yaml
 from pydantic import ValidationError
 
 from spendgate.config.schema import Config, DeploymentSpec, Provider
-from spendgate.config.secrets import ADC, Secret, check_ref, resolve
+from spendgate.config.secrets import AMBIENT, Secret, check_ref, credential_issues, resolve
 from spendgate.config.settings import (
     CheckReport,
     ResolvedDeployment,
@@ -215,12 +215,10 @@ def _deployment(
         issues.append((at, f"no base_url (set it here or in providers.{spec.provider})"))
     elif (problem := _base_url_issue(base_url)) is not None:
         issues.append((f"{at}.base_url", problem))
-    if auth != "sigv4" and ref is None:
-        issues.append((at, f"auth {auth} needs a credential (env:NAME or file:/path)"))
     where = credential_path(spec, at)
-    if ref == ADC and (spec.provider != "google" or auth != "bearer_token"):
-        issues.append((where, "adc is for Google Vertex AI only (auth bearer_token)"))
-    credential = None if ref == ADC else _secret(ref, where, ctx)
+    issues.extend(credential_issues(spec.provider, auth, ref, at, where))
+    ambient = ref in AMBIENT
+    credential = None if ambient else _secret(ref, where, ctx)
     if base_url is None:
         return None
     return ResolvedDeployment(
@@ -231,7 +229,7 @@ def _deployment(
         spec.region or prov.region,
         spec.api_version or prov.api_version,
         credential,
-        ref == ADC,
+        ambient,
     )
 
 
