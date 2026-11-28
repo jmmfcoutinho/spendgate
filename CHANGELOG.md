@@ -20,6 +20,11 @@ from a terminal. Runs that create no key are unchanged (ADR-0032).
 
 - Release images are published for `linux/arm64` as well as `linux/amd64`, so they run on Apple Silicon
   and other arm64 hosts without emulation (#123; reported, with the fix, by @joaolsg).
+- A contract test (T-CLK-04) races holds, settles, releases, expiries and late settles from eight
+  processes across a UTC day and month boundary, on SQLite and Postgres, with clocks either side
+  of midnight. It checks that each charge is booked once, in the period its hold was made in, that
+  `held` returns to zero, that the new period's cap stays exact while old holds settle into the old
+  one, and that each budget alert is reported once.
 
 ### Changed
 
